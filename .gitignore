@@ -1,2 +1,5 @@
 .claude
 node_modules
+
+# 로드맵 (로컬 전용)
+docs/work/ROADMAP*.md
