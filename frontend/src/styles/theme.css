@@ -1,0 +1,84 @@
+/* 다담 시니어 테마 — 큰 글씨, 고대비, 넓은 터치 타깃
+   code-convention.md §4 준수: text-lg↑, min-h-11↑ */
+
+@layer base {
+  :root {
+    /* shadcn/ui 색상 변수 (Tailwind v4 CSS-first) */
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --radius: 0.625rem;
+
+    /* 다담 브랜드 색상 */
+    --dadam-primary: oklch(0.6 0.15 250);      /* 따뜻한 파랑 */
+    --dadam-warm: oklch(0.75 0.12 60);         /* 따뜻한 황금색 */
+    --dadam-soft: oklch(0.95 0.03 250);        /* 연한 배경 */
+  }
+
+  .dark {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+  }
+}
+
+@layer base {
+  /* 시니어 기본 폰트 크기 — 18px (text-lg) */
+  html {
+    font-size: 18px;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    /* 안티앨리어싱 강화 — 시니어 가독성 */
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* 최소 터치 타깃 44px — code-convention.md min-h-11 준수 */
+  button,
+  [role="button"],
+  a,
+  input,
+  select,
+  textarea {
+    min-height: 2.75rem; /* 44px / 16px = 2.75rem */
+  }
+
+  /* 포커스 링 강화 — 접근성 */
+  :focus-visible {
+    outline: 3px solid var(--ring);
+    outline-offset: 2px;
+  }
+}

@@ -1,0 +1,83 @@
+import { createBrowserRouter } from 'react-router'
+
+// Lazy imports — 코드 스플리팅
+import { lazy, Suspense } from 'react'
+
+const LoginPage = lazy(() => import('@/features/auth/pages/LoginPage'))
+const RoleSelectPage = lazy(() => import('@/features/auth/pages/RoleSelectPage'))
+const OnboardingPage = lazy(() => import('@/features/auth/pages/OnboardingPage'))
+
+// 시니어(저자) 라우트
+const SeniorLayout = lazy(() => import('@/features/senior/layouts/SeniorLayout'))
+const SeniorHomePage = lazy(() => import('@/features/senior/pages/SeniorHomePage'))
+const ChatPage = lazy(() => import('@/features/senior/pages/ChatPage'))
+const MyBooksPage = lazy(() => import('@/features/senior/pages/MyBooksPage'))
+const FamilyBookshelfPage = lazy(() => import('@/features/senior/pages/FamilyBookshelfPage'))
+const BookEditPage = lazy(() => import('@/features/senior/pages/BookEditPage'))
+const AiMemoryPage = lazy(() => import('@/features/senior/pages/AiMemoryPage'))
+const SeniorSettingsPage = lazy(() => import('@/features/senior/pages/SeniorSettingsPage'))
+
+// 독자 라우트
+const ReaderLayout = lazy(() => import('@/features/reader/layouts/ReaderLayout'))
+const ReaderHomePage = lazy(() => import('@/features/reader/pages/ReaderHomePage'))
+const BookReadPage = lazy(() => import('@/features/reader/pages/BookReadPage'))
+const ReaderSettingsPage = lazy(() => import('@/features/reader/pages/ReaderSettingsPage'))
+
+// 공통
+const NotificationListPage = lazy(() => import('@/features/notifications/pages/NotificationListPage'))
+const FamilyInvitePage = lazy(() => import('@/features/family/pages/FamilyInvitePage'))
+const ConnectedFamilyPage = lazy(() => import('@/features/family/pages/ConnectedFamilyPage'))
+
+function Loading() {
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="text-lg text-neutral-500">로딩 중…</div>
+    </div>
+  )
+}
+
+function withSuspense(element: React.ReactNode) {
+  return <Suspense fallback={<Loading />}>{element}</Suspense>
+}
+
+export const router = createBrowserRouter([
+  // 인증 / 온보딩
+  { path: '/login', element: withSuspense(<LoginPage />) },
+  { path: '/role-select', element: withSuspense(<RoleSelectPage />) },
+  { path: '/onboarding', element: withSuspense(<OnboardingPage />) },
+
+  // 시니어(저자) — /s/*
+  {
+    path: '/s',
+    element: withSuspense(<SeniorLayout />),
+    children: [
+      { index: true, element: withSuspense(<SeniorHomePage />) },
+      { path: 'chat', element: withSuspense(<ChatPage />) },
+      { path: 'books', element: withSuspense(<MyBooksPage />) },
+      { path: 'books/:bookId/edit', element: withSuspense(<BookEditPage />) },
+      { path: 'family', element: withSuspense(<FamilyBookshelfPage />) },
+      { path: 'memory', element: withSuspense(<AiMemoryPage />) },
+      { path: 'settings', element: withSuspense(<SeniorSettingsPage />) },
+      { path: 'notifications', element: withSuspense(<NotificationListPage />) },
+      { path: 'family/invite', element: withSuspense(<FamilyInvitePage />) },
+      { path: 'family/members', element: withSuspense(<ConnectedFamilyPage />) },
+    ],
+  },
+
+  // 독자 — /r/*
+  {
+    path: '/r',
+    element: withSuspense(<ReaderLayout />),
+    children: [
+      { index: true, element: withSuspense(<ReaderHomePage />) },
+      { path: 'books/:bookId', element: withSuspense(<BookReadPage />) },
+      { path: 'settings', element: withSuspense(<ReaderSettingsPage />) },
+      { path: 'notifications', element: withSuspense(<NotificationListPage />) },
+      { path: 'family/invite', element: withSuspense(<FamilyInvitePage />) },
+      { path: 'family/members', element: withSuspense(<ConnectedFamilyPage />) },
+    ],
+  },
+
+  // 루트 — 로그인 상태·역할에 따라 리다이렉트 (App.tsx에서 처리)
+  { path: '/', element: withSuspense(<LoginPage />) },
+])
