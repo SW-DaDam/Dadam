@@ -23,7 +23,6 @@ DROP POLICY IF EXISTS "book_cover_read_authenticated" ON storage.objects;
 DROP POLICY IF EXISTS "book_cover_upload"             ON storage.objects;
 DROP POLICY IF EXISTS "book_cover_update"             ON storage.objects;
 DROP POLICY IF EXISTS "reply_audio_upload"            ON storage.objects;
-DROP POLICY IF EXISTS "reply_audio_read"              ON storage.objects;
 
 -- Storage 버킷 제거
 DELETE FROM storage.buckets WHERE id IN ('avatars', 'book-covers', 'reply-audio');

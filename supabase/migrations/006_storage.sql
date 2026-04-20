@@ -21,5 +21,5 @@ CREATE POLICY "book_cover_upload"             ON storage.objects FOR INSERT TO a
 CREATE POLICY "book_cover_update"             ON storage.objects FOR UPDATE TO authenticated USING    (bucket_id = 'book-covers' AND public.get_user_role() = 'senior');
 
 -- reply-audio 정책
+-- SELECT 정책 없음: signed URL(create_signed_reply_audio_url RPC)로만 접근
 CREATE POLICY "reply_audio_upload" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'reply-audio' AND public.get_user_role() = 'senior');
-CREATE POLICY "reply_audio_read"   ON storage.objects FOR SELECT TO authenticated USING    (bucket_id = 'reply-audio');

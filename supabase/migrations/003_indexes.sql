@@ -13,6 +13,10 @@ CREATE INDEX idx_family_links_family_accepted
 CREATE INDEX idx_family_links_invite_code_pending
   ON public.family_links(invite_code) WHERE invite_status = 'pending';
 
+-- 동일 어르신-가족 중복 연결 방지: 대기 중(family_id NULL) 초대는 중복 허용
+CREATE UNIQUE INDEX uq_family_link
+  ON public.family_links(senior_id, family_id) WHERE family_id IS NOT NULL;
+
 CREATE INDEX idx_conversations_senior_started
   ON public.conversations(senior_id, started_at DESC);
 
@@ -33,6 +37,10 @@ CREATE INDEX idx_books_senior_year_month
 
 CREATE INDEX idx_books_published_at
   ON public.books(published_at) WHERE published_at IS NOT NULL;
+
+-- 월간 책 중복 방지: short 타입은 동일 연월 중복 허용
+CREATE UNIQUE INDEX uq_monthly_book
+  ON public.books(senior_id, year, month) WHERE book_type = 'monthly';
 
 CREATE INDEX idx_chapters_book_order
   ON public.chapters(book_id, sort_order) WHERE is_deleted = false;
