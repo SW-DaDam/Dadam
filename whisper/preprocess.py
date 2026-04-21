@@ -32,6 +32,8 @@ DIR_94_VALID  = DRIVE_ROOT / "명령어 음성(노인남녀)/Validation"
 OUTPUT_DIR = Path("/content/drive/MyDrive/Dadam_dataSet/processed")
 SHARD_DIR  = OUTPUT_DIR / "shards"   # shard 임시 저장 루트
 FINAL_DIR  = OUTPUT_DIR / "senior_speech"  # 최종 DatasetDict
+# HuggingFace Arrow 빌드 임시 캐시를 Drive에 저장 (Colab 로컬 디스크 고갈 방지)
+CACHE_DIR  = OUTPUT_DIR / "_hf_cache"
 
 # ── 오디오 설정 ──────────────────────────────────────────────────────────────
 TARGET_SR    = 16_000  # Whisper 표준 입력 샘플레이트
@@ -285,6 +287,7 @@ def process_split(split: str) -> None:
             ds = Dataset.from_generator(
                 lambda zl=zip_label, za=zip_audio: iter_zip_pairs(zl, za),
                 features=features,
+                cache_dir=str(CACHE_DIR),  # Arrow 빌드 캐시를 Drive에 저장해 로컬 디스크 고갈 방지
             )
             ds.save_to_disk(str(shard_path))
         except Exception as e:
@@ -319,6 +322,7 @@ def merge_shards(split: str) -> Dataset:
 # ── 메인 파이프라인 ───────────────────────────────────────────────────────────
 def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)  # Arrow 캐시 디렉터리 사전 생성
 
     # 1단계: split별 shard 저장 (resume 지원)
     process_split("train")
