@@ -17,8 +17,9 @@ import zipfile
 from pathlib import Path
 from typing import Generator, Optional
 
+import numpy as np
 import librosa
-from datasets import Audio, Dataset, DatasetDict, concatenate_datasets, load_from_disk
+from datasets import Audio, Dataset, DatasetDict, Features, Sequence, Value, concatenate_datasets, load_from_disk
 
 # ── 경로 설정 (Colab 환경 기준) ──────────────────────────────────────────────
 DRIVE_ROOT = Path("/content/drive/MyDrive/Dadam_dataSet")
@@ -173,7 +174,8 @@ def iter_zip_pairs(
 
             matched += 1
             yield {
-                "audio":    {"array": audio, "sampling_rate": TARGET_SR},
+                # numpy array로 명시 — from_generator 직렬화 후 list가 되는 것을 방지
+                "audio":    {"array": np.array(audio, dtype=np.float32), "sampling_rate": TARGET_SR},
                 "text":     meta["text"],
                 "duration": duration,
                 "dataset":  meta["dataset"],
@@ -268,11 +270,22 @@ def process_split(split: str) -> None:
         shard_path = shard_root / sid
 
         try:
+            # features를 미리 선언해 Audio 타입을 generator 단계에서 확정
+            # cast_column 대신 이 방식을 사용하면 list→numpy 변환 오류를 방지
+            features = Features({
+                "audio":    Audio(sampling_rate=TARGET_SR),
+                "text":     Value("string"),
+                "duration": Value("float32"),
+                "dataset":  Value("string"),
+                "domain":   Value("string"),
+                "region":   Value("string"),
+                "gender":   Value("string"),
+                "age":      Value("string"),
+            })
             ds = Dataset.from_generator(
-                lambda zl=zip_label, za=zip_audio: iter_zip_pairs(zl, za)
+                lambda zl=zip_label, za=zip_audio: iter_zip_pairs(zl, za),
+                features=features,
             )
-            # shard 단위로 Audio 캐스팅 — 전체 누적 후 캐스팅보다 메모리 부담이 적음
-            ds = ds.cast_column("audio", Audio(sampling_rate=TARGET_SR))
             ds.save_to_disk(str(shard_path))
         except Exception as e:
             # 부분 저장 방지: 실패한 shard 디렉터리 삭제 후 raise
