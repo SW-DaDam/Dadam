@@ -57,13 +57,26 @@
   html {
     font-size: 18px;
     -webkit-text-size-adjust: 100%;
+    font-family: 'Noto Serif KR', 'Georgia', serif;
   }
 
   body {
     background-color: var(--background);
     color: var(--foreground);
+    font-family: 'Noto Serif KR', 'Georgia', serif;
     /* 안티앨리어싱 강화 — 시니어 가독성 */
     -webkit-font-smoothing: antialiased;
+  }
+
+  /* 한국어 고아 단어 방지 */
+  h1, h2, h3, h4, h5, h6 {
+    text-wrap: balance;
+    word-break: keep-all;
+  }
+
+  p, li, span {
+    text-wrap: pretty;
+    word-break: keep-all;
   }
 
   /* 최소 터치 타깃 44px — code-convention.md min-h-11 준수 */
