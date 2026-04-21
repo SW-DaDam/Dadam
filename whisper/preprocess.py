@@ -2,17 +2,23 @@
 AI Hub 107번(자유대화)·94번(노인명령어) 데이터셋 전처리 스크립트
 Colab Pro+ 환경에서 Google Drive 마운트 후 실행
 출력: HuggingFace datasets 포맷 (train / valid 분리)
+
+중간 저장 전략:
+- zip 쌍 하나마다 shard로 즉시 Drive 저장 → 세션 종료 시 손실 최소화
+- _manifest.json으로 완료된 shard를 기록, 재실행 시 skip (resume)
+- 전체 완료 후 shard를 병합하여 최종 DatasetDict 저장
 """
 
 import io
 import json
 import re
+import shutil
 import zipfile
 from pathlib import Path
 from typing import Generator, Optional
 
 import librosa
-from datasets import Audio, Dataset, DatasetDict
+from datasets import Audio, Dataset, DatasetDict, concatenate_datasets, load_from_disk
 
 # ── 경로 설정 (Colab 환경 기준) ──────────────────────────────────────────────
 DRIVE_ROOT = Path("/content/drive/MyDrive/Dadam_dataSet")
@@ -23,6 +29,8 @@ DIR_94_TRAIN  = DRIVE_ROOT / "명령어 음성(노인남녀)/Training"
 DIR_94_VALID  = DRIVE_ROOT / "명령어 음성(노인남녀)/Validation"
 
 OUTPUT_DIR = Path("/content/drive/MyDrive/Dadam_dataSet/processed")
+SHARD_DIR  = OUTPUT_DIR / "shards"   # shard 임시 저장 루트
+FINAL_DIR  = OUTPUT_DIR / "senior_speech"  # 최종 DatasetDict
 
 # ── 오디오 설정 ──────────────────────────────────────────────────────────────
 TARGET_SR    = 16_000  # Whisper 표준 입력 샘플레이트
@@ -57,7 +65,6 @@ def _parse_raw(raw: dict) -> Optional[dict]:
         utterance = raw["발화정보"]
         text    = utterance.get("stt", "").strip()
         file_nm = utterance.get("fileNm", "").strip()
-        # recrdTime이 빈 문자열이거나 없을 때 0으로 처리
         try:
             duration = float(utterance.get("recrdTime") or 0)
         except (ValueError, TypeError):
@@ -82,7 +89,6 @@ def _parse_raw(raw: dict) -> Optional[dict]:
         text      = raw.get("전사정보", {}).get("LabelText", "").strip()
         file_info = raw.get("파일정보", {})
         file_nm   = file_info.get("FileName", "").strip()
-        # FileLength가 빈 문자열이거나 없을 때 0으로 처리
         try:
             duration = float(file_info.get("FileLength") or 0)
         except (ValueError, TypeError):
@@ -115,11 +121,12 @@ def iter_zip_pairs(
 ) -> Generator[dict, None, None]:
     """
     라벨링 zip에서 JSON 메타를 로드하고, 원천 zip의 오디오와 매칭하여 yield
-    - 오디오는 BytesIO로 감싸서 librosa에 전달 (ZipExtFile 직접 전달 시 실패 방지)
-    - Dataset.from_generator()와 함께 써서 메모리에 전체 배열을 올리지 않음
+    - stem_map 폴백: fileNm이 .wavp 등 오타인 경우도 확장자 제거 stem으로 매칭
+    - 오디오는 BytesIO로 감싸서 librosa에 전달 (ZipExtFile 직접 전달 시 seek 실패 방지)
     """
     # ── 1단계: 라벨 zip → file_name 기준 메타 딕셔너리 구성
     meta_map: dict[str, dict] = {}
+    stem_map: dict[str, dict] = {}  # 확장자 제거 stem → meta (오타 폴백용)
     with zipfile.ZipFile(zip_label, "r") as zl:
         for name in zl.namelist():
             if not name.lower().endswith(".json"):
@@ -130,8 +137,9 @@ def iter_zip_pairs(
                     meta = _parse_raw(raw)
                     if meta:
                         meta_map[meta["file_name"]] = meta
+                        stem_map[Path(meta["file_name"]).stem] = meta
                 except Exception:
-                    pass  # 파싱 실패한 개별 파일은 무시하고 계속
+                    pass
 
     print(f"  라벨 로드 완료: {len(meta_map)}개 ({zip_label.name})")
 
@@ -143,12 +151,12 @@ def iter_zip_pairs(
                 continue
 
             base_name = Path(name).name
-            meta = meta_map.get(base_name)
+            # fileNm 오타(.wavp 등) 대응: 정확한 파일명 먼저, 실패 시 stem 폴백
+            meta = meta_map.get(base_name) or stem_map.get(Path(name).stem)
             if not meta:
                 skipped += 1
                 continue
 
-            # BytesIO로 감싸서 librosa에 전달 — ZipExtFile은 seek 불가라 librosa가 실패할 수 있음
             with za.open(name) as af:
                 try:
                     audio_bytes = io.BytesIO(af.read())
@@ -175,7 +183,9 @@ def iter_zip_pairs(
                 "age":      meta["age"],
             }
 
-    print(f"  매칭: {matched}개 / 스킵: {skipped}개 ({zip_audio.name})")
+    total = matched + skipped
+    ratio = f"{matched/total*100:.1f}%" if total else "N/A"
+    print(f"  매칭: {matched}개 / 스킵: {skipped}개 ({zip_audio.name}) — 매칭률: {ratio}")
 
 
 # ── 데이터셋 zip 쌍 목록 ──────────────────────────────────────────────────────
@@ -183,11 +193,9 @@ def get_pairs(split: str) -> list[tuple[Path, Path]]:
     """split에 따른 (라벨 zip, 원천 zip) 목록 반환"""
     if split == "train":
         return [
-            # 107번 train
             (DIR_107_TRAIN / "[라벨]1.AI챗봇.zip",       DIR_107_TRAIN / "[원천]1.AI챗봇_1.zip"),
             (DIR_107_TRAIN / "[라벨]1.AI챗봇.zip",       DIR_107_TRAIN / "[원천]1.AI챗봇_2.zip"),
             (DIR_107_TRAIN / "[라벨]2.음성수집도구.zip",  DIR_107_TRAIN / "[원천]2.음성수집도구_1.zip"),
-            # 94번 train
             (DIR_94_TRAIN / "[라벨]1.AI비서_라벨링_명령어(노년)_training.zip",  DIR_94_TRAIN / "[원천]1.AI비서_원천_1_명령어(노인)_training.zip"),
             (DIR_94_TRAIN / "[라벨]1.AI비서_라벨링_명령어(노년)_training.zip",  DIR_94_TRAIN / "[원천]1.AI비서_원천_8_명령어(노인)_training.zip"),
             (DIR_94_TRAIN / "[라벨]4.비정형_라벨링_명령어(노년)_training.zip",  DIR_94_TRAIN / "[원천]4.비정형_원천_10_명령어(노년)_training.zip"),
@@ -195,48 +203,123 @@ def get_pairs(split: str) -> list[tuple[Path, Path]]:
         ]
     else:  # valid
         return [
-            # 107번 valid
             (DIR_107_VALID / "[라벨]1.AI챗봇.zip",      DIR_107_VALID / "[원천]1.AI챗봇.zip"),
             (DIR_107_VALID / "[라벨]2.음성수집도구.zip", DIR_107_VALID / "[원천]2.음성수집도구.zip"),
-            # 94번 valid
             (DIR_94_VALID / "[라벨]1.AI비서_라벨링_명령어(노년)_validation.zip", DIR_94_VALID / "[원천]1.AI비서_원천_1_명령어(노인)_validation.zip"),
             (DIR_94_VALID / "[라벨]4.비정형_라벨링_명령어(노년)_validation.zip", DIR_94_VALID / "[원천]4.비정형_원천_1_명령어(노년)_validation.zip"),
         ]
 
 
+# ── shard 이름 생성 ───────────────────────────────────────────────────────────
+def shard_name(index: int, zip_audio: Path) -> str:
+    """인덱스 + 원천 zip명 기반 shard 디렉터리명 생성"""
+    slug = re.sub(r"[^\w가-힣]", "_", zip_audio.stem)
+    return f"{index:02d}_{slug}"
+
+
+# ── manifest 헬퍼 ─────────────────────────────────────────────────────────────
+def load_manifest(manifest_path: Path) -> set[str]:
+    """완료된 shard ID 목록 로드 — 파일 없으면 빈 set 반환"""
+    if not manifest_path.exists():
+        return set()
+    with manifest_path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    return set(data.get("completed", []))
+
+
+def append_manifest(manifest_path: Path, shard_id: str) -> None:
+    """shard 저장 성공 후 manifest에 shard_id 추가"""
+    completed = load_manifest(manifest_path)
+    completed.add(shard_id)
+    with manifest_path.open("w", encoding="utf-8") as f:
+        json.dump({"completed": sorted(completed)}, f, ensure_ascii=False)
+
+
+# ── split 단위 처리 (shard 저장 + resume) ────────────────────────────────────
+def process_split(split: str) -> None:
+    """
+    zip 쌍 하나마다 shard를 Drive에 즉시 저장
+    _manifest.json으로 완료된 shard는 skip하여 재실행 시 resume 가능
+    """
+    shard_root    = SHARD_DIR / split
+    manifest_path = shard_root / "_manifest.json"
+    shard_root.mkdir(parents=True, exist_ok=True)
+
+    completed = load_manifest(manifest_path)
+    pairs     = get_pairs(split)
+
+    print(f"\n=== {split} 셋 구성 중 ({len(pairs)}개 zip 쌍) ===")
+
+    for idx, (zip_label, zip_audio) in enumerate(pairs):
+        sid = shard_name(idx, zip_audio)
+
+        if sid in completed:
+            print(f"[SKIP] 이미 처리됨: {sid}")
+            continue
+
+        if not zip_label.exists():
+            print(f"[SKIP] 파일 없음: {zip_label}")
+            continue
+        if not zip_audio.exists():
+            print(f"[SKIP] 파일 없음: {zip_audio}")
+            continue
+
+        print(f"\n처리 중: {zip_audio.name}  →  shard: {sid}")
+        shard_path = shard_root / sid
+
+        try:
+            ds = Dataset.from_generator(
+                lambda zl=zip_label, za=zip_audio: iter_zip_pairs(zl, za)
+            )
+            # shard 단위로 Audio 캐스팅 — 전체 누적 후 캐스팅보다 메모리 부담이 적음
+            ds = ds.cast_column("audio", Audio(sampling_rate=TARGET_SR))
+            ds.save_to_disk(str(shard_path))
+        except Exception as e:
+            # 부분 저장 방지: 실패한 shard 디렉터리 삭제 후 raise
+            if shard_path.exists():
+                shutil.rmtree(shard_path)
+            raise RuntimeError(f"shard 저장 실패 ({sid}): {e}") from e
+
+        # save_to_disk 성공 후에만 manifest 갱신
+        append_manifest(manifest_path, sid)
+        print(f"  → shard 저장 완료: {shard_path}")
+
+
+# ── shard 병합 ────────────────────────────────────────────────────────────────
+def merge_shards(split: str) -> Dataset:
+    """완료된 shard를 모두 로드하여 하나의 Dataset으로 병합"""
+    shard_root = SHARD_DIR / split
+    completed  = load_manifest(shard_root / "_manifest.json")
+
+    shards = []
+    for sid in sorted(completed):
+        shard_path = shard_root / sid
+        if shard_path.exists():
+            shards.append(load_from_disk(str(shard_path)))
+
+    if not shards:
+        raise ValueError(f"{split} shard가 하나도 없습니다.")
+
+    return concatenate_datasets(shards)
+
+
 # ── 메인 파이프라인 ───────────────────────────────────────────────────────────
-def make_generator(split: str):
-    """Dataset.from_generator()에 넘길 제너레이터 팩토리"""
-    def _gen():
-        for zip_label, zip_audio in get_pairs(split):
-            if not zip_label.exists():
-                print(f"[SKIP] 파일 없음: {zip_label}")
-                continue
-            if not zip_audio.exists():
-                print(f"[SKIP] 파일 없음: {zip_audio}")
-                continue
-            print(f"\n처리 중: {zip_audio.name}")
-            yield from iter_zip_pairs(zip_label, zip_audio)
-    return _gen
-
-
 def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    print("=== train 셋 구성 중 ===")
-    train_ds = Dataset.from_generator(make_generator("train"))
-    # Audio 컬럼을 16kHz로 캐스팅 — from_generator 후 별도 적용
-    train_ds = train_ds.cast_column("audio", Audio(sampling_rate=TARGET_SR))
+    # 1단계: split별 shard 저장 (resume 지원)
+    process_split("train")
+    process_split("valid")
 
-    print("\n=== valid 셋 구성 중 ===")
-    valid_ds = Dataset.from_generator(make_generator("valid"))
-    valid_ds = valid_ds.cast_column("audio", Audio(sampling_rate=TARGET_SR))
+    # 2단계: shard 병합 후 최종 DatasetDict 저장
+    print("\n=== shard 병합 중 ===")
+    train_ds = merge_shards("train")
+    valid_ds  = merge_shards("valid")
 
     ds_dict = DatasetDict({"train": train_ds, "validation": valid_ds})
+    ds_dict.save_to_disk(str(FINAL_DIR))
 
-    save_path = OUTPUT_DIR / "senior_speech"
-    ds_dict.save_to_disk(str(save_path))
-    print(f"\n저장 완료: {save_path}")
+    print(f"\n저장 완료: {FINAL_DIR}")
     print(ds_dict)
 
 
