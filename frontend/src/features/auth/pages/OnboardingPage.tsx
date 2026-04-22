@@ -1,4 +1,8 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router'
+import { useAuthStore } from '@/shared/stores/authStore'
+import { completeSeniorOnboarding } from '../services/authService'
+import { getDbErrorMessage } from '@/lib/errorMessages'
 
 const FEATURES = [
   {
@@ -57,6 +61,18 @@ function AiAvatar() {
 
 export default function OnboardingPage() {
   const navigate = useNavigate()
+  const user = useAuthStore((s) => s.user)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  async function handleStart() {
+    if (!user) return
+    const { error } = await completeSeniorOnboarding(user.id)
+    if (error) {
+      setErrorMessage(getDbErrorMessage(error))
+      return
+    }
+    navigate('/s')
+  }
 
   return (
     <div className="flex-1 flex flex-col">
@@ -115,9 +131,12 @@ export default function OnboardingPage() {
 
       {/* 하단 버튼 */}
       <div className="w-full bg-white border-t border-[#E5E7EB] px-4 sm:px-6 md:px-8 py-5 flex flex-col items-center gap-3 shrink-0">
+        {errorMessage && (
+          <p className="text-base text-red-600 text-center">{errorMessage}</p>
+        )}
         <button
           type="button"
-          onClick={() => navigate('/s')}
+          onClick={handleStart}
           className="w-full h-[72px] rounded-xl bg-[#E8820C] text-xl sm:text-2xl text-white"
         >
           대화 시작하기

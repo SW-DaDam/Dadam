@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router'
 import { ChevronLeft, Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/shared/stores/authStore'
+import { setupFamilyProfile } from '../services/authService'
+import { getDbErrorMessage } from '@/lib/errorMessages'
 
 const RELATIONS = ['아들', '딸', '손자', '손녀', '사위', '며느리', '직접 입력']
 const CODE_LENGTH = 6
@@ -10,9 +12,12 @@ const CODE_LENGTH = 6
 export default function ReaderSetupPage() {
   const navigate = useNavigate()
   const kakaoProfile = useAuthStore((s) => s.kakaoProfile)
+  const user = useAuthStore((s) => s.user)
   const [relation, setRelation] = useState('아들')
   const [customRelation, setCustomRelation] = useState('')
   const [inviteCode, setInviteCode] = useState(['A', '3', 'K', '7', '', ''])
+  const [submitting, setSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   function handleCodeChange(index: number, value: string) {
     const next = [...inviteCode]
@@ -20,8 +25,19 @@ export default function ReaderSetupPage() {
     setInviteCode(next)
   }
 
-  function handleConfirm() {
-    // TODO: F-11 완료 후 family_links 연결
+  async function handleConfirm() {
+    if (!user) return
+    setSubmitting(true)
+    setErrorMessage(null)
+
+    const displayName = kakaoProfile?.name ?? '사용자'
+    const { error } = await setupFamilyProfile(user.id, displayName)
+    if (error) {
+      setErrorMessage(getDbErrorMessage(error))
+      setSubmitting(false)
+      return
+    }
+
     navigate('/r')
   }
 
@@ -53,8 +69,12 @@ export default function ReaderSetupPage() {
 
         {/* 카카오 자동완성 카드 */}
         <div className="w-full bg-white border border-[#E5E7EB] rounded-2xl px-6 py-5">
-          <div className="flex items-center gap-4">
-            <div className="relative shrink-0">
+          <div className="flex flex-col gap-3">
+            <div className="bg-[#FEE500] self-start rounded px-2 py-0.5">
+              <span className="text-sm text-[#3C1E1E]">카카오 자동 완성</span>
+            </div>
+            <div className="flex items-center gap-4">
+            <div className="shrink-0">
               <div className="w-[76px] h-[76px] rounded-full bg-[#FEE500] overflow-hidden flex items-center justify-center">
                 {kakaoProfile?.avatarUrl ? (
                   <img src={kakaoProfile.avatarUrl} alt="카카오 프로필" className="w-full h-full object-cover" />
@@ -63,9 +83,6 @@ export default function ReaderSetupPage() {
                     <path d="M20 0C8.954 0 0 6.716 0 15c0 5.073 3.027 9.558 7.627 12.29L5.41 34.97a.75.75 0 0 0 1.082.8l9.196-5.832C16.54 30.3 18.25 30.5 20 30.5c11.046 0 20-6.716 20-15S31.046 0 20 0Z" />
                   </svg>
                 )}
-              </div>
-              <div className="absolute -top-2 -right-2 bg-[#FEE500] rounded px-2 py-0.5">
-                <span className="text-sm text-[#3C1E1E]">카카오 자동 완성</span>
               </div>
             </div>
             <div className="flex flex-col gap-2">
@@ -78,6 +95,7 @@ export default function ReaderSetupPage() {
                 </div>
               ))}
             </div>
+          </div>
           </div>
         </div>
 
@@ -200,12 +218,19 @@ export default function ReaderSetupPage() {
       {/* 하단 버튼 */}
       <div className="w-full bg-white border-t border-[#E5E7EB] px-4 sm:px-6 md:px-8 py-5 flex flex-col items-center gap-3 shrink-0">
         <p className="text-base text-[#6B7280]">관계 · 연결은 설정에서 언제든 바꿀 수 있어요</p>
+        {errorMessage && (
+          <p className="text-base text-red-600 text-center">{errorMessage}</p>
+        )}
         <button
           type="button"
           onClick={handleConfirm}
-          className="w-full h-[72px] rounded-xl bg-[#E8820C] text-[1.375rem] text-white"
+          disabled={submitting}
+          className={cn(
+            'w-full h-[72px] rounded-xl text-[1.375rem] text-white transition-opacity',
+            submitting ? 'bg-[#E8820C] opacity-40 cursor-not-allowed' : 'bg-[#E8820C]',
+          )}
         >
-          독자로 시작하기
+          {submitting ? '저장 중…' : '독자로 시작하기'}
         </button>
       </div>
 

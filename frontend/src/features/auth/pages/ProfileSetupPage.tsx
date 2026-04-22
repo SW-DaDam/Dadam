@@ -3,20 +3,35 @@ import { useNavigate } from 'react-router'
 import { ChevronLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/shared/stores/authStore'
+import { setupSeniorProfile } from '../services/authService'
+import { getDbErrorMessage } from '@/lib/errorMessages'
 
 const QUICK_NICKNAMES = ['엄마', '할머니', '어머니', '외할머니']
 
 export default function ProfileSetupPage() {
   const navigate = useNavigate()
   const kakaoProfile = useAuthStore((s) => s.kakaoProfile)
+  const user = useAuthStore((s) => s.user)
   const [nickname, setNickname] = useState('엄마')
+  const [submitting, setSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   function handleQuickSelect(name: string) {
     setNickname(name)
   }
 
-  function handleConfirm() {
-    // TODO: F-02 완료 후 profiles 저장 연결
+  async function handleConfirm() {
+    if (!user || !nickname.trim()) return
+    setSubmitting(true)
+    setErrorMessage(null)
+
+    const { error } = await setupSeniorProfile(user.id, nickname.trim())
+    if (error) {
+      setErrorMessage(getDbErrorMessage(error))
+      setSubmitting(false)
+      return
+    }
+
     navigate('/onboarding')
   }
 
@@ -159,16 +174,19 @@ export default function ProfileSetupPage() {
       {/* 하단 버튼 영역 */}
       <div className="w-full bg-white border-t border-[#E5E7EB] px-4 sm:px-6 md:px-8 py-5 flex flex-col items-center gap-3">
         <p className="text-base text-[#6B7280]">호칭은 설정에서 언제든 바꿀 수 있어요</p>
+        {errorMessage && (
+          <p className="text-base text-red-600 text-center">{errorMessage}</p>
+        )}
         <button
           type="button"
           onClick={handleConfirm}
-          disabled={!nickname.trim()}
+          disabled={!nickname.trim() || submitting}
           className={cn(
             'w-full h-[72px] rounded-xl text-[1.375rem] text-white transition-opacity',
-            nickname.trim() ? 'bg-[#E8820C]' : 'bg-[#E8820C] opacity-40 cursor-not-allowed',
+            nickname.trim() && !submitting ? 'bg-[#E8820C]' : 'bg-[#E8820C] opacity-40 cursor-not-allowed',
           )}
         >
-          저자로 시작하기
+          {submitting ? '저장 중…' : '저자로 시작하기'}
         </button>
       </div>
 
