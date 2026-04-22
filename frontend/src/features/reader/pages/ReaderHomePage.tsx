@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router'
 import { Bell, Settings } from 'lucide-react'
+import { useAuthStore } from '@/shared/stores/authStore'
 
 function todayLabel() {
   return new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' })
@@ -41,6 +42,8 @@ const SHELF_BOOKS = [
 
 export default function ReaderHomePage() {
   const navigate = useNavigate()
+  const user = useAuthStore((s) => s.user)
+  const displayName: string = user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? '사용자'
 
   return (
     <div className="flex flex-col min-h-full">
@@ -85,7 +88,7 @@ export default function ReaderHomePage() {
             </svg>
           </div>
           <div className="flex-1 bg-white rounded-xl px-4 py-3 flex flex-col gap-0.5">
-            <p className="text-[1.0625rem] text-[#1F2937]">민준 님, 반가워요 :)</p>
+            <p className="text-[1.0625rem] text-[#1F2937]">{displayName} 님, 반가워요 :)</p>
             <p className="text-base text-[#6B7280]">엄마가 새 책을 출간했어요. 읽어보셨나요?</p>
           </div>
         </div>

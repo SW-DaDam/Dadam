@@ -13,7 +13,7 @@ interface Member {
   avatarTextColor: string
   lastActivity: string
   comments: number
-  extras: { label: string; value: number }
+  extras: { label: string; value: number }[]
 }
 
 const MEMBERS: Member[] = [
