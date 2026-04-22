@@ -3,12 +3,16 @@ import { createBrowserRouter } from 'react-router'
 // Lazy imports — 코드 스플리팅
 import { lazy, Suspense } from 'react'
 import AppShell from '@/shared/layouts/AppShell'
+import { ProtectedRoute } from '@/shared/components/ProtectedRoute'
 
 const LoginPage = lazy(() => import('@/features/auth/pages/LoginPage'))
 const RoleSelectPage = lazy(() => import('@/features/auth/pages/RoleSelectPage'))
 const OnboardingPage = lazy(() => import('@/features/auth/pages/OnboardingPage'))
 const ProfileSetupPage = lazy(() => import('@/features/auth/pages/ProfileSetupPage'))
 const ReaderSetupPage = lazy(() => import('@/features/auth/pages/ReaderSetupPage'))
+const CallbackPage = lazy(() =>
+  import('@/features/auth/pages/CallbackPage').then((m) => ({ default: m.CallbackPage }))
+)
 
 // 시니어(저자) 라우트
 const SeniorLayout = lazy(() => import('@/features/senior/layouts/SeniorLayout'))
@@ -53,48 +57,59 @@ export const router = createBrowserRouter([
   {
     element: <AppShell />,
     children: [
-      // 인증 / 온보딩
+      // 인증 / 온보딩 (비보호 라우트)
       { path: '/login', element: withSuspense(<LoginPage />) },
+      { path: '/auth/callback', element: withSuspense(<CallbackPage />) },
       { path: '/role-select', element: withSuspense(<RoleSelectPage />) },
       { path: '/onboarding', element: withSuspense(<OnboardingPage />) },
       { path: '/profile-setup', element: withSuspense(<ProfileSetupPage />) },
       { path: '/reader-setup', element: withSuspense(<ReaderSetupPage />) },
 
-      // 시니어(저자) — /s/*
+      // 시니어(저자) — /s/* (senior 전용 보호 라우트)
       {
-        path: '/s',
-        element: withSuspense(<SeniorLayout />),
+        element: <ProtectedRoute requiredRole="senior" />,
         children: [
-          { index: true, element: withSuspense(<SeniorHomePage />) },
-          { path: 'chat', element: withSuspense(<ChatPage />) },
-          { path: 'books', element: withSuspense(<MyBooksPage />) },
-          { path: 'books/:bookId', element: withSuspense(<SeniorBookReadPage />) },
-          { path: 'books/:bookId/edit', element: withSuspense(<BookEditPage />) },
-          { path: 'family', element: withSuspense(<FamilyBookshelfPage />) },
-          { path: 'memory', element: withSuspense(<AiMemoryPage />) },
-          { path: 'settings', element: withSuspense(<SeniorSettingsPage />) },
-          { path: 'settings/notifications', element: withSuspense(<NotificationSettingsPage />) },
-          { path: 'settings/profile', element: withSuspense(<ProfileEditPage />) },
-          { path: 'settings/voice', element: withSuspense(<AiVoiceSettingsPage />) },
-          { path: 'notifications', element: withSuspense(<NotificationListPage />) },
-          { path: 'family/invite', element: withSuspense(<FamilyInvitePage />) },
-          { path: 'family/members', element: withSuspense(<ConnectedFamilyPage />) },
+          {
+            path: '/s',
+            element: withSuspense(<SeniorLayout />),
+            children: [
+              { index: true, element: withSuspense(<SeniorHomePage />) },
+              { path: 'chat', element: withSuspense(<ChatPage />) },
+              { path: 'books', element: withSuspense(<MyBooksPage />) },
+              { path: 'books/:bookId', element: withSuspense(<SeniorBookReadPage />) },
+              { path: 'books/:bookId/edit', element: withSuspense(<BookEditPage />) },
+              { path: 'family', element: withSuspense(<FamilyBookshelfPage />) },
+              { path: 'memory', element: withSuspense(<AiMemoryPage />) },
+              { path: 'settings', element: withSuspense(<SeniorSettingsPage />) },
+              { path: 'settings/notifications', element: withSuspense(<NotificationSettingsPage />) },
+              { path: 'settings/profile', element: withSuspense(<ProfileEditPage />) },
+              { path: 'settings/voice', element: withSuspense(<AiVoiceSettingsPage />) },
+              { path: 'notifications', element: withSuspense(<NotificationListPage />) },
+              { path: 'family/invite', element: withSuspense(<FamilyInvitePage />) },
+              { path: 'family/members', element: withSuspense(<ConnectedFamilyPage />) },
+            ],
+          },
         ],
       },
 
-      // 독자 — /r/*
+      // 독자 — /r/* (family 전용 보호 라우트)
       {
-        path: '/r',
-        element: withSuspense(<ReaderLayout />),
+        element: <ProtectedRoute requiredRole="family" />,
         children: [
-          { index: true, element: withSuspense(<ReaderHomePage />) },
-          { path: 'recent', element: withSuspense(<ReaderHomePage />) },
-          { path: 'books/:bookId', element: withSuspense(<BookReadPage />) },
-          { path: 'settings', element: withSuspense(<ReaderSettingsPage />) },
-          { path: 'settings/profile', element: withSuspense(<ReaderProfileEditPage />) },
-          { path: 'notifications', element: withSuspense(<ReaderNotificationPage />) },
-          { path: 'family/invite', element: withSuspense(<FamilyInvitePage />) },
-          { path: 'family/members', element: withSuspense(<ConnectedFamilyPage />) },
+          {
+            path: '/r',
+            element: withSuspense(<ReaderLayout />),
+            children: [
+              { index: true, element: withSuspense(<ReaderHomePage />) },
+              { path: 'recent', element: withSuspense(<ReaderHomePage />) },
+              { path: 'books/:bookId', element: withSuspense(<BookReadPage />) },
+              { path: 'settings', element: withSuspense(<ReaderSettingsPage />) },
+              { path: 'settings/profile', element: withSuspense(<ReaderProfileEditPage />) },
+              { path: 'notifications', element: withSuspense(<ReaderNotificationPage />) },
+              { path: 'family/invite', element: withSuspense(<FamilyInvitePage />) },
+              { path: 'family/members', element: withSuspense(<ConnectedFamilyPage />) },
+            ],
+          },
         ],
       },
 
