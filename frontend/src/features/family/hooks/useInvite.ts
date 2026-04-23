@@ -20,8 +20,10 @@ interface UseInviteReturn {
   refetch: () => Promise<void>
 }
 
+const APP_ORIGIN = import.meta.env.VITE_APP_URL ?? window.location.origin
+
 function makeInviteLink(code: string): string {
-  return `${window.location.origin}/join?code=${code}`
+  return `${APP_ORIGIN}/join?code=${code}`
 }
 
 function newExpiresAt(): string {
