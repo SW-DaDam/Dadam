@@ -25,7 +25,18 @@ export default function FamilyInvitePage() {
 
   function handleKakaoShare() {
     const link = inviteLink ?? ''
-    window.open(`https://sharer.kakao.com/talk/friends/picker/link?app_key=${encodeURIComponent(link)}`)
+    if (!link) return
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const Kakao = (window as any).Kakao
+    if (!Kakao) return
+    if (!Kakao.isInitialized()) {
+      Kakao.init(import.meta.env.VITE_KAKAO_JS_KEY)
+    }
+    Kakao.Share.sendDefault({
+      objectType: 'text',
+      text: '다담 — AI 말동무와 함께 만드는 가족 출판 플랫폼\n초대 링크로 접속해서 가족으로 연결해요!',
+      link: { mobileWebUrl: link, webUrl: link },
+    })
   }
 
   return (

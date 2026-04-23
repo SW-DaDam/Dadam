@@ -6,3 +6,4 @@ node_modules
 docs/work/ROADMAP*.md
 docs/superpowers/
 docs/task/
+.vercel
