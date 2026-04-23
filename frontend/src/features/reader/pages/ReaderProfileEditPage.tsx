@@ -3,11 +3,15 @@ import { useNavigate } from 'react-router'
 import { ChevronLeft } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/shared/stores/authStore'
 
 const RELATION_PRESETS = ['아들', '딸', '손자', '손녀', '사위', '직접 입력']
 
 export default function ReaderProfileEditPage() {
   const navigate = useNavigate()
+  const user = useAuthStore((s) => s.user)
+  const displayName: string = user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? '사용자'
+  const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
   const [relation, setRelation] = useState('아들')
   const [notifBook, setNotifBook] = useState(true)
   const [notifReply, setNotifReply] = useState(true)
@@ -40,10 +44,11 @@ export default function ReaderProfileEditPage() {
         {/* 프로필 사진 */}
         <div className="bg-white border-b border-[#E5E7EB] flex flex-col items-center gap-3 py-6">
           <div className="relative">
-            <div className="w-20 h-20 rounded-full bg-[#FEE500] flex items-center justify-center">
-              <svg width="28" height="25" viewBox="0 0 40 36" fill="#3C1E1E8C" aria-hidden="true">
-                <path d="M20 0C8.954 0 0 6.716 0 15c0 5.073 3.027 9.558 7.627 12.29L5.41 34.97a.75.75 0 0 0 1.082.8l9.196-5.832C16.54 30.3 18.25 30.5 20 30.5c11.046 0 20-6.716 20-15S31.046 0 20 0Z" />
-              </svg>
+            <div className="w-20 h-20 rounded-full bg-[#FEE500] flex items-center justify-center overflow-hidden">
+              {avatarUrl
+                ? <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+                : <span className="text-2xl text-[#3C1E1E]">{displayName.charAt(0)}</span>
+              }
             </div>
             <span className="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-[#FEE500] border-[3px] border-white flex items-center justify-center">
               <span className="text-[10px] font-bold text-[#3C1E1E]">K</span>
@@ -58,7 +63,7 @@ export default function ReaderProfileEditPage() {
           <div className="flex flex-col gap-1.5">
             <p className="text-base text-[#6B7280]">이름</p>
             <div className="bg-[#F3F4F6] border border-[#E5E7EB] rounded-xl px-4 py-3.5 flex items-center gap-3">
-              <span className="flex-1 text-[1.25rem] text-[#9CA3AF]">김민준</span>
+              <span className="flex-1 text-[1.25rem] text-[#9CA3AF]">{displayName}</span>
               <span className="bg-[#E5E7EB] rounded-lg px-3 py-1">
                 <span className="text-sm text-[#6B7280]">카카오에서 가져와요</span>
               </span>

@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router'
 import { Bell, Settings, ChevronRight } from 'lucide-react'
+import { useAuthStore } from '@/shared/stores/authStore'
 
 function todayLabel() {
   return new Date().toLocaleDateString('ko-KR', {
@@ -14,6 +15,8 @@ const FAMILY_ACTIVITY = { name: '김민준', action: '댓글을 달았어요', t
 
 export default function SeniorHomePage() {
   const navigate = useNavigate()
+  const user = useAuthStore((s) => s.user)
+  const displayName: string = user?.user_metadata?.full_name ?? user?.email ?? '사용자'
 
   return (
     <div className="flex flex-col min-h-full">
@@ -49,7 +52,7 @@ export default function SeniorHomePage() {
             <span className="text-lg text-white font-bold">AI</span>
           </div>
           <div className="flex-1 bg-white rounded-xl px-4 py-3 flex flex-col gap-1">
-            <p className="text-[1.0625rem] text-[#1F2937]">좋은 아침이에요, 김영숙 님 :)</p>
+            <p className="text-[1.0625rem] text-[#1F2937]">좋은 아침이에요, {displayName} 님 :)</p>
             <p className="text-base text-[#6B7280]">오늘도 이야기 들려주세요</p>
           </div>
         </div>

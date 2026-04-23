@@ -1,3 +1,4 @@
+import { supabase } from '@/lib/supabase'
 
 function KakaoIcon() {
   return (
@@ -24,13 +25,26 @@ function AiAvatar() {
 }
 
 export default function LoginPage() {
-  // TODO: F-02 완료 후 실제 카카오 OAuth(supabase.auth.signInWithOAuth)로 교체
-  function handleKakaoStart() {
-    window.location.href = '/role-select'
-  }
-
-  function handleKakaoLogin() {
-    window.location.href = '/s'
+  // 카카오 OAuth 시작 — Supabase가 카카오 인가 페이지로 리다이렉트하고,
+  //   완료 후 redirectTo로 돌아와 detectSessionInUrl이 자동으로 세션 파싱
+  // queryParams.scope로 카카오 OAuth URL의 scope 파라미터를 완전 덮어쓰기.
+  //   options.scopes는 Supabase 기본값(account_email 포함)에 추가되는 구조라
+  //   account_email을 제거하려면 queryParams를 써야 함 (KOE205 회피).
+  //   카카오 개인 앱은 account_email 권한을 받을 수 없기 때문에 필수 조치
+  async function handleKakaoStart() {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'kakao',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: {
+          scope: 'profile_nickname profile_image',
+        },
+      },
+    })
+    if (error) {
+      // TASK-11에서 한국어 에러 메시지 매핑 예정, 우선 콘솔 로깅만
+      console.error('카카오 OAuth 시작 실패:', error.message)
+    }
   }
 
   return (
@@ -64,14 +78,6 @@ export default function LoginPage() {
           >
             <KakaoIcon />
             카카오톡으로 시작하기
-          </button>
-          <button
-            type="button"
-            onClick={handleKakaoLogin}
-            className="w-full h-[72px] rounded-xl bg-white border-2 border-[#FEE500] flex items-center justify-center gap-3 text-xl text-[#3C1E1E]"
-          >
-            <KakaoIcon />
-            카카오톡으로 로그인하기
           </button>
         </div>
 

@@ -2,11 +2,17 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ChevronRight } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
+import { useAuthStore } from '@/shared/stores/authStore'
 
 export default function SeniorSettingsPage() {
   const navigate = useNavigate()
   const [fontLarge, setFontLarge] = useState(true)
   const [darkMode, setDarkMode] = useState(false)
+  const user = useAuthStore((s) => s.user)
+
+  const displayName: string = user?.user_metadata?.full_name ?? user?.email ?? '사용자'
+  const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
+  const avatarChar = displayName.charAt(0)
 
   return (
     <div className="flex-1 flex flex-col">
@@ -20,17 +26,18 @@ export default function SeniorSettingsPage() {
         {/* 프로필 카드 */}
         <div className="bg-white border border-[#E5E7EB] rounded-2xl px-5 py-4 flex items-center gap-3">
           <div className="relative shrink-0">
-            <div className="w-12 h-12 rounded-full bg-[#FEE500] flex items-center justify-center">
-              <svg width="20" height="18" viewBox="0 0 40 36" fill="#3C1E1E99" aria-hidden="true">
-                <path d="M20 0C8.954 0 0 6.716 0 15c0 5.073 3.027 9.558 7.627 12.29L5.41 34.97a.75.75 0 0 0 1.082.8l9.196-5.832C16.54 30.3 18.25 30.5 20 30.5c11.046 0 20-6.716 20-15S31.046 0 20 0Z" />
-              </svg>
+            <div className="w-12 h-12 rounded-full bg-[#FEE500] flex items-center justify-center overflow-hidden">
+              {avatarUrl
+                ? <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+                : <span className="text-base text-[#3C1E1E]">{avatarChar}</span>
+              }
             </div>
             <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-[#FEE500] border-2 border-white flex items-center justify-center">
               <span className="text-[8px] text-[#3C1E1E] font-bold">K</span>
             </div>
           </div>
           <div className="flex-1 flex flex-col gap-0.5">
-            <p className="text-[1.375rem] text-[#1F2937]">김영숙</p>
+            <p className="text-[1.375rem] text-[#1F2937]">{displayName}</p>
             <p className="text-[1.0625rem] text-[#6B7280]">호칭: 엄마 · 저자</p>
           </div>
           <button

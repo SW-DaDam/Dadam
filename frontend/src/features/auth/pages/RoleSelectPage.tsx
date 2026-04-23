@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/shared/stores/authStore'
 
-type Role = 'author' | 'reader'
+type Role = 'senior' | 'family'
 
 function AuthorAvatar() {
   return (
@@ -31,14 +32,22 @@ function ReaderAvatar() {
 export default function RoleSelectPage() {
   const [selected, setSelected] = useState<Role | null>(null)
   const navigate = useNavigate()
+  const setRole = useAuthStore((s) => s.setRole)
+  const user = useAuthStore((s) => s.user)
+
+  const displayName: string = user?.user_metadata?.full_name ?? user?.email ?? '사용자'
+  const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
+  const avatarChar = displayName.charAt(0)
 
   function handleSelect(role: Role) {
     setSelected(role)
   }
 
   function handleConfirm() {
-    if (selected === 'author') navigate('/profile-setup')
-    else if (selected === 'reader') navigate('/reader-setup')
+    if (!selected) return
+    setRole(selected)
+    if (selected === 'senior') navigate('/profile-setup')
+    else navigate('/reader-setup')
   }
 
   return (
@@ -46,12 +55,15 @@ export default function RoleSelectPage() {
 
       {/* 헤더 */}
       <header className="w-full h-[80px] bg-white border-b border-[#E5E7EB] flex items-center px-4 sm:px-6 md:px-8 gap-4">
-        <div className="w-11 h-11 rounded-full bg-[#FEE500] flex items-center justify-center shrink-0">
-          <span className="text-sm text-[#3C1E1E]">김</span>
+        <div className="w-11 h-11 rounded-full bg-[#FEE500] flex items-center justify-center shrink-0 overflow-hidden">
+          {avatarUrl
+            ? <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+            : <span className="text-sm text-[#3C1E1E]">{avatarChar}</span>
+          }
         </div>
         <div className="flex flex-col gap-0.5">
           <p className="text-base text-[#6B7280] leading-[19px]">카카오 로그인 완료</p>
-          <p className="text-lg text-[#1F2937] leading-[22px]">김영숙 님, 반갑습니다</p>
+          <p className="text-lg text-[#1F2937] leading-[22px]">{displayName} 님, 반갑습니다</p>
         </div>
       </header>
 
@@ -73,10 +85,10 @@ export default function RoleSelectPage() {
         {/* 저자 카드 */}
         <button
           type="button"
-          onClick={() => handleSelect('author')}
+          onClick={() => handleSelect('senior')}
           className={cn(
             'w-full bg-white rounded-2xl p-8 flex flex-col items-center gap-5 text-left transition-all',
-            selected === 'author'
+            selected === 'senior'
               ? 'border-[3px] border-[#E8820C]'
               : 'border border-[#E5E7EB]',
           )}
@@ -103,10 +115,10 @@ export default function RoleSelectPage() {
         {/* 독자 카드 */}
         <button
           type="button"
-          onClick={() => handleSelect('reader')}
+          onClick={() => handleSelect('family')}
           className={cn(
             'w-full bg-white rounded-2xl p-8 flex flex-col items-center gap-5 text-left transition-all',
-            selected === 'reader'
+            selected === 'family'
               ? 'border-[3px] border-[#E8820C]'
               : 'border border-[#E5E7EB]',
           )}
@@ -139,7 +151,7 @@ export default function RoleSelectPage() {
             selected ? 'bg-[#E8820C]' : 'bg-[#E8820C] opacity-40 cursor-not-allowed',
           )}
         >
-          {selected === 'author' ? '저자로 시작하기' : selected === 'reader' ? '독자로 시작하기' : '역할을 선택해주세요'}
+          {selected === 'senior' ? '저자로 시작하기' : selected === 'family' ? '독자로 시작하기' : '역할을 선택해주세요'}
         </button>
 
       </main>
