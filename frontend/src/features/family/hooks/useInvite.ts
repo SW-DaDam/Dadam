@@ -48,6 +48,7 @@ export function useInvite(): UseInviteReturn {
     setLoading(true)
     setError(null)
 
+    // 유효한 초대 코드 조회 (pending + 만료 전)
     const { data: linkData, error: linkErr } = await supabase
       .from('family_links')
       .select('*, profile:profiles!family_links_family_id_fkey(*)')
@@ -62,6 +63,7 @@ export function useInvite(): UseInviteReturn {
 
     const rows = (linkData ?? []) as FamilyMemberWithProfile[]
 
+    // 유효한 pending 코드 (만료 전)
     const pendingCode = rows.find(
       (r) =>
         r.invite_status === 'pending' &&
@@ -69,6 +71,7 @@ export function useInvite(): UseInviteReturn {
     )
     setInviteCode(pendingCode?.invite_code ?? null)
 
+    // 수락된 가족만 표시
     setFamilyMembers(rows.filter((r) => r.invite_status === 'accepted'))
     setLoading(false)
   }, [user])
@@ -77,6 +80,7 @@ export function useInvite(): UseInviteReturn {
     void fetchData()
   }, [fetchData])
 
+  // 초대 코드 생성 (기존 pending 코드 만료 처리 후 새로 생성)
   async function generateInviteCode(): Promise<void> {
     if (!user) return
     const code = randomCode()
@@ -95,12 +99,14 @@ export function useInvite(): UseInviteReturn {
     setInviteCode(code)
   }
 
+  // 가족이 초대 코드 입력 후 수락
   async function acceptInvite(
     code: string,
     relationship: string,
   ): Promise<{ ok: boolean; message: string }> {
     if (!user) return { ok: false, message: '로그인이 필요해요' }
 
+    // 코드 조회
     const { data: link, error: findErr } = await supabase
       .from('family_links')
       .select('*')
@@ -126,6 +132,7 @@ export function useInvite(): UseInviteReturn {
     return { ok: true, message: '가족으로 연결됐어요!' }
   }
 
+  // 가족 연결 해제
   async function removeFamilyLink(linkId: string): Promise<void> {
     const { error: err } = await supabase
       .from('family_links')
