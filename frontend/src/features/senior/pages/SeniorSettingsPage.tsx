@@ -1,13 +1,21 @@
-import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ChevronRight } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
 import { useAuthStore } from '@/shared/stores/authStore'
+import { useThemeStore } from '@/shared/stores/themeStore'
+import { useFontSizeStore, type FontSize } from '@/shared/stores/fontSizeStore'
+import { cn } from '@/lib/utils'
+
+const FONT_OPTIONS: { value: FontSize; label: string }[] = [
+  { value: 'small', label: '작음' },
+  { value: 'medium', label: '중간' },
+  { value: 'large', label: '큼' },
+]
 
 export default function SeniorSettingsPage() {
   const navigate = useNavigate()
-  const [fontLarge, setFontLarge] = useState(true)
-  const [darkMode, setDarkMode] = useState(false)
+  const { darkMode, setDarkMode } = useThemeStore()
+  const { fontSize, setFontSize } = useFontSizeStore()
   const user = useAuthStore((s) => s.user)
 
   const displayName: string = user?.user_metadata?.full_name ?? user?.email ?? '사용자'
@@ -135,11 +143,26 @@ export default function SeniorSettingsPage() {
               <div className="w-10 h-10 rounded-xl bg-[#F3F4F6] flex items-center justify-center shrink-0 text-lg text-[#6B7280] font-medium">
                 가
               </div>
-              <div className="flex-1 flex flex-col gap-0.5">
+              <div className="flex-1 flex flex-col gap-1.5">
                 <p className="text-[1.125rem] text-[#1F2937]">글씨 크기</p>
-                <p className="text-base text-[#6B7280]">크게 설정 중</p>
+                <div className="flex gap-2">
+                  {FONT_OPTIONS.map(({ value, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setFontSize(value)}
+                      className={cn(
+                        'flex-1 py-1.5 rounded-lg text-base transition-colors',
+                        fontSize === value
+                          ? 'bg-[#E8820C] text-white'
+                          : 'bg-[#F3F4F6] text-[#6B7280]',
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <Toggle on={fontLarge} onChange={setFontLarge} />
             </div>
             {/* 다크 모드 */}
             <div className="flex items-center gap-3 px-5 py-4">

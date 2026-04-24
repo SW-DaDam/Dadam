@@ -49,8 +49,30 @@
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 15%);
     --ring: oklch(0.556 0 0);
+    color-scheme: dark;
   }
 }
+
+/* 다크 모드 하드코딩 색상 오버라이드 */
+.dark body { background-color: #111827; color: #F9FAFB; }
+.dark header { background-color: #1F2937 !important; border-color: #374151 !important; }
+.dark nav { background-color: #1F2937 !important; border-color: #374151 !important; }
+
+.dark .bg-white { background-color: #1F2937 !important; }
+.dark .bg-\[\#F9FAFB\] { background-color: #111827 !important; }
+.dark .bg-\[\#F3F4F6\] { background-color: #374151 !important; }
+.dark .bg-\[\#FFF8F0\] { background-color: #111827 !important; }
+.dark .bg-\[\#FFFBF5\] { background-color: #111827 !important; }
+.dark .bg-\[\#FFF0DC\] { background-color: #292524 !important; }
+
+.dark .text-\[\#1F2937\] { color: #F9FAFB !important; }
+.dark .text-\[\#374151\] { color: #E5E7EB !important; }
+.dark .text-\[\#6B7280\] { color: #9CA3AF !important; }
+.dark .text-\[\#9CA3AF\] { color: #6B7280 !important; }
+
+.dark .border-\[\#E5E7EB\] { border-color: #374151 !important; }
+.dark .border-b { border-color: #374151 !important; }
+.dark .divide-\[\#E5E7EB\] > * { border-color: #374151 !important; }
 
 @layer base {
   /* 시니어 기본 폰트 크기 — 18px (text-lg) */

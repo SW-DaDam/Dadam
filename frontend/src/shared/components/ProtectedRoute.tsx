@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from 'react-router-dom'
+import { Navigate, Outlet } from 'react-router'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 
 // handle_new_user 트리거가 설정하는 기본값 — 이 값이면 온보딩 미완료

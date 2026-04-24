@@ -46,32 +46,30 @@ export function useAuth(): UseAuthReturn {
   }
 
   useEffect(() => {
-    // 인증 상태 변경 구독 — INITIAL_SESSION으로 콜드 로드 세션도 처리
+    // getSession()으로 즉시 세션 확인 — INITIAL_SESSION 대기 없이 빠른 초기화
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      setSession(initialSession)
+      if (initialSession) {
+        syncAuthState(initialSession).finally(() => setLoading(false))
+      } else {
+        setLoading(false)
+      }
+    })
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+      // INITIAL_SESSION은 getSession()으로 처리했으므로 스킵
+      if (event === 'INITIAL_SESSION') return
+
       setSession(newSession)
 
-      if (event === 'TOKEN_REFRESHED') {
-        console.log('[Auth] 토큰 자동 갱신 완료')
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        await syncAuthState(newSession)
       }
 
-      try {
-        if (
-          event === 'INITIAL_SESSION' ||
-          event === 'SIGNED_IN' ||
-          event === 'TOKEN_REFRESHED'
-        ) {
-          await syncAuthState(newSession)
-          return
-        }
-
-        if (event === 'SIGNED_OUT') {
-          clear()
-        }
-      } finally {
-        // 어떤 이벤트·에러가 오더라도 loading을 해제해 무한 스피너 방지
-        setLoading(false)
+      if (event === 'SIGNED_OUT') {
+        clear()
       }
     })
 
