@@ -3,6 +3,9 @@
 -- 사전 요구사항: pg_cron 익스텐션 활성화 (대시보드 Database > Extensions)
 -- ============================================================
 
+-- pg_cron 익스텐션 활성화 (로컬 개발 환경용, 프로덕션은 대시보드에서 활성화)
+CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA extensions;
+
 -- 매월 1일 자정: 월말 책 초안 생성 Edge Function 호출
 SELECT cron.schedule(
   'monthly-book-generation',
