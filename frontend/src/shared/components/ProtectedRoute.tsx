@@ -24,9 +24,13 @@ export function ProtectedRoute({ requiredRole }: ProtectedRouteProps) {
     return <Navigate to="/login" replace />
   }
 
-  // 프로필 없음 (트리거 지연) → /auth/callback 루프를 막기 위해 로그인으로 복귀
+  // 세션은 있지만 프로필이 아직 로딩 중 (백그라운드 fetch 대기)
   if (!profile) {
-    return <Navigate to="/login" replace />
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-yellow-400 border-t-transparent" />
+      </div>
+    )
   }
 
   // 온보딩 미완료 (display_name이 기본값) → 역할 선택으로 강제 이동
