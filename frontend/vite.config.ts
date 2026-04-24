@@ -8,6 +8,7 @@ import basicSsl from '@vitejs/plugin-basic-ssl'
 export default defineConfig({
   server: {
     https: {},
+    host: true,  // 같은 와이파이 기기에서 접속 허용 (0.0.0.0)
   },
   test: {
     environment: 'jsdom',
