@@ -1,9 +1,41 @@
-import { defineConfig } from 'vite'
+import path from 'path'
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
-// Tailwind v4 공식 Vite 플러그인 — postcss.config 없이 CSS 파일 @import 만으로 동작
 import tailwindcss from '@tailwindcss/vite'
+import { VitePWA } from 'vite-plugin-pwa'
 
-// https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test-setup.ts'],
+  },
+  plugins: [
+    react(),
+    tailwindcss(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['favicon.svg', 'apple-touch-icon.svg'],
+      manifest: {
+        name: '다담 — AI 말동무',
+        short_name: '다담',
+        description: 'AI 말동무와 함께 만드는 가족 출판 플랫폼',
+        theme_color: '#4A7FBF',
+        background_color: '#ffffff',
+        display: 'standalone',
+        orientation: 'portrait',
+        start_url: '/',
+        icons: [
+          { src: 'pwa-192x192.svg', sizes: '192x192', type: 'image/svg+xml' },
+          { src: 'pwa-512x512.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any maskable' },
+          { src: 'android-chrome-96x96.svg', sizes: '96x96', type: 'image/svg+xml' },
+        ],
+      },
+    }),
+  ],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
 })
