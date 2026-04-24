@@ -9,3 +9,10 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+// Web Speech API 크로스 브라우저 타입 보강
+// Chrome은 webkitSpeechRecognition, 표준은 SpeechRecognition
+interface Window {
+  SpeechRecognition: typeof SpeechRecognition
+  webkitSpeechRecognition: typeof SpeechRecognition
+}
