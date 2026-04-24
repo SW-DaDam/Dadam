@@ -46,30 +46,26 @@ export function useAuth(): UseAuthReturn {
   }
 
   useEffect(() => {
-    // getSession()으로 즉시 세션 확인 — INITIAL_SESSION 대기 없이 빠른 초기화
-    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
-      setSession(initialSession)
-      if (initialSession) {
-        syncAuthState(initialSession).finally(() => setLoading(false))
-      } else {
-        setLoading(false)
-      }
-    })
-
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-      // INITIAL_SESSION은 getSession()으로 처리했으므로 스킵
-      if (event === 'INITIAL_SESSION') return
-
       setSession(newSession)
 
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+      // INITIAL_SESSION 또는 SIGNED_IN 모두 초기 인증 상태 확정으로 처리
+      // Supabase JS v2 + StrictMode 환경에서 INITIAL_SESSION 대신 SIGNED_IN이 발화될 수 있음
+      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+        if (newSession) syncAuthState(newSession)
+        setLoading(false)
+        return
+      }
+
+      if (event === 'TOKEN_REFRESHED') {
         await syncAuthState(newSession)
       }
 
       if (event === 'SIGNED_OUT') {
         clear()
+        setLoading(false)
       }
     })
 
