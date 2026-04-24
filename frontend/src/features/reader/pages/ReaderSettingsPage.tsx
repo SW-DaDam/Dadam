@@ -2,6 +2,15 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import Toggle from '@/shared/components/Toggle'
 import { useAuthStore } from '@/shared/stores/authStore'
+import { useThemeStore } from '@/shared/stores/themeStore'
+import { useFontSizeStore, type FontSize } from '@/shared/stores/fontSizeStore'
+import { cn } from '@/lib/utils'
+
+const FONT_OPTIONS: { value: FontSize; label: string }[] = [
+  { value: 'small', label: '작음' },
+  { value: 'medium', label: '중간' },
+  { value: 'large', label: '큼' },
+]
 
 export default function ReaderSettingsPage() {
   const navigate = useNavigate()
@@ -13,8 +22,8 @@ export default function ReaderSettingsPage() {
   const [notifNewBook, setNotifNewBook] = useState(true)
   const [notifReply, setNotifReply] = useState(true)
   const [notifFamily, setNotifFamily] = useState(false)
-  const [largeFontOn, setLargeFontOn] = useState(false)
-  const [darkModeOn, setDarkModeOn] = useState(false)
+  const { darkMode: darkModeOn, setDarkMode: setDarkModeOn } = useThemeStore()
+  const { fontSize, setFontSize } = useFontSizeStore()
 
   return (
     <div className="flex-1 flex flex-col">
@@ -120,11 +129,26 @@ export default function ReaderSettingsPage() {
               <div className="w-9 h-9 rounded-lg bg-[#F3F4F6] flex items-center justify-center shrink-0">
                 <span className="text-[1.125rem] font-medium text-[#6B7280]">가</span>
               </div>
-              <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                <p className="text-[1.0625rem] text-[#1F2937]">글씨크기</p>
-                {!largeFontOn && <p className="text-sm text-[#9CA3AF]">보통 설정 중</p>}
+              <div className="flex-1 flex flex-col gap-1.5 min-w-0">
+                <p className="text-[1.0625rem] text-[#1F2937]">글씨 크기</p>
+                <div className="flex gap-2">
+                  {FONT_OPTIONS.map(({ value, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setFontSize(value)}
+                      className={cn(
+                        'flex-1 py-1.5 rounded-lg text-base transition-colors',
+                        fontSize === value
+                          ? 'bg-[#E8820C] text-white'
+                          : 'bg-[#F3F4F6] text-[#6B7280]',
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <Toggle on={largeFontOn} onChange={setLargeFontOn} />
             </div>
             <div className="flex items-center gap-3 px-5 py-4">
               <div className="w-9 h-9 rounded-lg bg-[#F3F4F6] flex items-center justify-center shrink-0 text-base">
