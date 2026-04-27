@@ -36,7 +36,8 @@ CREATE TABLE public.family_links (
   relationship  TEXT          NULL,
   invited_at    TIMESTAMPTZ   NOT NULL DEFAULT now(),
   accepted_at   TIMESTAMPTZ   NULL,
-  expires_at    TIMESTAMPTZ   NOT NULL
+  expires_at    TIMESTAMPTZ   NOT NULL,
+  UNIQUE (senior_id, family_id)
 );
 
 -- 4. memories — 어르신 1명당 1행 (JSONB)
@@ -88,7 +89,8 @@ CREATE TABLE public.books (
   chapter_count   INTEGER     NOT NULL DEFAULT 0,
   published_at    TIMESTAMPTZ NULL,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (senior_id, year, month)
 );
 
 -- 8. chapters — 주제 기반 챕터 (소프트 삭제)

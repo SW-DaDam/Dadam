@@ -95,7 +95,7 @@ export default function AiVoiceSettingsPage() {
   const summary = `${voice === 'female' ? '여자' : '남자'} 목소리 · ${speedLabel} · ${volume} 음량`
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col min-h-0">
 
       <header className="w-full h-[80px] bg-white border-b border-[#E5E7EB] flex items-center px-4 sm:px-6 shrink-0">
         <button type="button" onClick={() => navigate(-1)} className="flex items-center min-h-11">

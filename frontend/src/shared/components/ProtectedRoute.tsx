@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from 'react-router'
+import { Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 
 // handle_new_user 트리거가 설정하는 기본값 — 이 값이면 온보딩 미완료
@@ -24,7 +24,7 @@ export function ProtectedRoute({ requiredRole }: ProtectedRouteProps) {
     return <Navigate to="/login" replace />
   }
 
-  // 세션은 있지만 프로필이 아직 로딩 중 (백그라운드 fetch 대기)
+  // 세션은 있지만 프로필이 아직 로딩 중 — 리다이렉트하면 루프 발생
   if (!profile) {
     return (
       <div className="flex min-h-screen items-center justify-center">

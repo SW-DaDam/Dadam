@@ -64,7 +64,7 @@ export default function MyBooksPage() {
   const publishedBooks = BOOKS.filter((b) => b.status === 'published')
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col min-h-0">
 
       <header className="w-full h-[80px] bg-white border-b border-[#E5E7EB] flex items-center justify-between px-4 sm:px-6 shrink-0">
         <h1 className="text-lg sm:text-xl text-[#1F2937] font-medium">내 책장</h1>

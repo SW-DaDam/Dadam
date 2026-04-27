@@ -2,6 +2,12 @@
 .mcp.json
 node_modules
 
+# 환경변수 (API 키 등 민감 정보)
+.env
+.env.local
+.env*.local
+supabase/functions/.env
+
 # 로드맵 (로컬 전용)
 docs/work/ROADMAP*.md
 docs/superpowers/
