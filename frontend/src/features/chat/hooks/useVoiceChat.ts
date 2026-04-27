@@ -11,6 +11,11 @@ const TTS_RATE = 0.9
 // no-speech 감지 후 자동 재시작까지 대기 시간 (TASK-09)
 const NO_SPEECH_RESTART_MS = 5000
 
+// SpeechRecognition API 지원 여부 — 컴포넌트가 UI 분기에 사용
+const isSttSupported =
+  typeof window !== 'undefined' &&
+  !!(window.SpeechRecognition ?? window.webkitSpeechRecognition)
+
 // Web Speech API 에러 코드 → 사용자 안내 메시지
 const STT_ERROR_MESSAGES: Record<string, string> = {
   'not-allowed': '마이크 사용 권한이 필요해요',
@@ -36,8 +41,10 @@ export interface UseVoiceChatReturn {
   messages: ChatMessage[]
   transcript: string       // 실시간 중간 STT 결과 (마이크 영역 위 표시용)
   error: string | null
+  isSttSupported: boolean  // STT API 지원 여부 — 마이크 영역 표시/숨김 분기용
   startListening: () => void
   stopListening: () => void
+  sendTextMessage: (text: string) => Promise<void>
 }
 
 // ── 헬퍼 ──────────────────────────────────────────────
@@ -230,6 +237,20 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
     }
   }, [addMessage, sendToAI, updateState])
 
+  // 텍스트 직접 입력 → AI 전송 (STT 없이 동일한 sendToAI 파이프라인 사용)
+  const sendTextMessage = useCallback(async (text: string) => {
+    if (!text.trim() || stateRef.current !== 'idle') return
+    setError(null)
+    const userMsg: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: text.trim(),
+      timestamp: new Date(),
+    }
+    addMessage(userMsg)
+    await sendToAI(text.trim())
+  }, [addMessage, sendToAI])
+
   const startListening = useCallback(() => {
     if (stateRef.current !== 'idle') return
     speechSynthesis.cancel()
@@ -243,5 +264,5 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
     updateState('idle')
   }, [updateState])
 
-  return { state, messages, transcript, error, startListening, stopListening }
+  return { state, messages, transcript, error, isSttSupported, startListening, stopListening, sendTextMessage }
 }
