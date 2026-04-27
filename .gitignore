@@ -12,3 +12,4 @@ supabase/functions/.env
 docs/work/ROADMAP*.md
 docs/superpowers/
 docs/task/
+.vercel

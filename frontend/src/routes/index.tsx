@@ -40,6 +40,7 @@ const ReaderProfileEditPage = lazy(() => import('@/features/reader/pages/ReaderP
 const NotificationListPage = lazy(() => import('@/features/notifications/pages/NotificationListPage'))
 const FamilyInvitePage = lazy(() => import('@/features/family/pages/FamilyInvitePage'))
 const ConnectedFamilyPage = lazy(() => import('@/features/family/pages/ConnectedFamilyPage'))
+const InviteAcceptPage = lazy(() => import('@/features/family/pages/InviteAcceptPage'))
 
 function Loading() {
   return (
@@ -60,6 +61,7 @@ export const router = createBrowserRouter([
       // 인증 / 온보딩 (비보호 라우트)
       { path: '/login', element: withSuspense(<LoginPage />) },
       { path: '/auth/callback', element: withSuspense(<CallbackPage />) },
+      { path: '/join', element: withSuspense(<InviteAcceptPage />) },
       { path: '/role-select', element: withSuspense(<RoleSelectPage />) },
       { path: '/onboarding', element: withSuspense(<OnboardingPage />) },
       { path: '/profile-setup', element: withSuspense(<ProfileSetupPage />) },
