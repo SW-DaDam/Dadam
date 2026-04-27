@@ -54,15 +54,17 @@ vi.mock('@/lib/supabase', () => ({
   },
 }))
 
-// voiceChatClient 모킹
+// voiceChatClient 모킹 — 호출마다 새 ReadableStream 반환 (스트림 lock 방지)
 vi.mock('@/lib/ai/voiceChatClient', () => ({
-  streamVoiceChat: vi.fn().mockResolvedValue(
-    new ReadableStream({
-      start(c) {
-        c.enqueue(new TextEncoder().encode('안녕하세요'))
-        c.close()
-      },
-    }),
+  streamVoiceChat: vi.fn().mockImplementation(() =>
+    Promise.resolve(
+      new ReadableStream({
+        start(c) {
+          c.enqueue(new TextEncoder().encode('안녕하세요'))
+          c.close()
+        },
+      }),
+    ),
   ),
 }))
 
@@ -121,5 +123,129 @@ describe('useVoiceChat', () => {
     unmount()
     expect(mockRecognition.stop).toHaveBeenCalled()
     expect(mockSpeechSynthesis.cancel).toHaveBeenCalled()
+  })
+})
+
+describe('TASK-09: 자동 복구', () => {
+  it('no-speech 에러가 3회 발생하면 isFatalError가 true가 된다', async () => {
+    const { result } = renderHook(() => useVoiceChat('user-123'))
+    await act(async () => { result.current.startListening() })
+
+    // no-speech 에러 3회 트리거
+    for (let i = 0; i < 3; i++) {
+      await act(async () => {
+        mockRecognition.onerror?.({ error: 'no-speech' } as SpeechRecognitionErrorEvent)
+      })
+    }
+
+    expect(result.current.isFatalError).toBe(true)
+    expect(result.current.error).toContain('연결할 수 없어요')
+  })
+
+  it('retryFromFatal() 호출 시 isFatalError가 false로 리셋된다', async () => {
+    const { result } = renderHook(() => useVoiceChat('user-123'))
+    await act(async () => { result.current.startListening() })
+
+    for (let i = 0; i < 3; i++) {
+      await act(async () => {
+        mockRecognition.onerror?.({ error: 'no-speech' } as SpeechRecognitionErrorEvent)
+      })
+    }
+    expect(result.current.isFatalError).toBe(true)
+
+    await act(async () => { result.current.retryFromFatal() })
+    expect(result.current.isFatalError).toBe(false)
+    expect(result.current.error).toBeNull()
+  })
+
+  it('no-speech가 2회 이하면 isFatalError가 false로 유지된다', async () => {
+    const { result } = renderHook(() => useVoiceChat('user-123'))
+    await act(async () => { result.current.startListening() })
+
+    for (let i = 0; i < 2; i++) {
+      await act(async () => {
+        mockRecognition.onerror?.({ error: 'no-speech' } as SpeechRecognitionErrorEvent)
+      })
+    }
+
+    expect(result.current.isFatalError).toBe(false)
+  })
+})
+
+describe('TASK-07: DB 저장 연동', () => {
+  it('sendTextMessage 호출 시 conversations INSERT가 실행된다', async () => {
+    const { supabase } = await import('@/lib/supabase')
+    const { result } = renderHook(() => useVoiceChat('senior-id-1'))
+
+    await act(async () => {
+      await result.current.sendTextMessage('오늘 날씨 좋네요')
+    })
+
+    expect(supabase.from).toHaveBeenCalledWith('conversations')
+  })
+
+  it('sendTextMessage 호출 시 utterances INSERT가 speaker="senior"로 실행된다', async () => {
+    const { supabase } = await import('@/lib/supabase')
+    // utterances insert 호출 여부를 확인하기 위해 from 호출 내역 추적
+    const insertMock = vi.fn().mockResolvedValue({ error: null })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(supabase.from).mockImplementation((table: string): any => {
+      if (table === 'utterances') {
+        return { insert: insertMock }
+      }
+      // conversations: 기존 mock 유지
+      return {
+        insert: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({ data: { id: 'conv-123' }, error: null }),
+          }),
+        }),
+        update: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+      }
+    })
+
+    const { result } = renderHook(() => useVoiceChat('senior-id-1'))
+
+    await act(async () => {
+      await result.current.sendTextMessage('테스트 발화')
+    })
+
+    expect(insertMock).toHaveBeenCalledWith(
+      expect.objectContaining({ speaker: 'senior', content: '테스트 발화' }),
+    )
+  })
+
+  it('AI 응답 수신 후 utterances INSERT가 speaker="ai"로 실행된다', async () => {
+    const { supabase } = await import('@/lib/supabase')
+    const insertMock = vi.fn().mockResolvedValue({ error: null })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(supabase.from).mockImplementation((table: string): any => {
+      if (table === 'utterances') {
+        return { insert: insertMock }
+      }
+      return {
+        insert: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({ data: { id: 'conv-123' }, error: null }),
+          }),
+        }),
+        update: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+      }
+    })
+
+    const { result } = renderHook(() => useVoiceChat('senior-id-1'))
+
+    await act(async () => {
+      await result.current.sendTextMessage('안녕하세요')
+    })
+
+    // senior 발화 + ai 응답 총 2회 insert 호출
+    expect(insertMock).toHaveBeenCalledTimes(2)
+    expect(insertMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ speaker: 'ai' }),
+    )
   })
 })

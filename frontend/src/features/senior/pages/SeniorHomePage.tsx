@@ -19,7 +19,7 @@ export default function SeniorHomePage() {
   const displayName: string = user?.user_metadata?.full_name ?? user?.email ?? '사용자'
 
   return (
-    <div className="flex flex-col min-h-full">
+    <div className="flex flex-col min-h-full overflow-y-auto">
 
       {/* 헤더 */}
       <header className="w-full h-[80px] bg-white border-b border-[#E5E7EB] flex items-center justify-between px-4 sm:px-6 shrink-0">

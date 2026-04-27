@@ -75,7 +75,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col min-h-0">
       <main className="flex-1 flex flex-col items-center px-4 sm:px-6 md:px-8 py-6 gap-5 w-full max-w-2xl mx-auto overflow-y-auto">
 
         {/* 도트 인디케이터 */}

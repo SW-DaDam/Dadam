@@ -11,8 +11,9 @@ const TABS = [
 
 export default function SeniorLayout() {
   return (
-    <div className="flex-1 flex flex-col">
-      <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 flex flex-col min-h-0">
+      {/* min-h-0: flex-1 자식이 부모 높이를 초과하지 않도록 shrink 허용 */}
+      <div className="flex-1 flex flex-col min-h-0">
         <Outlet />
       </div>
 

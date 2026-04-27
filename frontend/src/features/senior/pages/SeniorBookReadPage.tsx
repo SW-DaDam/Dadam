@@ -41,7 +41,7 @@ export default function SeniorBookReadPage() {
   const chapter = CHAPTERS.find((c) => c.id === activeChapter)!
 
   return (
-    <div className="flex-1 flex flex-col bg-[#FFF8F0]">
+    <div className="flex-1 flex flex-col min-h-0 bg-[#FFF8F0]">
 
       {/* 헤더 */}
       <header className="w-full h-[80px] bg-[#FFF8F0] border-b border-[#E5E7EB] flex items-center px-4 sm:px-6 shrink-0 relative">

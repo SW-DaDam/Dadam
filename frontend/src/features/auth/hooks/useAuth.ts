@@ -46,7 +46,6 @@ export function useAuth(): UseAuthReturn {
   }
 
   useEffect(() => {
-    // 인증 상태 변경 구독 — INITIAL_SESSION으로 콜드 로드 세션도 처리
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, newSession) => {

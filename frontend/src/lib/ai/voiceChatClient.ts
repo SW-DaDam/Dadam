@@ -10,14 +10,14 @@ export type VoiceChatMessage = { role: 'user' | 'assistant'; content: string }
 
 // 지수 백오프로 fetch 재시도
 // NON_RETRYABLE이거나 MAX_RETRY_COUNT 초과 시 throw
-async function fetchWithRetry(url: string, options: RequestInit): Promise<Response> {
+async function fetchWithRetry(url: string, options: RequestInit, signal?: AbortSignal): Promise<Response> {
   let lastError: Error | null = null
   for (let attempt = 0; attempt <= MAX_RETRY_COUNT; attempt++) {
     if (attempt > 0) {
       const delay = BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1)
       await new Promise((r) => setTimeout(r, delay))
     }
-    const res = await fetch(url, options)
+    const res = await fetch(url, { ...options, signal })
     if (res.ok) return res
     if (NON_RETRYABLE_STATUSES.includes(res.status)) {
       throw new Error(`[voiceChatClient] ${res.status}: 재시도 불가 에러`)
@@ -33,6 +33,7 @@ export async function streamVoiceChat(
   messages: VoiceChatMessage[],
   accessToken: string,
   seniorId?: string,
+  signal?: AbortSignal,
 ): Promise<ReadableStream<Uint8Array>> {
   const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/voice-chat`
   const res = await fetchWithRetry(url, {
@@ -42,7 +43,7 @@ export async function streamVoiceChat(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ messages, senior_id: seniorId ?? '' }),
-  })
+  }, signal)
   if (!res.body) throw new Error('[voiceChatClient] 응답 본문이 없습니다')
   return res.body
 }
