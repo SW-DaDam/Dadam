@@ -46,7 +46,7 @@
   - [ ] "한 번에 하나" 화면 레이아웃 컴포넌트
 - [ ] `src/types/domain.ts` 공동 정의 시작
 
-> ✅ **F-03 음성대화 지원 완료** (2026-04-27): ChatPage UI, useVoiceChat 훅, DB 저장, fallback, 자동복구, 당일 대화 수 조회 — feature/voice-chat → develop PR #12 오픈
+> ℹ️ **F-03 음성대화**: 권오인이 프론트(ChatPage, useVoiceChat 등) + 백엔드(Edge Function) 전체 구현. feature/voice-chat → develop PR #12 오픈 (2026-04-27)
 
 > 🔴 **의존성**: 권오인 F-02(인증) 완료 후 F-11 시작 가능 → 완료 알림 대기
 
