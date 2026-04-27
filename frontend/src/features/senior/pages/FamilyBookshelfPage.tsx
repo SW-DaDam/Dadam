@@ -61,7 +61,7 @@ export default function FamilyBookshelfPage() {
   const navigate = useNavigate()
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col min-h-0">
 
       <header className="w-full h-[80px] bg-[#FFF8F0] border-b border-[#E5E7EB] flex items-center justify-between px-4 sm:px-6 shrink-0">
         <h1 className="text-[1.5rem] font-bold text-[#1F2937]">엄마의 책장</h1>

@@ -9,6 +9,8 @@ export default defineConfig({
   server: {
     https: {},
     host: true,  // 같은 와이파이 기기에서 접속 허용 (0.0.0.0)
+    port: 5173,
+    strictPort: true,  // 5173 사용 중이면 에러 (다음 포트로 넘어가지 않음)
   },
   test: {
     environment: 'jsdom',

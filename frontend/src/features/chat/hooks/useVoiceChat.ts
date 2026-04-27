@@ -159,11 +159,29 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
       const reader = stream.getReader()
       const decoder = new TextDecoder()
       let accumulated = ''
+      let buffer = ''
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-        accumulated += decoder.decode(value, { stream: true })
+        buffer += decoder.decode(value, { stream: true })
+
+        // SSE 라인 단위로 파싱 — "data: {...}" 에서 text-delta만 추출
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const raw = line.slice(6).trim()
+          if (raw === '[DONE]') break
+          try {
+            const parsed = JSON.parse(raw) as { type: string; delta?: string }
+            if (parsed.type === 'text-delta' && parsed.delta) {
+              accumulated += parsed.delta
+            }
+          } catch {
+            // JSON 파싱 실패 라인은 무시
+          }
+        }
       }
 
       clearTimeout(timeoutId)
@@ -193,10 +211,8 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
   // SpeechRecognition 초기화 및 이벤트 핸들러 등록
   useEffect(() => {
     const recognition = makeSpeechRecognition()
-    if (!recognition) {
-      setError('이 브라우저는 음성 인식을 지원하지 않아요')
-      return
-    }
+    // STT 미지원 브라우저는 isSttSupported=false로 UI에서 이미 분기됨
+    if (!recognition) return
 
     recognition.onresult = (event) => {
       const result = event.results[event.resultIndex]
@@ -251,14 +267,18 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
       speechSynthesis.cancel()
       if (noSpeechTimerRef.current) clearTimeout(noSpeechTimerRef.current)
       // 페이지 이탈 시 대화 세션 종료 처리 (TASK-10)
-      if (conversationIdRef.current) {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      const conversationId = conversationIdRef.current
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      const utteranceCount = sequenceRef.current
+      if (conversationId) {
         void supabase
           .from('conversations')
           .update({
             ended_at: new Date().toISOString(),
-            utterance_count: sequenceRef.current,
+            utterance_count: utteranceCount,
           })
-          .eq('id', conversationIdRef.current)
+          .eq('id', conversationId)
       }
     }
   }, [addMessage, sendToAI, updateState])

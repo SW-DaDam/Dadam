@@ -188,9 +188,10 @@ describe('TASK-07: DB 저장 연동', () => {
     const { supabase } = await import('@/lib/supabase')
     // utterances insert 호출 여부를 확인하기 위해 from 호출 내역 추적
     const insertMock = vi.fn().mockResolvedValue({ error: null })
-    vi.mocked(supabase.from).mockImplementation((table: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(supabase.from).mockImplementation((table: string): any => {
       if (table === 'utterances') {
-        return { insert: insertMock } as any
+        return { insert: insertMock }
       }
       // conversations: 기존 mock 유지
       return {
@@ -201,7 +202,7 @@ describe('TASK-07: DB 저장 연동', () => {
         }),
         update: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
-      } as any
+      }
     })
 
     const { result } = renderHook(() => useVoiceChat('senior-id-1'))
@@ -218,9 +219,10 @@ describe('TASK-07: DB 저장 연동', () => {
   it('AI 응답 수신 후 utterances INSERT가 speaker="ai"로 실행된다', async () => {
     const { supabase } = await import('@/lib/supabase')
     const insertMock = vi.fn().mockResolvedValue({ error: null })
-    vi.mocked(supabase.from).mockImplementation((table: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(supabase.from).mockImplementation((table: string): any => {
       if (table === 'utterances') {
-        return { insert: insertMock } as any
+        return { insert: insertMock }
       }
       return {
         insert: vi.fn().mockReturnValue({
@@ -230,7 +232,7 @@ describe('TASK-07: DB 저장 연동', () => {
         }),
         update: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
-      } as any
+      }
     })
 
     const { result } = renderHook(() => useVoiceChat('senior-id-1'))

@@ -48,8 +48,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col">
-      <main className="flex-1 flex flex-col items-center px-4 sm:px-6 md:px-8 py-8 md:py-10 gap-5 md:gap-6 w-full max-w-2xl mx-auto">
+    <div className="flex-1 flex flex-col min-h-0">
+      <main className="flex-1 flex flex-col items-center px-4 sm:px-6 md:px-8 py-8 md:py-10 gap-5 md:gap-6 w-full max-w-2xl mx-auto overflow-y-auto">
 
         {/* 로고 영역 */}
         <section className="flex flex-col items-center gap-4 pt-6">

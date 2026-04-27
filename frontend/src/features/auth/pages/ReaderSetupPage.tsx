@@ -42,7 +42,7 @@ export default function ReaderSetupPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col min-h-0">
 
       {/* 헤더 */}
       <header className="w-full h-[80px] bg-white border-b border-[#E5E7EB] flex items-center px-6 relative shrink-0">
