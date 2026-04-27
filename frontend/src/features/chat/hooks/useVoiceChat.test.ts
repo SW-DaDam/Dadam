@@ -126,6 +126,52 @@ describe('useVoiceChat', () => {
   })
 })
 
+describe('TASK-09: 자동 복구', () => {
+  it('no-speech 에러가 3회 발생하면 isFatalError가 true가 된다', async () => {
+    const { result } = renderHook(() => useVoiceChat('user-123'))
+    await act(async () => { result.current.startListening() })
+
+    // no-speech 에러 3회 트리거
+    for (let i = 0; i < 3; i++) {
+      await act(async () => {
+        mockRecognition.onerror?.({ error: 'no-speech' } as SpeechRecognitionErrorEvent)
+      })
+    }
+
+    expect(result.current.isFatalError).toBe(true)
+    expect(result.current.error).toContain('연결할 수 없어요')
+  })
+
+  it('retryFromFatal() 호출 시 isFatalError가 false로 리셋된다', async () => {
+    const { result } = renderHook(() => useVoiceChat('user-123'))
+    await act(async () => { result.current.startListening() })
+
+    for (let i = 0; i < 3; i++) {
+      await act(async () => {
+        mockRecognition.onerror?.({ error: 'no-speech' } as SpeechRecognitionErrorEvent)
+      })
+    }
+    expect(result.current.isFatalError).toBe(true)
+
+    await act(async () => { result.current.retryFromFatal() })
+    expect(result.current.isFatalError).toBe(false)
+    expect(result.current.error).toBeNull()
+  })
+
+  it('no-speech가 2회 이하면 isFatalError가 false로 유지된다', async () => {
+    const { result } = renderHook(() => useVoiceChat('user-123'))
+    await act(async () => { result.current.startListening() })
+
+    for (let i = 0; i < 2; i++) {
+      await act(async () => {
+        mockRecognition.onerror?.({ error: 'no-speech' } as SpeechRecognitionErrorEvent)
+      })
+    }
+
+    expect(result.current.isFatalError).toBe(false)
+  })
+})
+
 describe('TASK-07: DB 저장 연동', () => {
   it('sendTextMessage 호출 시 conversations INSERT가 실행된다', async () => {
     const { supabase } = await import('@/lib/supabase')

@@ -20,7 +20,8 @@ export default function ChatPage() {
   const navigate = useNavigate()
   const seniorId = useAuthStore((s) => s.user?.id ?? '')
   const { state, messages, transcript, error, isSttSupported,
-          startListening, stopListening, sendTextMessage } =
+          isFatalError, startListening, stopListening,
+          sendTextMessage, retryFromFatal } =
     useVoiceChat(seniorId)
   const bottomRef = useRef<HTMLDivElement>(null)
   const [textInput, setTextInput] = useState('')
@@ -104,18 +105,34 @@ export default function ChatPage() {
       {/* 마이크 영역 — STT 지원 브라우저에서만 표시 */}
       {isSttSupported && (
         <div className="w-full bg-white flex flex-col items-center px-4 sm:px-6 pt-3 pb-8 gap-4 shrink-0">
-          <div className="w-full bg-[#FFF8F0] rounded-xl px-5 py-3 text-center">
-            <p className="text-[1.0625rem] italic text-[#6B7280]">
-              {transcript || error || '...'}
-            </p>
-          </div>
+          {/* 복구 불가 에러 — 재시도 버튼 표시 */}
+          {isFatalError ? (
+            <div className="flex flex-col items-center gap-3 w-full">
+              <p className="text-lg text-[#EF4444] text-center font-medium">{error}</p>
+              <button
+                type="button"
+                onClick={retryFromFatal}
+                className="min-h-11 px-6 py-3 rounded-xl bg-[#E8820C] text-white text-lg font-medium"
+              >
+                다시 시도하기
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="w-full bg-[#FFF8F0] rounded-xl px-5 py-3 text-center">
+                <p className="text-[1.0625rem] italic text-[#6B7280]">
+                  {transcript || error || '...'}
+                </p>
+              </div>
 
-          <MicButton state={state} onPress={handleMicPress} />
+              <MicButton state={state} onPress={handleMicPress} />
 
-          <p className="text-[1.0625rem] font-medium text-[#9CA3AF]">
-            버튼을 눌러 말씀해주세요
-          </p>
-          <p className="text-base text-[#6B7280] text-center">말씀이 끝나면 자동으로 저장돼요</p>
+              <p className="text-[1.0625rem] font-medium text-[#9CA3AF]">
+                버튼을 눌러 말씀해주세요
+              </p>
+              <p className="text-base text-[#6B7280] text-center">말씀이 끝나면 자동으로 저장돼요</p>
+            </>
+          )}
         </div>
       )}
 
