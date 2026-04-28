@@ -89,3 +89,17 @@ export type NotificationItem = Notification & {
 
 export type SeniorNavTab = 'home' | 'chat' | 'books' | 'family' | 'settings'
 export type ReaderNavTab = 'home' | 'notifications' | 'settings'
+
+// ─── 메모리 (F-04) ────────────────────────────────────────────
+
+/** memories.data JSONB — LLM이 자동 생성하는 플랫 items 배열 */
+export interface MemoryData {
+  items?: MemoryItem[]
+}
+
+/** LLM이 추출·분류하는 메모리 항목 (DB 저장 단위) */
+export interface MemoryItem {
+  text: string       // 기억 내용
+  category: string   // LLM이 자유롭게 결정 (취미, 가족, 건강, 일상, 추억, 가치관 등)
+  emoji: string      // 카테고리에 맞는 이모지
+}

@@ -87,6 +87,8 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
   const stateRef = useRef<VoiceChatState>('idle')
   // no-speech 연속 발생 횟수 — MAX_STT_RETRY_COUNT 초과 시 자동 복구 중단
   const retryCountRef = useRef<number>(0)
+  // cleanup은 async 불가 — 최신 세션 토큰을 항상 ref에 캐시해두고 참조
+  const accessTokenRef = useRef<string | null>(null)
 
   const [state, setState] = useState<VoiceChatState>('idle')
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -145,6 +147,8 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
       const { data: sessionData } = await supabase.auth.getSession()
       const accessToken = sessionData.session?.access_token
       if (!accessToken) throw new Error('[useVoiceChat] 세션 없음')
+      // 최신 토큰을 ref에 저장 — cleanup의 keepalive fetch에서 사용
+      accessTokenRef.current = accessToken
 
       await ensureConversation()
       await saveUtterance('senior', userText)
@@ -279,6 +283,25 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
             utterance_count: utteranceCount,
           })
           .eq('id', conversationId)
+
+        // 세션 종료 후 메모리 추출 (fire-and-forget, keepalive로 페이지 이탈 후에도 완료 보장)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        const token = accessTokenRef.current
+        if (token) {
+          fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-memory`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+              },
+              body: JSON.stringify({ conversation_id: conversationId, senior_id: seniorId }),
+              keepalive: true,
+            },
+          ).catch((err) => console.error('[useVoiceChat] extract-memory 호출 실패', err))
+        }
       }
     }
   }, [addMessage, sendToAI, updateState])

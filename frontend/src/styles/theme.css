@@ -90,7 +90,15 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  /* 한국어 고아 단어 방지 */
+  /* 스크롤바 숨김 유틸 — 탭 오버플로우 등 */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* 한국어 고아 단어 방지 */
   h1, h2, h3, h4, h5, h6 {
     text-wrap: balance;
     word-break: keep-all;

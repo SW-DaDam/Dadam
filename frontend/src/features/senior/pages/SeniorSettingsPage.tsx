@@ -4,6 +4,7 @@ import Toggle from '@/shared/components/Toggle'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { useThemeStore } from '@/shared/stores/themeStore'
 import { useFontSizeStore, type FontSize } from '@/shared/stores/fontSizeStore'
+import { useMemory } from '@/features/memory/hooks/useMemory'
 import { cn } from '@/lib/utils'
 
 const FONT_OPTIONS: { value: FontSize; label: string }[] = [
@@ -21,6 +22,8 @@ export default function SeniorSettingsPage() {
   const displayName: string = user?.user_metadata?.full_name ?? user?.email ?? '사용자'
   const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
   const avatarChar = displayName.charAt(0)
+
+  const { items: memoryItems } = useMemory(user?.id ?? '')
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -74,7 +77,9 @@ export default function SeniorSettingsPage() {
                 <p className="text-[1.125rem] text-[#1F2937]">AI가 기억하는 것들</p>
                 <p className="text-base text-[#6B7280]">취미, 가족, 추억 등 쌓인 기억 확인</p>
               </div>
-              <span className="bg-[#FFF0DC] rounded-lg px-2 py-1 text-sm text-[#E8820C] shrink-0">24개</span>
+              {memoryItems.length > 0 && (
+                <span className="bg-[#FFF0DC] rounded-lg px-2 py-1 text-sm text-[#E8820C] shrink-0">{memoryItems.length}개</span>
+              )}
               <ChevronRight size={20} className="text-[#D1D5DB] shrink-0" />
             </button>
             {/* AI 목소리 설정 */}

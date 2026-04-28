@@ -564,13 +564,77 @@ while (reader) {
 | 이름 | 담당 | 상태 | 비고 |
 |------|------|------|------|
 | `voice-chat` (LLM 스트리밍) | 권오인 | TBD | F-04 / 스트리밍 응답 |
-| `extract-memory` (세션 종료 후) | 권오인 | TBD | F-05 |
+| `extract-memory` (세션 종료 후) | 권오인 | DONE | F-04 |
 | `tag-utterances` (발화 태그) | 권오인 | TBD | F-05 |
 | `generate-book` (월말 pg_cron) | 권오인 | TBD | F-07 |
 | `generate-cover` (DALL-E 3) | 권오인 | TBD | F-13 `book-covers` 업로드 |
 | `retry-book-job` (수동 재시도) | 권오인 | TBD | F-08, RPC `retry_book_generation`과 연계 |
 
 > 상태: `TBD` (미구현) / `WIP` (구현 중) / `DONE` (완료). 각 Function 상세 스펙은 구현 PR에서 본 절에 추가.
+
+---
+
+### 7.5 `extract-memory` — 메모리 추출 (F-04)
+
+| 항목 | 내용 |
+|------|------|
+| 경로 | `POST /functions/v1/extract-memory` |
+| 인증 | `Authorization: Bearer <access_token>` 필수 |
+| 호출 시점 | 세션 종료 시 fire-and-forget (`keepalive: true` fetch) |
+| 담당 | 권오인 |
+
+**입력**
+```ts
+{
+  conversation_id: string  // 종료된 대화 세션 UUID
+  senior_id: string        // 어르신 profile UUID
+}
+```
+
+**출력**
+```ts
+// 성공 (메모리 갱신)
+{ success: true, updated_categories: string[] }
+
+// 성공 (발화 없음 — 건너뜀)
+{ success: true, skipped: true }
+
+// 실패 (기존 memories 항상 보존)
+{ success: false, error: string }
+```
+
+**호출 예시** (useVoiceChat.ts cleanup 내부)
+```ts
+// keepalive: true — 페이지 이탈 후에도 요청 완료 보장
+fetch(`${VITE_SUPABASE_URL}/functions/v1/extract-memory`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${accessToken}`,
+    'apikey': VITE_SUPABASE_ANON_KEY,
+  },
+  body: JSON.stringify({ conversation_id, senior_id }),
+  keepalive: true,
+})
+```
+
+**내부 동작**
+1. `utterances` 테이블에서 `speaker = 'senior'` 발화만 조회
+2. `memories` 테이블에서 기존 `data` JSONB 조회
+3. `gpt-4o-mini`로 새 관심사 추출 (카테고리: `hobbies`, `relationships`, `health`, `philosophy`, `recurring_topics`, `emotional_patterns`)
+4. 기존 data와 병합 (배열: concat+중복제거 / 객체: 키 단위 merge)
+5. `memories` UPSERT (`senior_id` 기준), `conversations.memory_extracted = true`
+
+**에러 처리**
+- LLM 실패 또는 JSON 파싱 오류 → 기존 memories 보존, `{ success: false, error }` 반환
+- 발화 0건 → `{ success: true, skipped: true }` (DB 변경 없음)
+
+**관련 RPC** (migration `010_memory_rpc.sql`)
+
+| RPC | 인자 | 설명 |
+|-----|------|------|
+| `remove_memory_item` | `p_senior_id`, `p_category`, `p_item_index?`, `p_item_key?` | 개별 항목 삭제 |
+| `clear_all_memories` | `p_senior_id` | 전체 초기화 (`data = '{}'`) |
 
 ---
 
