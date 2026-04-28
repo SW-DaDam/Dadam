@@ -102,13 +102,13 @@ export default function ChatPage() {
           onChange={(e) => setTextInput(e.target.value)}
           onKeyDown={handleTextKeyDown}
           placeholder={isSttSupported ? '메시지를 입력하세요' : '여기에 말씀을 입력해 주세요'}
-          disabled={state !== 'idle'}
+          disabled={state === 'processing' || state === 'listening'}
           className="flex-1 min-w-0 bg-[#FFF8F0] rounded-xl px-4 py-3 text-[1.0625rem] text-[#1F2937] placeholder:text-[#9CA3AF] outline-none min-h-11 disabled:opacity-50"
         />
         <button
           type="button"
           onClick={() => void handleTextSend()}
-          disabled={!textInput.trim() || state !== 'idle'}
+          disabled={!textInput.trim() || state === 'processing' || state === 'listening'}
           className="flex items-center justify-center w-11 h-11 rounded-xl bg-[#E8820C] text-white disabled:opacity-40 shrink-0"
         >
           <Send size={20} />
