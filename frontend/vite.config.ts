@@ -3,10 +3,11 @@ import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import basicSsl from '@vitejs/plugin-basic-ssl'
 
 export default defineConfig({
   server: {
-    // https: {},  // 마이크 테스트 시에만 활성화
+    https: {},
     host: true,  // 같은 와이파이 기기에서 접속 허용 (0.0.0.0)
     port: 5173,
     strictPort: true,  // 5173 사용 중이면 에러 (다음 포트로 넘어가지 않음)
@@ -17,6 +18,7 @@ export default defineConfig({
     setupFiles: ['./src/test-setup.ts'],
   },
   plugins: [
+    basicSsl(),
     react(),
     tailwindcss(),
     VitePWA({
