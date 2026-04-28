@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router'
-import { Bell, Settings, ChevronRight } from 'lucide-react'
+import { Settings, ChevronRight } from 'lucide-react'
 import { useAuthStore } from '@/shared/stores/authStore'
+import { NotificationBell } from '@/features/notifications/components/NotificationBell'
 
 function todayLabel() {
   return new Date().toLocaleDateString('ko-KR', {
@@ -25,14 +26,7 @@ export default function SeniorHomePage() {
       <header className="w-full h-[80px] bg-white border-b border-[#E5E7EB] flex items-center justify-between px-4 sm:px-6 shrink-0">
         <span className="text-base sm:text-xl text-[#6B7280]">{todayLabel()}</span>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => navigate('/s/notifications')}
-            className="w-14 h-14 rounded-xl bg-[#FFF0DC] flex flex-col items-center justify-center gap-0.5 min-h-11"
-          >
-            <Bell size={20} className="text-[#E8820C]" />
-            <span className="text-xs text-[#E8820C]">알림</span>
-          </button>
+          <NotificationBell role="senior" />
           <button
             type="button"
             onClick={() => navigate('/s/settings')}
