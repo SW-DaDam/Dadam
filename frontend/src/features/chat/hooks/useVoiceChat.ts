@@ -283,9 +283,17 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
     }
   }, [addMessage, sendToAI, updateState])
 
-  // 텍스트 직접 입력 → AI 전송 (STT 없이 동일한 sendToAI 파이프라인 사용)
+  // 텍스트 직접 입력 → AI 전송 (speaking 중에도 허용 — TTS 즉시 중단 후 전송)
   const sendTextMessage = useCallback(async (text: string) => {
-    if (!text.trim() || stateRef.current !== 'idle') return
+    if (!text.trim()) return
+    const cur = stateRef.current
+    // processing 중(이미 AI 응답 대기 중)에는 중복 전송 방지
+    if (cur === 'processing') return
+    // speaking 중이면 TTS 중단 후 idle로 전환
+    if (cur === 'speaking') {
+      speechSynthesis.cancel()
+      updateState('idle')
+    }
     setError(null)
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
@@ -295,7 +303,7 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
     }
     addMessage(userMsg)
     await sendToAI(text.trim())
-  }, [addMessage, sendToAI])
+  }, [addMessage, sendToAI, updateState])
 
   // isFatalError 리셋 — 재시도 버튼 클릭 시 호출
   const retryFromFatal = useCallback(() => {
@@ -305,7 +313,11 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
   }, [])
 
   const startListening = useCallback(() => {
-    if (stateRef.current !== 'idle') return
+    const cur = stateRef.current
+    if (cur === 'processing') return
+    // speaking 중이면 TTS 중단 후 listening 시작
+    if (cur === 'speaking') speechSynthesis.cancel()
+    if (cur !== 'idle' && cur !== 'speaking') return
     speechSynthesis.cancel()
     setError(null)
     recognitionRef.current?.start()

@@ -94,7 +94,7 @@ export default function ChatPage() {
         <div ref={bottomRef} />
       </div>
 
-      {/* 텍스트 입력 + 마이크 토글 버튼 */}
+      {/* 텍스트 입력 */}
       <div className="w-full bg-white border-t border-[#E5E7EB] flex items-center gap-2 px-4 py-3 shrink-0">
         <input
           type="text"
@@ -102,32 +102,34 @@ export default function ChatPage() {
           onChange={(e) => setTextInput(e.target.value)}
           onKeyDown={handleTextKeyDown}
           placeholder={isSttSupported ? '메시지를 입력하세요' : '여기에 말씀을 입력해 주세요'}
-          disabled={state !== 'idle'}
-          className="flex-1 bg-[#FFF8F0] rounded-xl px-4 py-3 text-[1.0625rem] text-[#1F2937] placeholder:text-[#9CA3AF] outline-none min-h-11 disabled:opacity-50"
+          disabled={state === 'processing' || state === 'listening'}
+          className="flex-1 min-w-0 bg-[#FFF8F0] rounded-xl px-4 py-3 text-[1.0625rem] text-[#1F2937] placeholder:text-[#9CA3AF] outline-none min-h-11 disabled:opacity-50"
         />
         <button
           type="button"
           onClick={() => void handleTextSend()}
-          disabled={!textInput.trim() || state !== 'idle'}
+          disabled={!textInput.trim() || state === 'processing' || state === 'listening'}
           className="flex items-center justify-center w-11 h-11 rounded-xl bg-[#E8820C] text-white disabled:opacity-40 shrink-0"
         >
           <Send size={20} />
         </button>
-        {isSttSupported && (
-          <button
-            type="button"
-            onClick={() => setIsMicExpanded((v) => !v)}
-            className="flex items-center justify-center w-11 h-11 rounded-xl bg-[#FFF8F0] text-[#9CA3AF] shrink-0"
-            aria-label={isMicExpanded ? '마이크 영역 접기' : '마이크 영역 펼치기'}
-          >
-            {isMicExpanded ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
-          </button>
-        )}
       </div>
+
+      {/* 마이크 영역 펼치기 버튼 — 접힌 상태에서만 표시 */}
+      {isSttSupported && !isMicExpanded && (
+        <button
+          type="button"
+          onClick={() => setIsMicExpanded(true)}
+          className="w-full bg-white flex items-center justify-center py-2 text-[#9CA3AF] shrink-0 border-t border-[#E5E7EB]"
+          aria-label="마이크 영역 펼치기"
+        >
+          <ChevronUp size={20} />
+        </button>
+      )}
 
       {/* 마이크 영역 — STT 지원 + 펼침 상태에서만 표시 */}
       {isSttSupported && isMicExpanded && (
-        <div className="w-full bg-white flex flex-col items-center px-4 sm:px-6 pt-2 pb-4 gap-2 shrink-0">
+        <div className="w-full bg-white flex flex-col items-center px-4 sm:px-6 pt-2 pb-4 gap-2 shrink-0 relative">
           {isFatalError ? (
             <div className="flex flex-col items-center gap-3 w-full">
               <p className="text-lg text-[#EF4444] text-center font-medium">{error}</p>
@@ -141,6 +143,15 @@ export default function ChatPage() {
             </div>
           ) : (
             <>
+              {/* 마이크 영역 접기 버튼 */}
+              <button
+                type="button"
+                onClick={() => setIsMicExpanded(false)}
+                className="absolute top-2 right-4 flex items-center justify-center w-11 h-11 rounded-xl bg-[#FFF8F0] text-[#9CA3AF]"
+                aria-label="마이크 영역 접기"
+              >
+                <ChevronDown size={20} />
+              </button>
               <div className="w-full bg-[#FFF8F0] rounded-xl px-5 py-2 text-center">
                 <p className="text-[1.0625rem] italic text-[#6B7280]">
                   {transcript || error || '...'}
