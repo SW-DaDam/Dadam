@@ -87,7 +87,7 @@ export default function NotificationListPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex flex-col min-h-0 h-full">
       <header className="w-full h-[80px] bg-white dark:bg-gray-800 border-b border-[#E5E7EB] dark:border-gray-700 flex items-center px-4 sm:px-6 shrink-0 relative">
         <button type="button" onClick={() => navigate(-1)} className="flex items-center min-h-11">
           <ChevronLeft size={22} className="text-[#6B7280]" />

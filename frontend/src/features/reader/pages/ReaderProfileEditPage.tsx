@@ -17,7 +17,7 @@ export default function ReaderProfileEditPage() {
   const [notifReply, setNotifReply] = useState(true)
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex flex-col h-full">
 
       <header className="w-full h-[80px] bg-white border-b border-[#E5E7EB] flex items-center px-4 sm:px-6 shrink-0 relative">
         <button
@@ -39,7 +39,7 @@ export default function ReaderProfileEditPage() {
         </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-[160px] w-full max-w-2xl mx-auto">
+      <main className="flex-1 min-h-0 overflow-y-auto pb-[160px] w-full max-w-2xl mx-auto">
 
         {/* 프로필 사진 */}
         <div className="bg-white border-b border-[#E5E7EB] flex flex-col items-center gap-3 py-6">

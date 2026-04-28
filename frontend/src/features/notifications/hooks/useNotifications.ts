@@ -1,17 +1,26 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { Notification } from '@/types/domain'
 import { useAuthStore } from '@/shared/stores/authStore'
+import { useNotificationsStore } from '../stores/notificationsStore'
 
 const PAGE_SIZE = 50
 const POLLING_MS = 30_000
+let _channelSeq = 0
 
 export function useNotifications() {
   const user = useAuthStore((s) => s.user)
-  const [notifications, setNotifications] = useState<Notification[]>([])
-  const [loading, setLoading] = useState(true)
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const {
+    notifications,
+    loading,
+    setNotifications,
+    prependNotification,
+    markOneRead,
+    markAllRead: storeMarkAllRead,
+    setLoading,
+  } = useNotificationsStore()
 
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const unreadCount = notifications.filter((n) => !n.is_read).length
 
   const fetchNotifications = useCallback(async () => {
@@ -22,27 +31,24 @@ export function useNotifications() {
       .eq('recipient_id', user.id)
       .order('created_at', { ascending: false })
       .limit(PAGE_SIZE)
-    if (error) {
-      console.error('[Notifications] fetch 실패', error)
-      return
-    }
+    if (error) return
     setNotifications(data ?? [])
-  }, [user?.id])
+  }, [user?.id, setNotifications])
 
   const markAsRead = useCallback(async (id: string) => {
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)))
+    markOneRead(id)
     await supabase.from('notifications').update({ is_read: true }).eq('id', id)
-  }, [])
+  }, [markOneRead])
 
   const markAllRead = useCallback(async () => {
     if (!user?.id) return
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })))
+    storeMarkAllRead()
     await supabase
       .from('notifications')
       .update({ is_read: true })
       .eq('recipient_id', user.id)
       .eq('is_read', false)
-  }, [user?.id])
+  }, [user?.id, storeMarkAllRead])
 
   useEffect(() => {
     if (!user?.id) return
@@ -50,13 +56,13 @@ export function useNotifications() {
     fetchNotifications().finally(() => setLoading(false))
 
     const channel = supabase
-      .channel(`notifications:user:${user.id}`)
+      .channel(`notifications:user:${user.id}:${++_channelSeq}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notifications', filter: `recipient_id=eq.${user.id}` },
         (payload) => {
-          setNotifications((prev) => [payload.new as Notification, ...prev])
-        }
+          prependNotification(payload.new as Notification)
+        },
       )
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
@@ -75,7 +81,7 @@ export function useNotifications() {
       supabase.removeChannel(channel)
       if (pollingRef.current) clearInterval(pollingRef.current)
     }
-  }, [user?.id, fetchNotifications])
+  }, [user?.id, fetchNotifications, prependNotification, setLoading])
 
   return { notifications, unreadCount, loading, markAsRead, markAllRead }
 }

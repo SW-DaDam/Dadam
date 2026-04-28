@@ -26,13 +26,13 @@ export default function ReaderSettingsPage() {
   const { fontSize, setFontSize } = useFontSizeStore()
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex flex-col h-full">
 
       <header className="w-full h-[80px] bg-white border-b border-[#E5E7EB] flex items-center justify-center px-4 sm:px-6 shrink-0">
         <h1 className="text-lg sm:text-xl text-[#1F2937] font-medium">설정</h1>
       </header>
 
-      <main className="flex-1 overflow-y-auto flex flex-col gap-4 px-4 sm:px-6 py-5 w-full max-w-2xl mx-auto">
+      <main className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-4 px-4 sm:px-6 py-5 w-full max-w-2xl mx-auto">
 
         {/* 프로필 카드 */}
         <div className="bg-white border border-[#E5E7EB] rounded-2xl px-5 py-4 flex items-center gap-4">

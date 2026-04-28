@@ -74,7 +74,7 @@ export default function ReaderNotificationPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex flex-col h-full min-h-0">
       <header className="w-full h-[80px] bg-white border-b border-[#E5E7EB] flex items-center px-4 sm:px-6 shrink-0 relative">
         <button type="button" onClick={() => navigate(-1)} className="flex items-center min-h-11">
           <ChevronLeft size={22} className="text-[#6B7280]" />
