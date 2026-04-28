@@ -43,6 +43,11 @@ export type BookWithChapters = Book & {
   chapters: Chapter[]
 }
 
+/** 책장 표시용 — 댓글 수 집계 포함 */
+export type BookWithStats = Book & {
+  commentCount: number
+}
+
 /** 댓글 + 답글 묶음 */
 export type CommentWithReplies = Comment & {
   replies: Reply[]
