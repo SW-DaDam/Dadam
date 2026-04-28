@@ -41,10 +41,11 @@ MAX_DURATION = 30.0
 MIN_DURATION = 0.5
 
 # ── 텍스트 정규화 ─────────────────────────────────────────────────────────────
-# SP 태그: (SP: 발음) → 발음 그대로 유지 (모델이 실제 들리는 소리를 학습하도록)
+# SP 태그: (SP:발음)정답 구조 — 태그 전체 제거, 뒤의 정답 단어만 남김
+#   예) (SP:에능)예능 → 예능
 # FP 태그: (FP: ...) → 제거 (채움말·간투사 표시)
 # 기타 태그: (noise) (laugh) [...] 등 → 제거
-_SP_PATTERN    = re.compile(r"\(SP:\s*([^)]+)\)")   # (SP: 내용) → 내용 추출
+_SP_PATTERN    = re.compile(r"\(SP:[^)]*\)")         # (SP:...) 태그 전체 제거
 _TAG_PATTERN   = re.compile(r"\([A-Z]+:[^)]*\)")    # FP/기타 태그 제거
 _NOISE_PATTERN = re.compile(
     r"\(noise\)|\(laugh\)|\(cough\)|\(breath\)|\(unclear\)|"
@@ -58,13 +59,13 @@ def normalize_text(text: str) -> str:
     """
     발화 전사 텍스트 정규화
     처리 순서:
-      1. (SP: 발음) — 발음 내용으로 교체 (화자가 실제 발음한 형태 유지)
+      1. (SP:발음)정답 — SP 태그만 제거, 뒤의 정답 단어 유지
       2. (FP:...) 등 기타 대문자 태그 — 제거
       3. [소음] {기타} <마커> 등 — 제거
       4. 다중 공백 정리
     """
-    # SP 태그: 발음 내용으로 교체 — (SP: 삼) → 삼
-    text = _SP_PATTERN.sub(lambda m: m.group(1), text)
+    # SP 태그 제거 — (SP:에능)예능 → 예능 (뒤의 정답 단어가 자연스럽게 남음)
+    text = _SP_PATTERN.sub("", text)
     # FP 등 나머지 대문자 태그 제거
     text = _TAG_PATTERN.sub(" ", text)
     # 소음·웃음 등 노이즈 태그 제거
