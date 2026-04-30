@@ -301,6 +301,21 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
               keepalive: true,
             },
           ).catch((err) => console.error('[useVoiceChat] extract-memory 호출 실패', err))
+
+          // 세션 종료 후 발화 태그 분류 (fire-and-forget, keepalive로 페이지 이탈 후에도 완료 보장)
+          fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tag-utterances`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+              },
+              body: JSON.stringify({ conversation_id: conversationId, senior_id: seniorId }),
+              keepalive: true,
+            },
+          ).catch((err) => console.error('[useVoiceChat] tag-utterances 호출 실패', err))
         }
       }
     }
