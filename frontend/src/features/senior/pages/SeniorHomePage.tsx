@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router'
 import { Settings, ChevronRight } from 'lucide-react'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { NotificationBell } from '@/features/notifications/components/NotificationBell'
+import { useMonthlyConversationDays } from '@/features/senior/hooks/useMonthlyConversationDays'
 
 function todayLabel() {
   return new Date().toLocaleDateString('ko-KR', {
@@ -11,13 +12,15 @@ function todayLabel() {
   })
 }
 
-const CHAT_PROGRESS = { days: 18, remaining: 12, total: 30 }
 const FAMILY_ACTIVITY = { name: '김민준', action: '댓글을 달았어요', time: '1시간 전' }
 
 export default function SeniorHomePage() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const displayName: string = user?.user_metadata?.full_name ?? user?.email ?? '사용자'
+
+  // 이번 달 대화 일수 DB에서 조회
+  const { days, remaining, total } = useMonthlyConversationDays(user?.id ?? '')
 
   return (
     <div className="flex flex-col min-h-full overflow-y-auto">
@@ -78,16 +81,16 @@ export default function SeniorHomePage() {
           </div>
         </button>
 
-        {/* 진행 카드 */}
+        {/* 진행 카드 — 이번 달 대화 일수 DB 연동, 진행 바는 오늘 날짜 기준 */}
         <div className="w-full bg-white border border-[#E5E7EB] rounded-2xl px-5 py-4 flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <p className="text-[1.0625rem] text-[#1F2937]">이번 달 {CHAT_PROGRESS.days}일째 대화 중</p>
-            <p className="text-sm text-[#6B7280]">월말까지 {CHAT_PROGRESS.remaining}일 남았어요</p>
+            <p className="text-[1.0625rem] text-[#1F2937]">이번 달 {days}일째 대화 중</p>
+            <p className="text-sm text-[#6B7280]">월말까지 {remaining}일 남았어요</p>
           </div>
           <div className="w-full h-3 bg-[#E5E7EB] rounded-full overflow-hidden">
             <div
               className="h-full bg-[#E8820C] rounded-full"
-              style={{ width: `${(CHAT_PROGRESS.days / CHAT_PROGRESS.total) * 100}%` }}
+              style={{ width: `${total > 0 ? ((total - remaining) / total) * 100 : 0}%` }}
             />
           </div>
         </div>
