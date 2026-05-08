@@ -151,6 +151,47 @@ async function aggregateUtterances(
 }
 
 /**
+ * aggregating 실패 시 fallback — emotional_peak 태그 발화만 선별 (스펙 §6)
+ * 규칙 기반이므로 실패할 이유가 없지만, DB 조회 자체가 실패하면 throw
+ */
+async function aggregateUtterancesFallback(
+  supabase: ReturnType<typeof createClient>,
+  seniorId: string,
+  year: number,
+  month: number,
+): Promise<UtteranceItem[]> {
+  const monthStart = new Date(year, month - 1, 1).toISOString()
+  const monthEnd = new Date(year, month, 1).toISOString()
+
+  const { data: conversations, error: convErr } = await supabase
+    .from('conversations')
+    .select('id')
+    .eq('senior_id', seniorId)
+    .gte('started_at', monthStart)
+    .lt('started_at', monthEnd)
+
+  if (convErr) throw new Error(`fallback conversations 조회 실패: ${convErr.message}`)
+
+  const conversationIds = (conversations ?? []).map((c: { id: string }) => c.id)
+  if (conversationIds.length === 0) return []
+
+  const { data: utterances, error } = await supabase
+    .from('utterances')
+    .select('id, content, tags')
+    .eq('speaker', 'senior')
+    .in('conversation_id', conversationIds)
+    .contains('tags', ['emotional_peak'])   // emotional_peak 태그 보유 발화만
+    .order('created_at', { ascending: true })
+
+  if (error) throw new Error(`fallback utterances 조회 실패: ${error.message}`)
+
+  return (utterances ?? []).map((u: { id: string; content: string }) => ({
+    id: u.id,
+    content: u.content,
+  }))
+}
+
+/**
  * 단일 어르신 대상 책 생성 파이프라인 실행
  * aggregating → chaptering → cover_requested → done
  * 반환: 'success' | 'failed' | 'skipped'
@@ -219,10 +260,16 @@ async function runPipelineForSenior(
   try {
     selectedUtterances = await aggregateUtterances(supabase, seniorId, year, month)
   } catch (err) {
-    await updateJobStatus(supabase, jobId, 'failed', {
-      error_log: `[aggregating] ${String(err)}`,
-    })
-    return 'failed'
+    // 스펙 §6: aggregating 실패 시 emotional_peak 태그 발화만 fallback 선별
+    console.warn(`[generate-book] job ${jobId} — aggregating 실패, emotional_peak fallback 시도:`, err)
+    try {
+      selectedUtterances = await aggregateUtterancesFallback(supabase, seniorId, year, month)
+    } catch (fallbackErr) {
+      await updateJobStatus(supabase, jobId, 'failed', {
+        error_log: `[aggregating] ${String(err)} / fallback: ${String(fallbackErr)}`,
+      })
+      return 'failed'
+    }
   }
 
   if (selectedUtterances.length === 0) {
@@ -242,14 +289,16 @@ async function runPipelineForSenior(
   console.log(`[generate-book] job ${jobId} — ${selectedUtterances.length}건 발화 선별 완료`)
 
   // ── chaptering: LLM으로 챕터 구성·서사 생성 ───────────────────
+  // 스펙 §5: 서사 변환 품질을 위해 gpt-4o 사용 (gpt-4o-mini 대비 서사 품질 우수)
+  // 스펙 §6: JSON 파싱 실패 시 1회 재시도
   await updateJobStatus(supabase, jobId, 'chaptering')
 
   let bookOutput: BookOutput
   try {
     const openai = createOpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') ?? '' })
 
-    const { text } = await generateText({
-      model: openai('gpt-4o-mini'),
+    const callLLM = () => generateText({
+      model: openai('gpt-4o'),
       messages: [
         { role: 'system', content: CHAPTERING_SYSTEM_PROMPT },
         { role: 'user', content: buildChapteringUserMessage(selectedUtterances) },
@@ -257,7 +306,26 @@ async function runPipelineForSenior(
       temperature: 0.7,   // 서사 생성은 분류보다 창의성이 필요하므로 0.7 사용
     })
 
-    bookOutput = JSON.parse(text.trim()) as BookOutput
+    let text: string
+    try {
+      const result = await callLLM()
+      text = result.text
+    } catch (llmErr) {
+      // LLM 호출 자체 실패 시 즉시 failed (재시도 없음 — 비용 절감)
+      throw llmErr
+    }
+
+    // JSON 파싱 실패 시 1회 재시도 (스펙 §6)
+    let parsed: BookOutput | null = null
+    try {
+      parsed = JSON.parse(text.trim()) as BookOutput
+    } catch {
+      console.warn(`[generate-book] job ${jobId} — JSON 파싱 실패, 1회 재시도`)
+      const retry = await callLLM()
+      parsed = JSON.parse(retry.text.trim()) as BookOutput
+    }
+
+    bookOutput = parsed
 
     // LLM 출력 기본 검증
     if (!bookOutput.book_title || !Array.isArray(bookOutput.chapters) || bookOutput.chapters.length === 0) {
