@@ -97,7 +97,7 @@ Dadam/
 | 경계 | 실체 | 정본 문서 |
 |------|------|-----------|
 | 타입 | `src/types/database.ts` (자동 생성) · `src/types/domain.ts` (join/도메인 복합 타입) | [code-convention.md §4](./docs/work/code-convention.md) |
-| RPC | 7개 함수 (soft_delete_chapter, restore_chapter, update_chapter_title, select_cover, publish_book, retry_book_generation, create_signed_reply_audio_url) | [api-spec.md §2](./docs/work/api-spec.md) |
+| RPC | 10개 함수 (soft_delete_chapter, restore_chapter, update_chapter_title, select_cover, publish_book, retry_book_generation, create_signed_reply_audio_url, trigger_book_generation, remove_memory_item, clear_all_memories) | [api-spec.md §2](./docs/work/api-spec.md) |
 | Realtime | 3채널 (`notifications:user:*`, `comments:chapter:*`, `replies:comment:*`) | [api-spec.md §3](./docs/work/api-spec.md) |
 | Storage | 3버킷 (`avatars` public, `book-covers` public/service_role, `reply-audio` private/signed URL) | [api-spec.md §4](./docs/work/api-spec.md) |
 
@@ -108,8 +108,14 @@ Dadam/
 - 수직 슬라이싱: 담당자가 해당 기능의 프론트 + Edge Function + RLS + 마이그레이션을 모두 작성합니다.
 - 담당·브랜치 목록은 [role-assignment.md §2](./docs/work/role-assignment.md).
 
-### 6.4 Edge Function (6개, 권오인 전담)
-voice-chat · extract-memory · tag-utterances · generate-book · generate-cover · retry-book-job — 호출 규약은 [api-spec.md §7](./docs/work/api-spec.md).
+### 6.4 Edge Function (7개, 권오인 전담)
+voice-chat · extract-memory · tag-utterances · generate-book · generate-cover · retry-book-job · delete-account — 호출 규약은 [api-spec.md §7](./docs/work/api-spec.md).
+
+### 6.5 주요 DB 스키마 변경 이력 (최신)
+- `memories.data`: 카테고리별 중첩 JSONB → `{ items: [{ text, category, emoji }] }` 플랫 배열 (마이그레이션 20260428)
+- `book_generation_jobs.status`: TEXT → `job_status` Enum (`pending|aggregating|chaptering|cover_requested|done|failed`)
+- `book_generation_jobs`: `senior_id`, `stage_payload` 컬럼 추가, `book_id` NULL 허용
+- pg_cron 스케줄: 매월 1일 → 매월 28~31일 + Edge Function 내부 말일 체크 방식
 
 ## 7. 작업 시 체크리스트 (Claude 전용)
 
