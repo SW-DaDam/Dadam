@@ -464,21 +464,37 @@ Deno.serve(async (req) => {
       )
     }
 
-    // 호출자 JWT를 검증: anon/service_role 토큰 모두 Supabase가 서명 확인
-    // getUser()가 실패하면 위조된 토큰이므로 즉시 거부
-    // service_role 키로 호출하는 pg_cron은 service_role JWT를 사용하므로 통과됨
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
-    const callerSupabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      anonKey,
-      { global: { headers: { Authorization: authHeader } } },
-    )
-    const { error: authError } = await callerSupabase.auth.getUser()
-    if (authError) {
+    // 호출자 JWT 검증
+    // service_role JWT는 auth.getUser()를 통과하지 못하므로 토큰 payload의 role로 분기
+    // - role=service_role: 서명 검증 없이 통과 (pg_cron, 내부 호출 전용)
+    // - role=authenticated: auth.getUser()로 실제 사용자 세션 검증
+    const token = authHeader.replace('Bearer ', '')
+    let tokenRole: string | null = null
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]))
+      tokenRole = payload.role ?? null
+    } catch {
       return new Response(
         JSON.stringify({ error: '유효하지 않은 인증 토큰입니다' }),
         { status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
       )
+    }
+
+    if (tokenRole !== 'service_role') {
+      // 일반 사용자 토큰은 Supabase Auth로 검증
+      const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+      const callerSupabase = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        anonKey,
+        { global: { headers: { Authorization: authHeader } } },
+      )
+      const { error: authError } = await callerSupabase.auth.getUser()
+      if (authError) {
+        return new Response(
+          JSON.stringify({ error: '유효하지 않은 인증 토큰입니다' }),
+          { status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+        )
+      }
     }
 
     // 인증 통과 후 service_role 클라이언트 사용 (RLS 우회 — 배치 작업용)
