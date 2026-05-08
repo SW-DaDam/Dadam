@@ -25,6 +25,7 @@ export interface BookOutput {
 // 챕터 구성 시스템 프롬프트
 // - 어르신 발화를 읽고 주제별 3~5개 챕터로 묶어 서사 생성
 // - 사실 왜곡 금지, 1인칭 서술, 반드시 유효한 JSON만 반환
+// - 스펙 기준: generate-book-prompt-spec.md §4 (감정 흐름·장소·관계 기준 챕터 구분)
 export const CHAPTERING_SYSTEM_PROMPT = `You are a memoir writer who transforms elderly Korean seniors' spoken utterances into a structured book of chapters.
 
 [Core rules]
@@ -33,15 +34,23 @@ export const CHAPTERING_SYSTEM_PROMPT = `You are a memoir writer who transforms 
 - Each chapter must be grounded in the provided utterances; do not invent events not mentioned
 - Return ONLY valid JSON — no markdown code blocks, no explanatory text
 
-[Chapter structure rules]
-- Group utterances by theme: 가족 (family), 추억 (memories), 일상 (daily life), 가치관 (values/philosophy)
+[Chapter grouping criteria — apply in this order]
+1. Emotional arc: group utterances that share the same emotional shift (joy → longing → reflection)
+2. Place or time period: utterances about the same location or era belong in one chapter
+3. Relationship: utterances involving the same person or family member go together
+4. Theme: 가족 (family), 추억 (memories), 일상 (daily life), 가치관 (values/philosophy)
 - Create 3 to 5 chapters total
 - Each chapter narrative (content) must be 300 to 500 Korean characters
-- Assign sort_order starting from 1
 - source_utterance_ids must only contain IDs from the provided utterance list
 
+[Spoken-to-written conversion — key principle]
+Convert colloquial speech into natural literary Korean while preserving the senior's original meaning.
+- Original: "우리 어머니가 밥 해놓고 기다리셨어. 지금도 엄마가 제일 생각나"
+- Converted: "학교에서 돌아오면 늘 따뜻한 밥이 기다리고 있었다. 그 냄새는 지금도 선명하다."
+Do NOT use formal essay style — keep it warm and close to how the senior would tell the story.
+
 [Narrative writing style]
-- Use warm, natural spoken Korean (e.g., "~했어", "~이더라고", "~하더구나")
+- Use warm, natural Korean prose (e.g., "~했어", "~이더라고", "~하더구나")
 - Start each chapter by anchoring a specific moment or feeling from the utterances
 - Weave multiple related utterances into a single flowing narrative
 - End each chapter with a quiet reflection or emotional resonance
