@@ -166,64 +166,70 @@ serve(async (req) => {
 
     const openai = createOpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') ?? '' })
 
-    const systemPrompt = `당신은 어르신과의 대화에서 기억할 만한 정보를 추출하는 분석가입니다.
+    // 영문 system prompt: LLM의 지시 이해도·토큰 효율이 한국어보다 높음
+    // 앞으로 이 파일에 추가하는 프롬프트도 반드시 영문으로 작성할 것
+    const systemPrompt = `You are an analyst that extracts memorable facts from a Korean elderly senior's conversation utterances.
 
-규칙:
-1. 기존 기억에 이미 있는 내용은 절대 포함하지 마세요.
-2. 새로 발견된 정보만 추출하세요.
-3. 응답은 반드시 순수 JSON 배열만 (마크다운 코드블록, 설명 텍스트 금지).
-4. 추출할 정보가 없으면 빈 배열 [] 반환.
-5. 각 항목은 { "text": "...", "category": "...", "emoji": "..." } 형식.
+[Rules]
+1. Never include anything already present in the existing memories.
+2. Extract only newly discovered information.
+3. Respond with a pure JSON array only — no markdown code blocks, no explanatory text.
+4. If there is nothing to extract, return an empty array [].
+5. Each item must follow this format: { "text": "...", "category": "...", "emoji": "..." }
 
-필터링 규칙 (추출하지 않는 발화):
-- "네", "그렇군요", "맞아요", "그래요" 등 단순 호응·맞장구
-- 질문에 대한 단순 긍정·부정만 있는 발화 (구체적 정보 없음)
+[Filtering rules — do NOT extract these]
+- Simple affirmations or back-channels: "네", "그렇군요", "맞아요", "그래요"
+- Utterances that contain only a bare yes/no with no concrete information
 
-text 작성 규칙 (매우 중요):
-- 반드시 짧은 명사형·서술형 종결로 작성하세요. 문장을 길게 이어 쓰지 마세요.
-  좋은 예: "수빈이는 자주 못 온다", "텃밭 가꾸기를 좋아함", "무릎이 안 좋아서 병원 다님"
-  나쁜 예: "수빈이는 자주 못 와서 혼자 먹어야지", "텃밭에서 토마토를 키우고 있어서 수확했어"
-- 이번 대화에서 처음 등장하는 사실을 추출할 때, 기존 기억에 해당 인물의 관계가 명시되어 있으면 관계를 함께 표기하세요.
-  예: 기존 기억에 "딸 수빈이"가 있고 발화에 "수빈이가 이사했어"가 나오면 → "딸 수빈이가 이사함"
-- 기존 기억에 이미 있는 사실을 관계 표현만 달리해서 재추출하지 마세요 (중복 방지).
-- 기존 기억에 없는 신규 인물은 이름만 표기하고 관계를 추측하지 마세요.
-  예: 처음 등장한 "민준이" → "민준이가 도움을 줌" (관계 추가 금지)
-- 관계는 가족(딸, 아들, 손자, 며느리 등)뿐 아니라 친구, 후배, 이웃, 동창 등도 포함합니다.
+[text writing rules — very important]
+- Write in short noun-form or predicative endings. Do not write long run-on sentences.
+  Good: "수빈이는 자주 못 온다", "텃밭 가꾸기를 좋아함", "무릎이 안 좋아서 병원 다님"
+  Bad:  "수빈이는 자주 못 와서 혼자 먹어야지", "텃밭에서 토마토를 키우고 있어서 수확했어"
+- If a fact being extracted involves a person already in existing memories with a known relationship, include that relationship in the text.
+  Example: existing memory has "딸 수빈이" → new utterance "수빈이가 이사했어" → extract as "딸 수빈이가 이사함"
+- Do NOT re-extract a fact already in existing memories by merely rephrasing the relationship (duplicate prevention).
+- For a new person not in existing memories, use only their name — do NOT infer or add a relationship.
+  Example: first mention of "민준이" → "민준이가 도움을 줌" (no relationship label)
+- Relationships include not only family (딸, 아들, 손자, 며느리) but also friends, juniors, neighbours, classmates, etc.
 
-이모지 규칙:
-- 이모지는 항목당 반드시 1개만 사용하세요.
+[Emoji rules]
+- Use exactly ONE emoji per item.
 
-카테고리 (아래 7개를 우선 사용, 맞는 게 없을 때만 2~4자 한국어 단어로 새로 만드세요):
+[Categories — prefer these 7; create a new 2–4 character Korean word only if none fit]
 취미, 가족, 건강, 일상, 추억, 가치관, 일정
 
-날짜·일정이 언급된 경우 text에 날짜 정보를 함께 포함하세요.
-예: "손녀 졸업식 (5월 15일)" → category: "일정", emoji: "📅"
+If a date or scheduled event is mentioned, include the date in the text.
+Example: "손녀 졸업식 (5월 15일)" → category: "일정", emoji: "📅"
 
-few-shot 예시:
-발화: "이웃들이랑 모여서 얘기하는 게 참 좋아요. 치매 예방도 되고"
+[Few-shot examples]
+Utterance: "이웃들이랑 모여서 얘기하는 게 참 좋아요. 치매 예방도 되고"
 → {"text": "이웃들과 모여 담소 나누기를 좋아함", "category": "일상", "emoji": "😊"}
 
-발화: "사위가 같이 가자고 해서 딸네 휴가에 같이 갔다 왔어요"
+Utterance: "사위가 같이 가자고 해서 딸네 휴가에 같이 갔다 왔어요"
 → {"text": "사위 초대로 딸네 가족 휴가에 동참", "category": "가족", "emoji": "👨‍👩‍👧"}
 
-발화: "꽃 선물 받는 게 가장 좋죠. 어릴 때는 진달래, 개나리 많이 꺾었어"
+Utterance: "꽃 선물 받는 게 가장 좋죠. 어릴 때는 진달래, 개나리 많이 꺾었어"
 → {"text": "꽃 선물 받는 것을 가장 좋아함", "category": "취미", "emoji": "🌸"}
 
-[기존 기억]
+[Existing memories]
 ${existingJson}
 
-[어르신 발화]
+[Senior's utterances]
 ${utteranceTexts}
 
-[응답 형식]
+[Response format]
 [{"text": "텃밭 가꾸기를 좋아함", "category": "취미", "emoji": "🌱"}, ...]`
 
     // LLM 실패 시 upsert를 진행하지 않고 즉시 실패 반환
     let extractedItems: MemoryItem[]
     try {
+      // system role로 분리하여 지시 명확성 향상
       const { text } = await generateText({
         model: openai('gpt-4o-mini'),
-        prompt: systemPrompt,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: 'Extract memorable facts from the senior utterances provided in the system prompt.' },
+        ],
         temperature: 0.3,
       })
       extractedItems = JSON.parse(text.trim()) as MemoryItem[]

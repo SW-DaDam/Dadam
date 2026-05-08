@@ -129,60 +129,61 @@ Deno.serve(async (req) => {
 
     const openai = createOpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') ?? '' })
 
-    const prompt = `아래 발화 목록을 분석해서 각 발화에 해당하는 태그를 분류해 주세요.
+    // 영문 system prompt: LLM의 지시 이해도·토큰 효율이 한국어보다 높음
+    // 앞으로 이 파일에 추가하는 프롬프트도 반드시 영문으로 작성할 것
+    const systemPrompt = `You are a classifier that assigns emotion/topic tags to Korean elderly senior utterances.
 
-태그 종류 (복수 가능):
-- daily_mundane: 일상 잡담 (날씨, 식사, TV 등 특별하지 않은 이야기)
-  · 감정 표현이 있어도 강도가 낮거나 단순 상황 서술이면 daily_mundane
-- memory_recall: 과거 추억 회상 (어릴 때, 옛날에, 그 시절 등 명시적 과거 언급)
-- emotional_peak: 현재 시점에서 감정이 강하게 폭발한 발화
-  · 기준: 외로움·그리움·충격·죄책감 등 강렬한 현재 감정 키워드가 있을 때만 부여
-  · 과거 사실 서술이나 약한 불만 표현에는 부여하지 마세요
-- philosophy: 삶의 가치관·신념·교훈 (살다 보면, 중요한 건, 그래야 해)
-- relationship_event: 가족·지인과의 구체적 관계 사건 (손자가, 며느리가, 이웃이)
+[Tag definitions — multiple tags allowed per utterance]
+- daily_mundane: Ordinary small talk (weather, meals, TV, etc.). Assign even if mild emotion is present, as long as it is low-intensity or purely situational.
+- memory_recall: Recollection of past memories. Assign when explicit past-tense markers appear (어릴 때, 옛날에, 그 시절) OR when the utterance clearly describes a past event/experience even without those markers.
+- emotional_peak: Currently intense emotional expression at the moment of speaking. Assign ONLY when strong present-emotion keywords appear (e.g., 너무 외로워, 눈물 나, 충격받았어, 죄책감이 들어). Do NOT assign for past-event descriptions or mild complaints.
+- philosophy: Life values, beliefs, or lessons (살다 보면, 중요한 건, 그래야 해).
+- relationship_event: A concrete event involving family or acquaintances (손자가 ..., 며느리가 ..., 이웃이 ...). Simple mentions without an event do NOT qualify.
 
-복합 태그 규칙:
-- 복수 태그 동시 부여 가능 (예: memory_recall + emotional_peak)
-- general 태그는 존재하지 않으므로 절대 사용하지 마세요
+[Compound tag rules]
+- Multiple tags may be assigned simultaneously (e.g., memory_recall + emotional_peak).
+- The tag "general" does not exist — never use it.
+- An empty array [] is valid when no tag applies.
 
-few-shot 예시:
-[발화] "다들 바빠서 만나기 힘들어하니 혼자 보내는 시간이 너무 외로워."
-[태그] ["emotional_peak"]
-이유: "너무 외로워" — 현재 강렬한 감정 키워드 명확
+[Few-shot examples]
+Utterance: "다들 바빠서 만나기 힘들어하니 혼자 보내는 시간이 너무 외로워."
+Tags: ["emotional_peak"]
+Reason: "너무 외로워" — strong present-emotion keyword is explicit.
 
-[발화] "학교에서 애들이 나를 때리는데 아무것도 할 수 없어서 슬펐어."
-[태그] ["memory_recall"]
-이유: 과거 경험 서술 — 명시적 키워드(어릴 때, 옛날에)가 없어도 과거 시제 + 감정 서술이면 memory_recall
+Utterance: "학교에서 애들이 나를 때리는데 아무것도 할 수 없어서 슬펐어."
+Tags: ["memory_recall"]
+Reason: Past-tense experience narration — qualifies as memory_recall even without explicit past-time marker.
 
-[발화] "오늘 점심에 된장찌개 끓여 먹었어요."
-[태그] ["daily_mundane"]
-이유: 현재 일상 서술, 감정·기억·관계 없음
+Utterance: "오늘 점심에 된장찌개 끓여 먹었어요."
+Tags: ["daily_mundane"]
+Reason: Present-day routine description; no emotion, memory, or relationship event.
 
-[발화] "예전 집 앞이 다 들판이었는데, 그 시절이 그립고 지금은 참 슬프구나."
-[태그] ["memory_recall", "emotional_peak"]
-이유: 과거 회상 + 현재 강한 슬픔 동시 존재
+Utterance: "예전 집 앞이 다 들판이었는데, 그 시절이 그립고 지금은 참 슬프구나."
+Tags: ["memory_recall", "emotional_peak"]
+Reason: Past recollection + strong present sadness coexist.
 
-[발화] "모두가 손해 보는 일은 안 하려고만 해. 그게 화가 나."
-[태그] ["daily_mundane"]
-이유: 상황 불만 표현, 감정 강도 낮음
+Utterance: "모두가 손해 보는 일은 안 하려고만 해. 그게 화가 나."
+Tags: ["daily_mundane"]
+Reason: Situational complaint with low emotional intensity — does not meet emotional_peak threshold.
 
-응답 형식 (순수 JSON 배열만, 설명 텍스트 금지):
+[Response format — pure JSON array only, no explanatory text]
 [
   { "id": "uuid", "tags": ["memory_recall", "emotional_peak"] },
   { "id": "uuid", "tags": ["daily_mundane"] }
-]
+]`
 
-태그가 없는 발화는 빈 배열 [] 사용.
-
-[발화 목록]
-${utteranceList}`
+    const userMessage = `Classify the following utterances:\n${utteranceList}`
 
     // LLM 실패 시 utterances 원본 보존 후 즉시 실패 반환
     let tagResults: TagResult[]
     try {
+      // system role로 분리하여 지시 명확성 향상
       const { text } = await generateText({
         model: openai('gpt-4o-mini'),
-        prompt,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage },
+        ],
         temperature: 0.3,
       })
       tagResults = JSON.parse(text.trim()) as TagResult[]
