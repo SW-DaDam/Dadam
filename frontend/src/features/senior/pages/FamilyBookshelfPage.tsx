@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router'
 import { UserPlus } from 'lucide-react'
 import { useBookshelf } from '@/features/bookshelf/hooks/useBookshelf'
 import { ShelfRack } from '@/features/bookshelf/components/ShelfRack'
+import { useAuthStore } from '@/shared/stores/authStore'
 import type { BookWithStats } from '@/types/domain'
 
 const ACTIVITIES = [
@@ -13,6 +14,9 @@ const ACTIVITIES = [
 export default function FamilyBookshelfPage() {
   const navigate = useNavigate()
   const { books, loading } = useBookshelf()
+  const profile = useAuthStore((s) => s.profile)
+  // profile.display_name이 없으면 '나'로 fallback
+  const shelfTitle = `${profile?.display_name ?? '나'}의 책장`
 
   const latestDraft = books.find((b) => b.status === 'draft' || b.status === 'editing')
   const publishedBooks = books.filter((b) => b.status === 'published')
@@ -27,7 +31,7 @@ export default function FamilyBookshelfPage() {
     <div className="flex-1 flex flex-col overflow-hidden">
 
       <header className="w-full h-[80px] bg-[#FFF8F0] border-b border-[#E5E7EB] flex items-center justify-between px-4 sm:px-6 shrink-0">
-        <h1 className="text-[1.5rem] font-bold text-[#1F2937]">엄마의 책장</h1>
+        <h1 className="text-[1.5rem] font-bold text-[#1F2937]">{shelfTitle}</h1>
         <button
           type="button"
           onClick={() => navigate('/s/family/invite')}

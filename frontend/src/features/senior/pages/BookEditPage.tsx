@@ -181,7 +181,7 @@ export default function BookEditPage() {
       {/* Step 1 — 표지 선택 */}
       {currentStep === 1 && (
         <>
-          <main className="flex-1 overflow-y-auto pb-[100px] w-full max-w-2xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
+          <main className="flex-1 overflow-y-auto w-full max-w-2xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
             <div className="flex flex-col items-center gap-2 text-center">
               <p className="text-[1.5rem] font-bold text-[#1F2937]">이번 달 책 표지를 골라주세요</p>
               <p className="text-[1.125rem] text-[#6B7280]">AI가 이번 달 이야기를 바탕으로 만들었어요</p>
@@ -221,8 +221,8 @@ export default function BookEditPage() {
             </div>
           </main>
 
-          <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#E5E7EB] px-4 sm:px-6 py-4">
-            <button type="button" onClick={() => setCurrentStep(2)} className="w-full bg-[#E8820C] rounded-2xl py-4 text-center">
+          <div className="shrink-0 bg-white border-t border-[#E5E7EB] px-4 sm:px-6 py-4">
+            <button type="button" onClick={() => setCurrentStep(2)} className="w-full max-w-2xl mx-auto block bg-[#E8820C] rounded-2xl py-4 text-center">
               <span className="text-[1.25rem] text-white">이 표지로 할게요</span>
             </button>
           </div>
@@ -232,7 +232,7 @@ export default function BookEditPage() {
       {/* Step 2 — 챕터 확인 */}
       {currentStep === 2 && (
         <>
-          <main className="flex-1 overflow-y-auto pb-[100px] w-full max-w-2xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-4">
+          <main className="flex-1 overflow-y-auto w-full max-w-2xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-4">
             <div className="flex flex-col items-center gap-2 text-center">
               <p className="text-[1.5rem] font-bold text-[#1F2937]">이번 달 이야기들이에요</p>
               <p className="text-[1.125rem] text-[#6B7280]">마음에 들지 않는 이야기는 빼도 돼요</p>
@@ -271,12 +271,12 @@ export default function BookEditPage() {
             </div>
           </main>
 
-          <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#E5E7EB] px-4 sm:px-6 py-4">
+          <div className="shrink-0 bg-white border-t border-[#E5E7EB] px-4 sm:px-6 py-4">
             <button
               type="button"
               onClick={() => setCurrentStep(3)}
               disabled={activeChapters.length === 0}
-              className="w-full bg-[#E8820C] disabled:opacity-40 rounded-2xl py-4 text-center"
+              className="w-full max-w-2xl mx-auto block bg-[#E8820C] disabled:opacity-40 rounded-2xl py-4 text-center"
             >
               <span className="text-[1.25rem] text-white">다음으로</span>
             </button>
@@ -337,7 +337,7 @@ function Step3Epilogue({ onNext }: { onNext: () => void }) {
 
   return (
     <>
-      <main className="flex-1 overflow-y-auto pb-[160px] w-full max-w-2xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-4">
+      <main className="flex-1 overflow-y-auto w-full max-w-2xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-4">
 
         <div className="flex flex-col items-center gap-2 text-center">
           <p className="text-[1.5rem] text-[#1F2937]">이번 달 마무리 한마디</p>
@@ -403,9 +403,9 @@ function Step3Epilogue({ onNext }: { onNext: () => void }) {
       </main>
 
       {/* 하단 버튼 */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#E5E7EB] px-4 sm:px-6 py-4 flex flex-col gap-3">
+      <div className="shrink-0 bg-white border-t border-[#E5E7EB] px-4 sm:px-6 py-4 flex flex-col gap-3">
         <p className="text-base text-[#6B7280] text-center">에필로그는 나중에 수정할 수 있어요</p>
-        <div className="flex gap-3">
+        <div className="flex gap-3 w-full max-w-2xl mx-auto">
           <button type="button" onClick={onNext} className="flex-[2] bg-[#FFF0DC] rounded-2xl py-4 text-center">
             <span className="text-[1.125rem] text-[#E8820C]">건너뛰기</span>
           </button>
