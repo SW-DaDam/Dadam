@@ -13,3 +13,7 @@ docs/roadmap/
 docs/superpowers/
 docs/task/
 .vercel
+
+# 로컬 도구 (Playwright MCP 스냅샷, VS Code 설정)
+.playwright-mcp/
+.vscode/
