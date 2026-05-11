@@ -1,28 +1,30 @@
-// Supabase 클라이언트 초기화 모듈
-// 환경변수 누락 시 런타임 초기에 명확한 에러를 던져 설정 실수를 조기에 파악한다
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/types/database'
 
 interface SupabaseClientConfig {
   url: string
   anonKey: string
 }
 
-// 환경변수 유효성 검증 후 Supabase 클라이언트를 생성한다
-export function createSupabaseClient(config: SupabaseClientConfig): SupabaseClient {
+export function createSupabaseClient(config: SupabaseClientConfig): SupabaseClient<Database> {
   if (!config.url) {
     throw new Error('VITE_SUPABASE_URL 이 설정되지 않았습니다. .env.local 을 확인하세요.')
   }
   if (!config.anonKey) {
     throw new Error('VITE_SUPABASE_ANON_KEY 가 설정되지 않았습니다. .env.local 을 확인하세요.')
   }
-  return createClient(config.url, config.anonKey)
+  return createClient<Database>(config.url, config.anonKey, {
+    auth: {
+      persistSession: true,     // 로컬 스토리지에 세션 저장 → 새로고침 후 유지
+      autoRefreshToken: true,   // access_token 만료 임박 시 자동 갱신
+      detectSessionInUrl: true, // OAuth 콜백 URL의 code/fragment 자동 파싱 (TASK-06 필수)
+    },
+  })
 }
 
-// 지연 초기화: 첫 호출 시점에만 환경변수를 읽어 클라이언트 생성
-// (모듈 import 시점이 아닌, 실제 사용 시점에 검증 수행)
-let cachedClient: SupabaseClient | null = null
+let cachedClient: SupabaseClient<Database> | null = null
 
-export function getSupabase(): SupabaseClient {
+export function getSupabase(): SupabaseClient<Database> {
   if (!cachedClient) {
     cachedClient = createSupabaseClient({
       url: import.meta.env.VITE_SUPABASE_URL,
@@ -31,3 +33,5 @@ export function getSupabase(): SupabaseClient {
   }
   return cachedClient
 }
+
+export const supabase = getSupabase()
