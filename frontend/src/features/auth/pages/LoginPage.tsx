@@ -35,7 +35,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'kakao',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${import.meta.env.DEV ? `${window.location.protocol}//localhost:${window.location.port || 5173}` : window.location.origin}/auth/callback`,
         queryParams: {
           scope: 'profile_nickname profile_image',
         },

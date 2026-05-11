@@ -1,29 +1,20 @@
 import { supabase } from '@/lib/supabase'
 
-// 어르신 프로필 설정: profiles UPDATE + senior_profiles UPSERT
-// .select()로 실제 업데이트된 row를 받아 0건이면 트리거 미완료로 판단해 에러 반환
+// 어르신 프로필 설정: profiles UPSERT + senior_profiles UPSERT
+// 트리거 미완료로 profiles row가 없을 경우에도 안전하게 생성
 export async function setupSeniorProfile(
   userId: string,
   displayName: string
 ): Promise<{ error: unknown }> {
-  const { data: updatedRows, error: profileError } = await supabase
+  const { error: profileError } = await supabase
     .from('profiles')
-    .update({ role: 'senior', display_name: displayName })
-    .eq('id', userId)
-    .select('id')
+    .upsert({ id: userId, role: 'senior', display_name: displayName })
 
   if (profileError) {
-    console.error('[Auth] 어르신 프로필 role 설정 실패', profileError)
+    console.error('[Auth] 어르신 프로필 설정 실패', profileError)
     return { error: profileError }
   }
 
-  if (!updatedRows || updatedRows.length === 0) {
-    const err = new Error('profiles row not found — handle_new_user trigger may be delayed')
-    console.error('[Auth]', err.message)
-    return { error: err }
-  }
-
-  // 트리거가 role='family'로 생성했을 수 있으므로 UPSERT로 처리
   const { error: seniorError } = await supabase
     .from('senior_profiles')
     .upsert({ id: userId, onboarding_completed: false })
@@ -36,27 +27,19 @@ export async function setupSeniorProfile(
   return { error: null }
 }
 
-// 가족 프로필 설정: profiles role + display_name UPDATE
-// .select()로 실제 업데이트된 row를 받아 0건이면 트리거 미완료로 판단해 에러 반환
+// 가족 프로필 설정: profiles UPSERT
+// 트리거 미완료로 profiles row가 없을 경우에도 안전하게 생성
 export async function setupFamilyProfile(
   userId: string,
   displayName: string
 ): Promise<{ error: unknown }> {
-  const { data: updatedRows, error } = await supabase
+  const { error } = await supabase
     .from('profiles')
-    .update({ role: 'family', display_name: displayName })
-    .eq('id', userId)
-    .select('id')
+    .upsert({ id: userId, role: 'family', display_name: displayName })
 
   if (error) {
     console.error('[Auth] 가족 프로필 설정 실패', error)
     return { error }
-  }
-
-  if (!updatedRows || updatedRows.length === 0) {
-    const err = new Error('profiles row not found — handle_new_user trigger may be delayed')
-    console.error('[Auth]', err.message)
-    return { error: err }
   }
 
   return { error: null }
