@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router'
-import { ChevronLeft, Check, Mic, Pencil, X, RotateCcw } from 'lucide-react'
+import { ChevronLeft, Check, Mic, Pencil, X, RotateCcw, RefreshCw, BookOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useBookEdit } from '@/features/bookshelf/hooks/useBookEdit'
 import type { Chapter, CoverImage } from '@/types/domain'
@@ -67,10 +67,10 @@ function CoverDecoration({ type }: { type: string }) {
 
 // ─── 진행 표시기 ─────────────────────────────────────────────────
 
-function StepIndicator({ currentStep }: { currentStep: number }) {
+function StepIndicator({ currentStep, onStepClick }: { currentStep: number; onStepClick: (n: number) => void }) {
   return (
-    <div className="bg-white border-b border-[#E5E7EB] px-6 sm:px-8 pt-3 pb-4 shrink-0">
-      <div className="relative h-[2px] bg-[#D1D5DB] rounded-full mb-4 mx-3">
+    <div className="bg-white border-b border-[#E5E7EB] px-6 sm:px-8 pt-2 pb-2 shrink-0">
+      <div className="relative h-[2px] bg-[#D1D5DB] rounded-full mb-2 mx-3">
         <div className="absolute top-0 left-0 h-full bg-[#E8820C] rounded-full transition-all"
           style={{ width: `${((currentStep - 1) / (STEPS.length - 1)) * 100}%` }} />
       </div>
@@ -78,8 +78,12 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
         {STEPS.map((step) => {
           const done = step.n < currentStep
           const active = step.n === currentStep
+          // 이미 완료된 단계 또는 현재 단계만 클릭 이동 허용
+          const clickable = step.n <= currentStep
           return (
-            <div key={step.n} className="flex flex-col items-center gap-1">
+            <button key={step.n} type="button"
+              onClick={() => clickable && onStepClick(step.n)}
+              className={cn('flex flex-col items-center gap-1', clickable ? 'cursor-pointer' : 'cursor-default')}>
               <div className={cn('w-7 h-7 rounded-full flex items-center justify-center',
                 done ? 'bg-[#16A34A]' : active ? 'bg-[#E8820C]' : 'bg-[#D1D5DB]')}>
                 {done
@@ -89,7 +93,7 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
               <span className={cn('text-xs', done ? 'text-[#16A34A] font-bold' : active ? 'text-[#E8820C] font-bold' : 'text-[#6B7280]')}>
                 {step.label}
               </span>
-            </div>
+            </button>
           )
         })}
       </div>
@@ -102,10 +106,20 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
 export default function BookEditPage() {
   const navigate = useNavigate()
   const { bookId } = useParams<{ bookId: string }>()
-  const { book, chapters: realChapters, coverImages, loading, softDeleteChapter, restoreChapter, updateChapterTitle, selectCover, publishBook } = useBookEdit(bookId)
+  const { book, chapters: realChapters, coverImages, loading, regenerating, extraCoverCount, extraCoverLimit, softDeleteChapter, restoreChapter, updateChapterTitle, selectCover, publishBook, regenerateCover } = useBookEdit(bookId)
 
   const [currentStep, setCurrentStep] = useState(1)
   const [selectedCoverId, setSelectedCoverId] = useState<string>(MOCK_COVERS[1].id)
+
+  // 최초 로드 시에만 첫 번째 표지로 초기화
+  // 재생성 후 coverImages가 갱신될 때 사용자가 선택한 표지가 리셋되지 않도록
+  // 현재 선택된 ID가 목록에 없을 때만 첫 번째로 교정
+  useEffect(() => {
+    if (coverImages.length > 0 && !coverImages.some(c => c.id === selectedCoverId)) {
+      setSelectedCoverId(coverImages[0].id)
+    }
+  }, [coverImages, selectedCoverId])
+  const [viewingChapter, setViewingChapter] = useState<Chapter | null>(null)
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null)
   const [editingChapterId, setEditingChapterId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
@@ -221,56 +235,52 @@ export default function BookEditPage() {
         </h1>
       </header>
 
-      {currentStep < 4 && <StepIndicator currentStep={currentStep} />}
+      {currentStep < 4 && <StepIndicator currentStep={currentStep} onStepClick={n => setCurrentStep(n as 1 | 2 | 3 | 4)} />}
 
       {/* ── Step 1: 표지 선택 (F-13) ── */}
       {currentStep === 1 && (
         <>
-          <main className="flex-1 overflow-y-auto w-full max-w-2xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
-            <div className="flex flex-col items-center gap-2 text-center">
-              <p className="text-[1.5rem] font-bold text-[#1F2937]">이번 달 책 표지를 골라주세요</p>
-              <p className="text-[1.125rem] text-[#6B7280]">AI가 이번 달 이야기를 바탕으로 만들었어요</p>
+          <main className="flex-1 overflow-hidden w-full max-w-2xl mx-auto px-4 sm:px-6 py-3 flex flex-col gap-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex flex-col gap-1">
+                <p className="text-[1.25rem] font-bold text-[#1F2937] whitespace-nowrap">이번 달 책 표지를 골라주세요</p>
+                <p className="text-[1.0625rem] text-[#6B7280]">AI가 이번 달 이야기를 바탕으로 만들었어요</p>
+              </div>
+              {/* 표지 추가 생성 버튼 — 최대 3장 추가 가능 */}
+              {coverImages.length > 0 && (
+                <button type="button"
+                  disabled={regenerating || extraCoverCount >= extraCoverLimit}
+                  className="shrink-0 flex flex-col items-center gap-1 mt-1 disabled:opacity-40"
+                  onClick={async () => {
+                    try {
+                      await regenerateCover()
+                    } catch (e) {
+                      showToast(e instanceof Error ? e.message : '표지 생성에 실패했어요')
+                    }
+                  }}>
+                  <div className="w-11 h-11 rounded-full bg-[#FFF0DC] border border-[#E8820C] flex items-center justify-center">
+                    <RefreshCw size={20} className={cn('text-[#E8820C]', regenerating && 'animate-spin')} />
+                  </div>
+                  <span className="text-xs text-[#E8820C]">
+                    {regenerating ? '생성 중…' : `다시 만들기 (${extraCoverCount}/${extraCoverLimit})`}
+                  </span>
+                </button>
+              )}
             </div>
 
-            {/* 실제 표지 이미지 */}
+            {/* 표지 슬라이드 선택 */}
             {coverImages.length > 0 ? (
-              <div className="grid grid-cols-3 gap-3">
-                {coverImages.map(cover => (
-                  <RealCoverCard
-                    key={cover.id}
-                    cover={cover}
-                    isSelected={selectedCoverId === cover.id}
-                    onSelect={() => setSelectedCoverId(cover.id)}
-                  />
-                ))}
-              </div>
+              <CoverSlider
+                covers={coverImages}
+                selectedId={selectedCoverId}
+                onSelect={setSelectedCoverId}
+              />
             ) : (
-              /* 목업 표지 */
-              <div className="grid grid-cols-3 gap-3">
-                {MOCK_COVERS.map(cover => {
-                  const isSelected = selectedCoverId === cover.id
-                  return (
-                    <button key={cover.id} type="button" onClick={() => setSelectedCoverId(cover.id)}
-                      className="flex flex-col items-stretch">
-                      <div className={cn('relative rounded-xl overflow-hidden flex flex-col',
-                        isSelected ? 'border-[3px] border-[#E8820C]' : 'border border-[#E5E7EB]')}
-                        style={{ backgroundColor: cover.bg }}>
-                        <div className="h-[80px] flex items-center justify-center p-3">
-                          <CoverDecoration type={cover.decoration} />
-                        </div>
-                        <div className="px-2 pb-3 flex flex-col items-center gap-1">
-                          <p className="text-sm font-bold text-center" style={{ color: cover.accent }}>{cover.label}</p>
-                        </div>
-                      </div>
-                      {isSelected && (
-                        <div className="mt-2 bg-[#E8820C] rounded-xl py-2 text-center">
-                          <span className="text-sm font-bold text-white">선택됨</span>
-                        </div>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
+              <MockCoverSlider
+                covers={MOCK_COVERS}
+                selectedId={selectedCoverId}
+                onSelect={setSelectedCoverId}
+              />
             )}
           </main>
 
@@ -334,7 +344,12 @@ export default function BookEditPage() {
                     </div>
                   </div>
 
-                  <div className="flex justify-end">
+                  <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => setViewingChapter(chapter)}
+                      className="bg-[#F3F4F6] rounded-xl px-4 py-2 min-h-11 flex items-center gap-1.5">
+                      <BookOpen size={15} className="text-[#6B7280]" />
+                      <span className="text-base text-[#6B7280]">내용 보기</span>
+                    </button>
                     <button type="button" onClick={() => setConfirmRemoveId(chapter.id)}
                       disabled={editingChapterId === chapter.id}
                       className="bg-[#FEF2F2] rounded-xl px-4 py-2 min-h-11 disabled:opacity-40">
@@ -377,6 +392,29 @@ export default function BookEditPage() {
               <span className="text-[1.25rem] text-white">다음으로</span>
             </button>
           </div>
+
+          {/* 챕터 내용 보기 모달 */}
+          {viewingChapter && (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0">
+              <div className="absolute inset-0 bg-[#1F2937] opacity-45" onClick={() => setViewingChapter(null)} />
+              <div className="relative bg-white rounded-2xl w-full max-w-sm flex flex-col gap-4 z-10 max-h-[75vh]">
+                {/* 모달 헤더 */}
+                <div className="flex items-center justify-between px-5 pt-5">
+                  <p className="text-[1.125rem] font-bold text-[#E8820C] flex-1 pr-2">{viewingChapter.title}</p>
+                  <button type="button" onClick={() => setViewingChapter(null)}
+                    className="w-8 h-8 rounded-full bg-[#F3F4F6] flex items-center justify-center shrink-0">
+                    <X size={16} className="text-[#6B7280]" />
+                  </button>
+                </div>
+                {/* 본문 스크롤 영역 */}
+                <div className="overflow-y-auto px-5 pb-5">
+                  <p className="text-[1.0625rem] text-[#1F2937] leading-relaxed whitespace-pre-wrap">
+                    {viewingChapter.content}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* 챕터 빼기 확인 모달 */}
           {confirmRemoveId !== null && confirmChapter && (
@@ -455,21 +493,86 @@ export default function BookEditPage() {
   )
 }
 
-// ─── 실제 표지 카드 ───────────────────────────────────────────────
+// ─── 실제 표지 슬라이더 ──────────────────────────────────────────
 
-function RealCoverCard({ cover, isSelected, onSelect }: { cover: CoverImage; isSelected: boolean; onSelect: () => void }) {
+function CoverSlider({ covers, selectedId, onSelect }: {
+  covers: CoverImage[]
+  selectedId: string
+  onSelect: (id: string) => void
+}) {
+  const currentIdx = covers.findIndex(c => c.id === selectedId)
+  const idx = currentIdx < 0 ? 0 : currentIdx
+
+  function prev() { onSelect(covers[(idx - 1 + covers.length) % covers.length].id) }
+  function next() { onSelect(covers[(idx + 1) % covers.length].id) }
+
   return (
-    <button type="button" onClick={onSelect} className="flex flex-col items-stretch">
-      <div className={cn('relative rounded-xl overflow-hidden flex flex-col bg-[#F3F4F6]',
-        isSelected ? 'border-[3px] border-[#E8820C]' : 'border border-[#E5E7EB]')}>
-        <img src={cover.image_url} alt="표지 후보" className="w-full h-[100px] object-cover" />
+    <div className="relative w-full">
+      <div className="rounded-2xl overflow-hidden border-[3px] border-[#E8820C] aspect-[4/3] w-full">
+        <img src={covers[idx].image_url} alt="선택된 표지" className="w-full h-full object-cover" />
       </div>
-      {isSelected && (
-        <div className="mt-2 bg-[#E8820C] rounded-xl py-2 text-center">
-          <span className="text-sm font-bold text-white">선택됨</span>
+
+      {/* 점 인디케이터 — 이미지 상단에 오버레이 */}
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2">
+        {covers.map((c, i) => (
+          <div key={c.id} onClick={() => onSelect(c.id)}
+            className={cn('rounded-full cursor-pointer transition-all',
+              i === idx ? 'w-3 h-3 bg-[#E8820C]' : 'w-3 h-3 bg-white/70')} />
+        ))}
+      </div>
+
+      {/* 이전 버튼 */}
+      <button type="button" onClick={prev}
+        className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/80 flex items-center justify-center shadow-md">
+        <ChevronLeft size={22} className="text-[#1F2937]" />
+      </button>
+      {/* 다음 버튼 */}
+      <button type="button" onClick={next}
+        className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/80 flex items-center justify-center shadow-md">
+        <ChevronLeft size={22} className="text-[#1F2937] rotate-180" />
+      </button>
+    </div>
+  )
+}
+
+// ─── 목업 표지 슬라이더 ──────────────────────────────────────────
+
+function MockCoverSlider({ covers, selectedId, onSelect }: {
+  covers: typeof MOCK_COVERS
+  selectedId: string
+  onSelect: (id: string) => void
+}) {
+  const currentIdx = covers.findIndex(c => c.id === selectedId)
+  const idx = currentIdx < 0 ? 0 : currentIdx
+
+  function prev() { onSelect(covers[(idx - 1 + covers.length) % covers.length].id) }
+  function next() { onSelect(covers[(idx + 1) % covers.length].id) }
+
+  const cover = covers[idx]
+  return (
+    <div className="flex flex-col items-center gap-4">
+      <div className="relative w-full">
+        <div className="rounded-2xl overflow-hidden border-[3px] border-[#E8820C] aspect-[4/3] w-full flex flex-col items-center justify-center"
+          style={{ backgroundColor: cover.bg }}>
+          <CoverDecoration type={cover.decoration} />
+          <p className="mt-4 text-base font-bold" style={{ color: cover.accent }}>{cover.label}</p>
         </div>
-      )}
-    </button>
+        <button type="button" onClick={prev}
+          className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/80 flex items-center justify-center shadow-md">
+          <ChevronLeft size={22} className="text-[#1F2937]" />
+        </button>
+        <button type="button" onClick={next}
+          className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/80 flex items-center justify-center shadow-md">
+          <ChevronLeft size={22} className="text-[#1F2937] rotate-180" />
+        </button>
+      </div>
+      <div className="flex items-center gap-2">
+        {covers.map((c, i) => (
+          <button key={c.id} type="button" onClick={() => onSelect(c.id)}
+            className={cn('rounded-full transition-all', i === idx ? 'w-3 h-3 bg-[#E8820C]' : 'w-2 h-2 bg-[#D1D5DB]')} />
+        ))}
+      </div>
+    </div>
   )
 }
 

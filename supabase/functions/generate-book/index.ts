@@ -204,6 +204,7 @@ async function aggregateUtterancesFallback(
  *   - 미지정 시: 기존 active job 없으면 새 job 생성
  */
 async function runPipelineForSenior(
+  callerAuthHeader: string,  // 원래 요청의 Authorization 헤더 (generate-cover 내부 호출 시 전달)
   supabase: ReturnType<typeof createClient>,
   seniorId: string,
   year: number,
@@ -315,14 +316,27 @@ async function runPipelineForSenior(
       throw llmErr
     }
 
+    // LLM 응답에서 JSON 추출 (```json ... ``` 마크다운 코드블록 포함 대응)
+    const extractJson = (raw: string): BookOutput | null => {
+      const stripped = raw
+        .replace(/^```json\s*/i, '')  // 앞쪽 ```json 제거
+        .replace(/^```\s*/i, '')      // 앞쪽 ``` 제거
+        .replace(/\s*```\s*$/, '')    // 뒤쪽 ``` 제거
+        .trim()
+      try {
+        return JSON.parse(stripped) as BookOutput
+      } catch {
+        return null
+      }
+    }
+
     // JSON 파싱 실패 시 1회 재시도 (스펙 §6)
-    let parsed: BookOutput | null = null
-    try {
-      parsed = JSON.parse(text.trim()) as BookOutput
-    } catch {
+    let parsed = extractJson(text)
+    if (!parsed) {
       console.warn(`[generate-book] job ${jobId} — JSON 파싱 실패, 1회 재시도`)
       const retry = await callLLM()
-      parsed = JSON.parse(retry.text.trim()) as BookOutput
+      parsed = extractJson(retry.text)
+      if (!parsed) throw new Error('JSON 파싱 재시도 실패')
     }
 
     bookOutput = parsed
@@ -401,51 +415,49 @@ async function runPipelineForSenior(
 
   console.log(`[generate-book] job ${jobId} — book ${bookId} 생성 완료 (챕터 ${chaptersToInsert.length}개)`)
 
-  // ── cover_requested: generate-cover 비동기 호출 (fire-and-forget) ──
+  // ── cover_requested: generate-cover 동기 호출 후 결과 확인 ──────────────
+  // fire-and-forget이 아닌 응답 확인 방식 — 호출 실패 시 job을 failed로 전환
   await updateJobStatus(supabase, jobId, 'cover_requested', { book_id: bookId })
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
-    // 응답 대기 없이 즉시 다음 단계 진행 (표지 생성은 F-07 담당)
-    fetch(`${supabaseUrl}/functions/v1/generate-cover`, {
+    // batch 모드 내부 호출: Authorization 대신 X-Internal-Secret으로 인증
+    // INTERNAL_COVER_SECRET는 두 함수 모두에 동일하게 설정된 공유 secret
+    // 외부 클라이언트는 이 값을 알 수 없으므로 batch 엔드포인트에 직접 접근 불가
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    const internalSecret = Deno.env.get('INTERNAL_COVER_SECRET') ?? ''
+    const coverRes = await fetch(`${supabaseUrl}/functions/v1/generate-cover`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${serviceRoleKey}`,
+        'Authorization': callerAuthHeader,  // Supabase 게이트웨이 통과용 (JWT 형식 필요)
+        'apikey': anonKey,
+        'X-Internal-Secret': internalSecret,
       },
-      body: JSON.stringify({ book_id: bookId, senior_id: seniorId }),
-    }).catch((err) => {
-      // fire-and-forget — 실패해도 job은 done으로 처리
-      console.warn(`[generate-book] generate-cover 호출 실패 (무시됨):`, err)
+      body: JSON.stringify({ book_id: bookId, senior_id: seniorId, mode: 'batch' }),
     })
+
+    if (!coverRes.ok) {
+      const errBody = await coverRes.text().catch(() => '(응답 본문 없음)')
+      console.error(`[generate-book] generate-cover 호출 실패 (${coverRes.status}): ${errBody}`)
+      await updateJobStatus(supabase, jobId, 'failed', {
+        error_log: `generate-cover 호출 실패 (${coverRes.status}): ${errBody}`,
+      })
+      return 'failed'
+    }
   } catch (err) {
-    // generate-cover 호출 준비 실패도 job을 막지 않음
-    console.warn(`[generate-book] generate-cover 호출 준비 실패 (무시됨):`, err)
-  }
-
-  // ── done: 파이프라인 완료 ──────────────────────────────────────
-  await updateJobStatus(supabase, jobId, 'done', { book_id: bookId })
-
-  // ── 알림 발송: 어르신에게 책 초안 완성 알림 ───────────────────
-  const { error: notifErr } = await supabase
-    .from('notifications')
-    .insert({
-      recipient_id: seniorId,
-      type: 'book_draft_ready',
-      title: '이번 달 이야기책 초안이 완성됐어요 📖',
-      body: `${month}월의 이야기가 ${chaptersToInsert.length}개 챕터로 만들어졌어요.`,
-      reference_id: bookId,
-      reference_type: 'book',
+    // 네트워크 오류 등 — job을 failed로 전환하여 재시도 가능 상태로 만듦
+    console.error(`[generate-book] generate-cover 호출 예외:`, err)
+    await updateJobStatus(supabase, jobId, 'failed', {
+      error_log: `generate-cover 호출 예외: ${String(err)}`,
     })
-
-  if (notifErr) {
-    // 알림 실패는 파이프라인 성공에 영향 없음 — 로그만 남김
-    console.error(`[generate-book] 알림 발송 실패 (job: ${jobId})`, notifErr)
+    return 'failed'
   }
 
-  console.log(`[generate-book] job ${jobId} — 파이프라인 완료 (senior: ${seniorId})`)
+  // done 전환 및 알림 발송은 generate-cover가 담당
+  // generate-cover가 cover_images INSERT 완료 후 job → done + book_draft_ready 알림을 발송함
+  console.log(`[generate-book] job ${jobId} — cover_requested 완료, generate-cover에 위임 (senior: ${seniorId})`)
   return 'success'
 }
 
@@ -471,7 +483,10 @@ Deno.serve(async (req) => {
     const token = authHeader.replace('Bearer ', '')
     let tokenRole: string | null = null
     try {
-      const payload = JSON.parse(atob(token.split('.')[1]))
+      // JWT payload는 URL-safe base64 — '-'/'_' 치환 후 padding 보정 필요
+      const raw = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+      const b64 = raw.padEnd(raw.length + (4 - (raw.length % 4)) % 4, '=')
+      const payload = JSON.parse(atob(b64))
       tokenRole = payload.role ?? null
     } catch {
       return new Response(
@@ -540,7 +555,7 @@ Deno.serve(async (req) => {
       const jobYear = payload.target_year ?? now.getFullYear()
       const jobMonth = payload.target_month ?? (now.getMonth() + 1)
 
-      const result = await runPipelineForSenior(supabase, pendingJob.senior_id, jobYear, jobMonth, pendingJob.id)
+      const result = await runPipelineForSenior(authHeader, supabase, pendingJob.senior_id, jobYear, jobMonth, pendingJob.id)
       return new Response(
         JSON.stringify({ message: '파이프라인 완료', job_id: body.job_id, result }),
         { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
@@ -606,7 +621,7 @@ Deno.serve(async (req) => {
 
     for (const senior of seniors) {
       try {
-        const result = await runPipelineForSenior(supabase, senior.id, year, month)
+        const result = await runPipelineForSenior(authHeader, supabase, senior.id, year, month)
         if (result === 'success') successCount++
         else if (result === 'failed') failCount++
         else skippedCount++

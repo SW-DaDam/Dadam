@@ -417,9 +417,9 @@ async function uploadAvatar(userId: string, file: File) {
 | 항목 | 내용 |
 |------|------|
 | 공개 여부 | public (조회만) |
-| 경로 패턴 | `{senior_id}/{book_id}/{cover_id}.webp` |
+| 경로 패턴 | `{senior_id}/{book_id}/{cover_id}.png` |
 | 업로드 주체 | 권오인 Edge Function(`generate-cover`) |
-| 허용 형식 | `image/webp` |
+| 허용 형식 | `image/png` (Deno 환경 WebP 변환 불가로 PNG 저장, D-05) |
 | 클라이언트 업로드 | **금지** (RLS로 차단) |
 
 ```ts
@@ -567,10 +567,61 @@ while (reader) {
 | `extract-memory` (세션 종료 후) | 권오인 | DONE | F-04 |
 | `tag-utterances` (발화 태그) | 권오인 | DONE | F-05 |
 | `generate-book` (월말 pg_cron) | 권오인 | TBD | F-07 |
-| `generate-cover` (DALL-E 3) | 권오인 | TBD | F-13 `book-covers` 업로드 |
+| `generate-cover` (DALL-E 3) | 권오인 | DONE | F-07 표지 후보 생성 + `book-covers` 업로드 |
 | `retry-book-job` (수동 재시도) | 권오인 | TBD | F-08, RPC `retry_book_generation`과 연계 |
 
 > 상태: `TBD` (미구현) / `WIP` (구현 중) / `DONE` (완료). 각 Function 상세 스펙은 구현 PR에서 본 절에 추가.
+
+---
+
+### 7.X `generate-cover` — DALL-E 3 표지 후보 생성 (F-07)
+
+**경로**: `POST /functions/v1/generate-cover`  
+**인증**: `service_role` JWT (generate-book 내부 호출 전용, 클라이언트 직접 호출 금지)
+
+#### 요청
+
+```ts
+interface GenerateCoverRequest {
+  book_id: string    // 대상 책 UUID
+  senior_id: string  // 어르신 UUID (Storage 경로용)
+}
+```
+
+#### 처리 흐름
+
+```
+idempotent 체크 (cover_images 존재 OR job done 상태 → 200 early return)
+  → cover_requested 상태 job 조회 (book_id 기준)
+  → chapters 조회 (is_deleted=false, sort_order 순)
+  → gpt-4o-mini로 핵심 키워드 3~5개 추출 (한/영 동시)
+  → DALL-E 3 병렬 3회 호출 (n=1 고정, 3회 별도 호출 필수)
+  → 각 이미지: book-covers 버킷 PNG 업로드 → cover_images INSERT
+  → job → done / books → editing / notifications INSERT
+```
+
+#### 응답
+
+| 상황 | HTTP | body |
+|------|------|------|
+| 정상 완료 | 200 | `{ message: '표지 생성 완료', success_count: number }` |
+| 이미 생성됨 | 200 | `{ message: 'already generated' }` |
+| 파라미터 오류 | 400 | `{ error: string }` |
+| 인증 실패 | 401/403 | `{ error: string }` |
+| job 없음 | 404 | `{ error: string }` |
+| 전체 실패 | 500 | `{ error: string, details: string }` |
+
+#### 에러 처리
+
+- **개별 이미지 실패**: `Promise.allSettled`로 격리, 나머지 계속 생성
+- **성공 0개**: `job.status → 'failed'`, `error_log`에 상세 기록
+- **부분 성공 (1~2개)**: 생성된 것만으로 완료 처리
+
+#### Storage 결과
+
+- 경로: `{senior_id}/{book_id}/{cover_id}.png`
+- `cover_images.image_url`: `getPublicUrl()` 반환값 (signed URL 아님)
+- `cover_images.status`: `'candidate'` 고정 (F-13 useBookEdit 필터 조건)
 
 ---
 
