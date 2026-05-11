@@ -17,3 +17,10 @@ docs/task/
 # 로컬 도구 (Playwright MCP 스냅샷, VS Code 설정)
 .playwright-mcp/
 .vscode/
+
+# Supabase CLI 자동 생성 파일
+supabase/.temp/
+supabase/.branches/
+
+# Vite 빌드 캐시
+frontend/.vite/
