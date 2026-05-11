@@ -83,7 +83,7 @@ function useBookRead(bookId: string | undefined) {
       list.push({
         ...comment,
         author: authorMap.get(comment.author_id) ?? null,
-        replies: (comment.replies as Reply[]) ?? [],
+        replies: (comment.replies as unknown as Reply[]) ?? [],
       })
       commentsByChapter.set(comment.chapter_id, list)
     }
