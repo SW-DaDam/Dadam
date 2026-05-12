@@ -22,7 +22,7 @@ interface UseBookEditReturn {
   updateChapterTitle: (chapterId: string, newTitle: string) => Promise<void>
   selectCover: (coverId: string) => Promise<void>
   publishBook: (dedication: string) => Promise<void>
-  regenerateCover: () => Promise<void>
+  regenerateCover: (chapterId: string) => Promise<void>
 }
 
 export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
@@ -94,7 +94,7 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
     if (error) throw error
   }, [bookId])
 
-  const regenerateCover = useCallback(async () => {
+  const regenerateCover = useCallback(async (chapterId: string) => {
     if (!bookId || !book?.senior_id) return
     setRegenerating(true)
     try {
@@ -111,7 +111,8 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
           },
-          body: JSON.stringify({ book_id: bookId, senior_id: book.senior_id, mode: 'single' }),
+          // chapter_id: 어떤 챕터 표지를 재생성할지 Edge Function에 전달
+          body: JSON.stringify({ book_id: bookId, senior_id: book.senior_id, mode: 'single', chapter_id: chapterId }),
         }
       )
       const data = await res.json()

@@ -252,8 +252,11 @@ export default function BookEditPage() {
                   disabled={regenerating || extraCoverCount >= extraCoverLimit}
                   className="shrink-0 flex flex-col items-center gap-1 mt-1 disabled:opacity-40"
                   onClick={async () => {
+                    // 현재 선택된 표지의 chapter_id를 찾아 해당 챕터 표지 재생성
+                    const chapterId = coverImages.find(c => c.id === selectedCoverId)?.chapter_id
+                    if (!chapterId) return
                     try {
-                      await regenerateCover()
+                      await regenerateCover(chapterId)
                     } catch (e) {
                       showToast(e instanceof Error ? e.message : '표지 생성에 실패했어요')
                     }

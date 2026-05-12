@@ -20,98 +20,63 @@ const BUCKET = 'book-covers'     // Supabase Storage 버킷명
 // ─── 타입 ─────────────────────────────────────────────────────────────────────
 
 interface GenerateCoverRequest {
-  book_id: string    // 대상 책 UUID
-  senior_id: string  // 어르신 UUID (Storage 경로용)
-  mode?: 'batch' | 'single'  // batch: 최초 3장 생성(service_role), single: 1장 추가 생성(anon)
+  book_id: string      // 대상 책 UUID
+  senior_id: string    // 어르신 UUID (Storage 경로용)
+  mode?: 'batch' | 'single'  // batch: 최초 생성(service_role), single: 1장 추가 생성(anon)
+  chapter_id?: string  // single 모드 전용: 재생성할 챕터 UUID
 }
 
 interface Chapter {
+  id: string
   title: string
+  theme: string
   content: string
+  sort_order: number
 }
 
-// LLM이 반환하는 키워드 구조 (한/영 동시 추출)
-interface Keywords {
-  korean: string[]
-  english: string[]
+// 챕터 테마별 시각적 무드 (사람 없는 오브젝트·풍경 중심)
+const THEME_MOOD: Record<string, string> = {
+  '가족': 'warm family heirlooms, handwritten letters, a wooden dining table with empty chairs bathed in afternoon light',
+  '추억': 'nostalgic objects from the past, faded photographs, an old clock, soft morning mist over a quiet countryside road',
+  '일상': 'simple everyday objects, a teacup on a windowsill, gentle sunlight through curtains, seasonal vegetables on a wooden board',
+  '가치관': 'a solitary tree on a hilltop at dusk, calm water reflecting clouds, timeless natural scenery with a contemplative mood',
 }
 
-// ─── 헬퍼: JSON 안전 파싱 ─────────────────────────────────────────────────────
-
-function extractJson<T>(text: string): T | null {
-  // LLM 응답에서 ```json ... ``` 또는 순수 JSON 블록 추출
-  const match = text.match(/```json\s*([\s\S]*?)```/) ?? text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/)
-  if (!match) return null
-  try {
-    return JSON.parse(match[1] ?? match[0]) as T
-  } catch {
-    return null
-  }
+// 성별별 색조 팔레트
+const GENDER_PALETTE: Record<string, string> = {
+  female: 'warm pastel tones — soft rose, cream, sage green',
+  male: 'earthy muted tones — slate blue, warm brown, aged ivory',
 }
 
-// ─── 헬퍼: 키워드 추출 (gpt-4o-mini) ────────────────────────────────────────
+// ─── 헬퍼: 챕터별 DALL-E 프롬프트 구성 ──────────────────────────────────────
+// - 챕터 테마 + 내용 요약 + 성별/나이 팔레트 기반
+// - 사람·얼굴 없는 오브젝트·풍경 중심의 책 표지 스타일
 
-async function extractKeywords(openai: OpenAI, chapters: Chapter[]): Promise<Keywords> {
-  const chapterText = chapters
-    .map((c, i) => `Chapter ${i + 1} — ${c.title}\n${c.content}`)
-    .join('\n\n')
+function buildDallePrompt(chapter: Chapter, gender?: string | null, age?: number | null): string {
+  const mood = THEME_MOOD[chapter.theme] ?? THEME_MOOD['일상']
+  const palette = gender ? (GENDER_PALETTE[gender] ?? GENDER_PALETTE['female']) : 'warm neutral tones'
+  const ageHint = age && age >= 60
+    ? 'with a vintage, nostalgic quality reminiscent of mid-20th-century Korea'
+    : 'with a timeless, classic quality'
+  const snippet = chapter.content.slice(0, 60).replace(/"/g, '')
 
-  const systemPrompt = `You are a helpful assistant that extracts keywords for book cover illustration prompts.`
-
-  const userPrompt = `Extract 3–5 core keywords from the chapter titles and contents below.
-These keywords will be used in a DALL-E 3 prompt for a Korean senior's memoir book cover.
-Choose keywords that represent concrete objects, places, emotions, or scenes that would look beautiful in an illustration.
-Respond ONLY with a valid JSON object (no markdown, no explanation):
-{ "korean": ["텃밭", "손주"], "english": ["vegetable garden", "grandchild"] }
-
----
-${chapterText}`
-
-  const tryParse = async (): Promise<Keywords | null> => {
-    const res = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.3,
-    })
-    return extractJson<Keywords>(res.choices[0]?.message?.content ?? '')
-  }
-
-  // 파싱 실패 시 1회 재시도
-  let keywords = await tryParse()
-  if (!keywords) {
-    console.warn('[generate-cover] 키워드 파싱 실패, 1회 재시도')
-    keywords = await tryParse()
-  }
-
-  // 재시도도 실패하면 기본값 사용
-  if (!keywords) {
-    console.warn('[generate-cover] 키워드 추출 실패 — 기본 키워드 사용')
-    return { korean: ['가족', '추억', '따뜻함'], english: ['family', 'memories', 'warmth'] }
-  }
-
-  return keywords
+  return `A beautiful book cover illustration for a Korean memoir chapter titled "${chapter.title}". ` +
+    `The visual theme is: ${mood}. ` +
+    `Color palette: ${palette}. ` +
+    `Style: soft painterly illustration ${ageHint}, suitable for a literary memoir cover. ` +
+    `The mood evoked by the chapter: "${snippet}...". ` +
+    `No text, no people, no faces. Composition: centered subject with soft bokeh background. ` +
+    `High quality, publishing-grade artwork.`
 }
 
-// ─── 헬퍼: DALL-E 프롬프트 구성 ──────────────────────────────────────────────
-
-function buildDallePrompt(keywords: Keywords): string {
-  // 영문 키워드만 사용 (DALL-E 3는 영문 프롬프트 품질이 우수)
-  return `A warm, nostalgic book cover illustration for a Korean senior's memoir.
-Themes: ${keywords.english.join(', ')}.
-Style: soft watercolor, peaceful and gentle colors, heartwarming, beautifully detailed.
-No text, no letters, no numbers, no words.`
-}
-
-// ─── 헬퍼: 이미지 1장 생성 + Storage 업로드 + cover_images INSERT ─────────────
+// ─── 헬퍼: 이미지 1장 생성 + Storage 업로드 + cover_images upsert ─────────────
 
 async function generateAndUploadCover(
   openai: OpenAI,
   supabaseAdmin: ReturnType<typeof createClient>,
   bookId: string,
   seniorId: string,
+  chapterId: string,
   dallePrompt: string,
   index: number,
 ): Promise<void> {
@@ -127,36 +92,37 @@ async function generateAndUploadCover(
   const imageUrl = imageRes.data[0]?.url
   if (!imageUrl) throw new Error(`DALL-E 응답에 URL 없음 (index ${index})`)
 
-  // 임시 URL에서 이미지 바이너리 fetch (URL 유효기간 ~1시간 내 즉시 처리)
   const imageResponse = await fetch(imageUrl)
   if (!imageResponse.ok) throw new Error(`이미지 다운로드 실패 (index ${index}): ${imageResponse.status}`)
   const imageBuffer = await imageResponse.arrayBuffer()
 
-  // Storage 경로: {senior_id}/{book_id}/{cover_id}.png
-  const coverId = crypto.randomUUID()
-  const storagePath = `${seniorId}/${bookId}/${coverId}.png`
+  // Storage 경로: {senior_id}/{book_id}/{chapter_id}.png (챕터 1:1 대응)
+  const storagePath = `${seniorId}/${bookId}/${chapterId}.png`
 
   const { error: uploadErr } = await supabaseAdmin.storage
     .from(BUCKET)
     .upload(storagePath, imageBuffer, {
       contentType: 'image/png',
-      upsert: false,
+      upsert: true,  // 추가 생성 시 덮어쓰기 허용
     })
   if (uploadErr) throw new Error(`Storage 업로드 실패 (index ${index}): ${uploadErr.message}`)
 
-  // public URL 생성 (F-13 <img src>에 직접 사용 — signed URL 금지)
   const { data: { publicUrl } } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(storagePath)
 
-  const { error: insertErr } = await supabaseAdmin.from('cover_images').insert({
-    id: coverId,
-    book_id: bookId,
-    image_url: publicUrl,   // F-13 useBookEdit이 status='candidate' 필터로 조회
-    prompt: dallePrompt,
-    status: 'candidate',
-  })
-  if (insertErr) throw new Error(`cover_images INSERT 실패 (index ${index}): ${insertErr.message}`)
+  // upsert: 추가 생성 시 기존 레코드 교체 (챕터당 1개 유지)
+  const { error: upsertErr } = await supabaseAdmin.from('cover_images').upsert(
+    {
+      book_id: bookId,
+      chapter_id: chapterId,
+      image_url: publicUrl,
+      prompt: dallePrompt,
+      status: 'candidate',
+    },
+    { onConflict: 'book_id,chapter_id' },
+  )
+  if (upsertErr) throw new Error(`cover_images upsert 실패 (index ${index}): ${upsertErr.message}`)
 
-  console.log(`[generate-cover] 표지 ${index + 1} 생성 완료 — ${coverId}`)
+  console.log(`[generate-cover] 표지 ${index + 1} 생성 완료 — chapter ${chapterId}`)
 }
 
 // ─── 메인 핸들러 ─────────────────────────────────────────────────────────────
@@ -272,27 +238,47 @@ Deno.serve(async (req) => {
         )
       }
 
-      // 챕터 조회
-      const { data: chapters, error: chaptersErr } = await supabaseAdmin
-        .from('chapters')
-        .select('title, content')
-        .eq('book_id', bookId)
-        .eq('is_deleted', false)
-        .order('sort_order')
-
-      if (chaptersErr || !chapters || chapters.length === 0) {
+      // chapter_id 필수 (single 모드는 특정 챕터 재생성)
+      const { chapter_id: chapterId } = body
+      if (!chapterId) {
         return new Response(
-          JSON.stringify({ error: '챕터 조회 실패' }),
-          { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+          JSON.stringify({ error: 'single 모드는 chapter_id가 필요합니다' }),
+          { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
         )
       }
 
-      const openai = new OpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') })
-      const keywords = await extractKeywords(openai, chapters as Chapter[])
-      const dallePrompt = buildDallePrompt(keywords)
+      const { data: chapter, error: chapterErr } = await supabaseAdmin
+        .from('chapters')
+        .select('id, title, theme, content, sort_order')
+        .eq('id', chapterId)
+        .eq('book_id', bookId)
+        .eq('is_deleted', false)
+        .single()
 
-      console.log(`[generate-cover] single 모드 — 1장 추가 생성 (book_id: ${bookId}, extra: ${extraCount + 1}/${EXTRA_COVER_LIMIT})`)
-      await generateAndUploadCover(openai, supabaseAdmin, bookId, seniorId, dallePrompt, totalCount)
+      if (chapterErr || !chapter) {
+        return new Response(
+          JSON.stringify({ error: '챕터를 찾을 수 없습니다' }),
+          { status: 404, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+        )
+      }
+
+      // 저자 프로필 (성별·나이)
+      let gender: string | null = null
+      let age: number | null = null
+      try {
+        const { data: profile } = await supabaseAdmin
+          .from('senior_profiles').select('gender, birth_date').eq('id', seniorId).single()
+        if (profile) {
+          gender = profile.gender ?? null
+          if (profile.birth_date) age = new Date().getFullYear() - new Date(profile.birth_date).getFullYear()
+        }
+      } catch { /* 기본값으로 진행 */ }
+
+      const openai = new OpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') })
+      const dallePrompt = buildDallePrompt(chapter as Chapter, gender, age)
+
+      console.log(`[generate-cover] single 모드 — 챕터 재생성 (chapter_id: ${chapterId}, extra: ${extraCount + 1}/${EXTRA_COVER_LIMIT})`)
+      await generateAndUploadCover(openai, supabaseAdmin, bookId, seniorId, chapterId, dallePrompt, totalCount)
 
       return new Response(
         JSON.stringify({ message: '표지 1장 추가 생성 완료', extra_count: extraCount + 1, extra_limit: EXTRA_COVER_LIMIT }),
@@ -335,13 +321,14 @@ Deno.serve(async (req) => {
 
     const jobId = job.id
 
-    // 챕터 조회
+    // 챕터 조회 (최대 3개, 챕터별 1:1 표지 생성)
     const { data: chapters, error: chaptersErr } = await supabaseAdmin
       .from('chapters')
-      .select('title, content')
+      .select('id, title, theme, content, sort_order')
       .eq('book_id', bookId)
       .eq('is_deleted', false)
       .order('sort_order')
+      .limit(COVER_COUNT)
 
     if (chaptersErr || !chapters || chapters.length === 0) {
       console.error(`[generate-cover] 챕터 조회 실패 (book_id: ${bookId})`, chaptersErr)
@@ -355,29 +342,45 @@ Deno.serve(async (req) => {
       )
     }
 
+    // 저자 프로필 조회 (성별·나이 — 없어도 진행)
+    let gender: string | null = null
+    let age: number | null = null
+    try {
+      const { data: profile } = await supabaseAdmin
+        .from('senior_profiles')
+        .select('gender, birth_date')
+        .eq('id', seniorId)
+        .single()
+      if (profile) {
+        gender = profile.gender ?? null
+        if (profile.birth_date) {
+          age = new Date().getFullYear() - new Date(profile.birth_date).getFullYear()
+        }
+      }
+    } catch { /* 프로필 없으면 기본값으로 진행 */ }
+
     const openai = new OpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') })
-    console.log(`[generate-cover] 키워드 추출 시작 (book_id: ${bookId})`)
-    const keywords = await extractKeywords(openai, chapters as Chapter[])
-    console.log(`[generate-cover] 추출된 키워드 — 한: ${keywords.korean.join(', ')} / 영: ${keywords.english.join(', ')}`)
 
-    const dallePrompt = buildDallePrompt(keywords)
+    // 챕터별 순차 생성 (DALL-E rate limit 고려)
+    console.log(`[generate-cover] 챕터별 표지 생성 시작 (${chapters.length}장, book_id: ${bookId})`)
+    let successCount = 0
+    const errorLogs: string[] = []
 
-    console.log(`[generate-cover] DALL-E 3 병렬 호출 시작 (${COVER_COUNT}장)`)
-    const results = await Promise.allSettled(
-      Array.from({ length: COVER_COUNT }, (_, i) =>
-        generateAndUploadCover(openai, supabaseAdmin, bookId, seniorId, dallePrompt, i)
-      )
-    )
-
-    const successCount = results.filter(r => r.status === 'fulfilled').length
-    const failures = results.filter(r => r.status === 'rejected') as PromiseRejectedResult[]
-
-    failures.forEach((f, i) => {
-      console.error(`[generate-cover] DALL-E 오류 (index ${i}): ${f.reason}`)
-    })
+    for (let i = 0; i < chapters.length; i++) {
+      const chapter = chapters[i] as Chapter
+      try {
+        const dallePrompt = buildDallePrompt(chapter, gender, age)
+        await generateAndUploadCover(openai, supabaseAdmin, bookId, seniorId, chapter.id, dallePrompt, i)
+        successCount++
+      } catch (err) {
+        const msg = `chapter ${chapter.id} (${chapter.title}): ${String(err)}`
+        console.error(`[generate-cover] DALL-E 오류 — ${msg}`)
+        errorLogs.push(msg)
+      }
+    }
 
     if (successCount === 0) {
-      const errorLog = failures.map(f => String(f.reason)).join(' | ')
+      const errorLog = errorLogs.join(' | ')
       await supabaseAdmin
         .from('book_generation_jobs')
         .update({ status: 'failed', error_log: `[generate-cover] 전체 실패: ${errorLog}` })
