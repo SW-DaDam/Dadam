@@ -16,36 +16,35 @@ LANGUAGE plpgsql
 SECURITY DEFINER  -- service_role 권한으로 실행 (RLS 우회)
 AS $$
 DECLARE
-  v_job_id UUID;
+  v_job_id   UUID;
+  v_month_start TIMESTAMPTZ;
+  v_month_end   TIMESTAMPTZ;
 BEGIN
   -- 호출자 권한 검증: 본인 또는 service_role만 허용
   IF auth.uid() IS NOT NULL AND auth.uid() != p_senior_id THEN
     RAISE EXCEPTION 'permission denied: 본인 또는 service_role만 호출 가능합니다';
   END IF;
 
-  -- 이미 processing 계열 job이 있으면 예외 (중복 방지)
-  -- TIMESTAMPTZ 범위로 해당 연/월 비교 (make_date는 DATE 반환 — 타임존 불명확)
-  IF EXISTS (
-    SELECT 1 FROM public.book_generation_jobs
-    WHERE senior_id = p_senior_id
-      AND status IN (
-        'aggregating'::job_status,
-        'chaptering'::job_status,
-        'cover_requested'::job_status,
-        'done'::job_status
-      )
-      AND created_at >= make_timestamptz(p_year, p_month, 1, 0, 0, 0)
-      AND created_at < make_timestamptz(
-            CASE WHEN p_month = 12 THEN p_year + 1 ELSE p_year END,
-            CASE WHEN p_month = 12 THEN 1 ELSE p_month + 1 END,
-            1, 0, 0, 0
-          )
-  ) THEN
-    RAISE EXCEPTION '이미 처리 중이거나 완료된 job이 있습니다 (senior_id: %, year: %, month: %)',
-      p_senior_id, p_year, p_month;
+  -- 해당 연/월 범위 계산
+  v_month_start := make_timestamptz(p_year, p_month, 1, 0, 0, 0, 'UTC');
+  v_month_end   := v_month_start + INTERVAL '1 month';
+
+  -- 중복 job 방지: 해당 월에 이미 active job(pending 포함)이 있으면 기존 job_id 반환
+  -- 이중 탭, 네트워크 재시도 등으로 인한 중복 생성 방지
+  SELECT id INTO v_job_id
+  FROM public.book_generation_jobs
+  WHERE senior_id = p_senior_id
+    AND status IN ('pending', 'aggregating', 'chaptering', 'cover_requested', 'done')
+    AND created_at >= v_month_start
+    AND created_at <  v_month_end
+  ORDER BY created_at DESC
+  LIMIT 1;
+
+  IF v_job_id IS NOT NULL THEN
+    RETURN v_job_id;
   END IF;
 
-  -- pending 상태로 job 생성 후 job_id 반환
+  -- pending 상태로 신규 job 생성
   -- target_year/target_month를 stage_payload에 보존해야
   -- Edge Function이 new Date() 대신 요청된 연/월로 파이프라인을 실행할 수 있음
   INSERT INTO public.book_generation_jobs (senior_id, status, stage_payload)
