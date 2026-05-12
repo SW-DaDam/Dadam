@@ -48,6 +48,7 @@ interface MemoryItem {
   text: string
   category: string
   emoji: string
+  expires_at?: string  // 일정 카테고리 전용 만료일 (YYYY-MM-DD)
 }
 
 // 요청 본문 타입
@@ -78,23 +79,39 @@ function getModel() {
  */
 async function buildSystemPrompt(seniorId: string, isFirstMessage: boolean): Promise<string> {
   try {
-    // service_role 클라이언트로 RLS 우회하여 memories 조회
+    // service_role 클라이언트로 RLS 우회하여 memories + senior_profiles 동시 조회
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    const { data, error } = await supabase
-      .from('memories')
-      .select('data')
-      .eq('senior_id', seniorId)
-      .single()
+    const [{ data: memoryData, error: memErr }, { data: profile, error: profileErr }] = await Promise.all([
+      supabase.from('memories').select('data').eq('senior_id', seniorId).single(),
+      supabase.from('senior_profiles').select('gender, birth_date').eq('id', seniorId).single(),
+    ])
 
     // PGRST116: row 없음 — 정상 케이스로 폴백
-    if (error || !data) return BASE_PROMPT
+    if (memErr || !memoryData) return BASE_PROMPT
 
-    const items: MemoryItem[] = (data.data as { items?: MemoryItem[] })?.items ?? []
+    const allItems: MemoryItem[] = (memoryData.data as { items?: MemoryItem[] })?.items ?? []
+
+    // 만료된 일정 항목은 AI 컨텍스트에서 제외 (지난 일정이 대화에 영향을 주지 않도록)
+    const today = new Date().toISOString().slice(0, 10)
+    const items = allItems.filter((item) => !item.expires_at || item.expires_at > today)
+
     if (items.length === 0) return BASE_PROMPT
+
+    // 성별·나이 컨텍스트 구성 (optional — 없어도 동작)
+    let profileContext = ''
+    if (!profileErr && profile) {
+      const parts: string[] = []
+      if (profile.gender) parts.push(`gender: ${profile.gender}`)
+      if (profile.birth_date) {
+        const age = new Date().getFullYear() - new Date(profile.birth_date).getFullYear()
+        parts.push(`age: approx. ${age}`)
+      }
+      if (parts.length > 0) profileContext = `\n\n[Senior's profile]\n${parts.join(', ')}\nUse this to calibrate your language register and topic sensitivity (e.g., avoid age-inappropriate topics, use gender-aware phrasing where natural in Korean).`
+    }
 
     // 관심사 목록을 "[카테고리] 텍스트 이모지" 형식으로 정리 (LLM 구조 인식 개선)
     const interestLines = items.map((item) => `[${item.category}] ${item.text} ${item.emoji}`).join('\n')
@@ -103,7 +120,7 @@ async function buildSystemPrompt(seniorId: string, isFirstMessage: boolean): Pro
       ? `\n\n[First-turn instruction]\nUsing the interests above, open the conversation with ONE warm, natural proactive question so the senior feels comfortable starting to talk.\nCategory-based examples (use as reference only — do not read verbatim):\n- 취미: "요즘도 텃밭 가꾸고 계세요? 이번 철에는 뭘 심으셨나요?"\n- 가족: "지난번에 손녀 이야기를 해주셨는데, 요즘 잘 지내고 있나요?"\n- 건강: "어깨는 요즘 좀 어떠세요? 계속 좋아지고 계신가요?"\n- 추억: "고향 이야기를 해주셨는데, 요즘도 가끔 생각나시나요?"`
       : ''
 
-    return `${BASE_PROMPT}\n\n[Senior's known interests]\n${interestLines}${proactivePart}`
+    return `${BASE_PROMPT}${profileContext}\n\n[Senior's known interests]\n${interestLines}${proactivePart}`
   } catch (err) {
     // memories 조회 실패 시 조용히 기본 프롬프트로 폴백
     console.error('[voice-chat] memories 조회 실패, 기본 프롬프트 사용:', err)
