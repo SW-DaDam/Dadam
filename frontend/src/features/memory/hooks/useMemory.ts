@@ -30,26 +30,22 @@ export function useMemory(seniorId: string): UseMemoryReturn {
       setIsLoading(true)
       setError(null)
 
+      // maybeSingle: row 없으면 null 반환 (single은 0건 시 406 에러)
       const { data, error: dbErr } = await supabase
         .from('memories')
         .select('data')
         .eq('senior_id', seniorId)
-        .single()
+        .maybeSingle()
 
       if (cancelled) return
 
       if (dbErr) {
-        if (dbErr.code === 'PGRST116') {
-          // row 없음 = 아직 대화 없음 → 빈 상태로 처리
-          setItems([])
-        } else {
-          setError(dbErr.message)
-        }
+        setError(dbErr.message)
         setIsLoading(false)
         return
       }
 
-      setItems(((data?.data as MemoryData)?.items) ?? [])
+      setItems((data?.data as MemoryData)?.items ?? [])
       setIsLoading(false)
     }
 

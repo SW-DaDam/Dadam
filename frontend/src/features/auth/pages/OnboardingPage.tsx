@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
+import { ChevronLeft } from 'lucide-react'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { completeSeniorOnboarding } from '../services/authService'
 import { getDbErrorMessage } from '@/lib/errorMessages'
+import StepIndicator from '../components/StepIndicator'
 
 const FEATURES = [
   {
@@ -47,13 +49,13 @@ const FEATURES = [
 
 function AiAvatar() {
   return (
-    <div className="relative flex items-center justify-center w-[140px] h-[140px] rounded-full bg-[#FFF0DC]">
-      <div className="absolute top-2 right-3 w-5 h-5 rounded-full bg-[#FFF0DC] border-2 border-[#E8820C]" />
-      <div className="absolute bottom-3 left-2 w-3.5 h-3.5 rounded-full bg-[#E8820C] opacity-40" />
-      <div className="absolute bottom-6 right-2 w-3 h-3 rounded-full bg-[#E8820C] opacity-25" />
-      <div className="absolute top-4 left-3 w-[18px] h-[18px] rounded-full bg-[#FFF0DC] border-[1.5px] border-[#E8820C]" />
-      <div className="w-24 h-24 rounded-full bg-[#E8820C] flex items-center justify-center">
-        <span className="text-[1.625rem] text-white leading-none font-bold">AI</span>
+    <div className="relative flex items-center justify-center w-[96px] h-[96px] rounded-full bg-[#FFF0DC]">
+      <div className="absolute top-1 right-2 w-3.5 h-3.5 rounded-full bg-[#FFF0DC] border-2 border-[#E8820C]" />
+      <div className="absolute bottom-2 left-1 w-2.5 h-2.5 rounded-full bg-[#E8820C] opacity-40" />
+      <div className="absolute bottom-4 right-1 w-2 h-2 rounded-full bg-[#E8820C] opacity-25" />
+      <div className="absolute top-3 left-2 w-3 h-3 rounded-full bg-[#FFF0DC] border-[1.5px] border-[#E8820C]" />
+      <div className="w-16 h-16 rounded-full bg-[#E8820C] flex items-center justify-center">
+        <span className="text-lg text-white leading-none font-bold">AI</span>
       </div>
     </div>
   )
@@ -75,22 +77,26 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <main className="flex-1 flex flex-col items-center px-4 sm:px-6 md:px-8 py-6 gap-5 w-full max-w-2xl mx-auto overflow-y-auto">
+    <div className="flex-1 flex flex-col overflow-y-auto">
 
-        {/* 도트 인디케이터 */}
-        <div className="flex items-center gap-2 pt-2">
-          {[0, 1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className={
-                i === 2
-                  ? 'w-5 h-2.5 rounded-full bg-[#E8820C]'
-                  : 'w-2.5 h-2.5 rounded-full bg-[#D1D5DB]'
-              }
-            />
-          ))}
-        </div>
+      {/* 헤더 */}
+      <header className="w-full h-[80px] bg-white border-b border-[#E5E7EB] flex items-center px-6 relative">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="flex items-center min-h-11"
+        >
+          <ChevronLeft size={22} className="text-[#6B7280]" />
+        </button>
+        <h1 className="absolute left-1/2 -translate-x-1/2 text-lg sm:text-xl text-[#1F2937] whitespace-nowrap font-medium">
+          AI 친구 만나기
+        </h1>
+      </header>
+
+      <main className="flex-1 flex flex-col items-center px-4 sm:px-6 md:px-8 pt-0 pb-6 gap-5 w-full max-w-2xl mx-auto">
+
+        {/* 단계 표시 */}
+        <StepIndicator currentStep={3} />
 
         {/* AI 캐릭터 */}
         <AiAvatar />

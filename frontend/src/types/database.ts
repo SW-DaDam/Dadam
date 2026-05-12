@@ -486,6 +486,7 @@ export type Database = {
           birth_date: string | null
           created_at: string
           dialect: string | null
+          gender: 'male' | 'female' | null
           id: string
           interests_summary: string | null
           onboarding_completed: boolean
@@ -496,6 +497,7 @@ export type Database = {
           birth_date?: string | null
           created_at?: string
           dialect?: string | null
+          gender?: 'male' | 'female' | null
           id: string
           interests_summary?: string | null
           onboarding_completed?: boolean
@@ -506,6 +508,7 @@ export type Database = {
           birth_date?: string | null
           created_at?: string
           dialect?: string | null
+          gender?: 'male' | 'female' | null
           id?: string
           interests_summary?: string | null
           onboarding_completed?: boolean
