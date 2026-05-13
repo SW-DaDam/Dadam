@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { ChevronLeft, Share2, Mic } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -174,6 +174,7 @@ export default function SeniorBookReadPage() {
   const [commentText, setCommentText] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // 챕터 로드 완료 시 첫 번째 챕터 선택
   useEffect(() => {
@@ -181,6 +182,34 @@ export default function SeniorBookReadPage() {
       setActiveChapterId(chapters[0].id)
     }
   }, [chapters, activeChapterId])
+
+  // Realtime 댓글 구독 (F-15)
+  useEffect(() => {
+    if (!activeChapterId) return
+
+    function startPolling() {
+      if (pollingRef.current) return
+      pollingRef.current = setInterval(async () => { await reload() }, 10_000)
+    }
+    function stopPolling() {
+      if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null }
+    }
+
+    const channel = supabase
+      .channel(`comments:chapter:${activeChapterId}`)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'comments',
+        filter: `chapter_id=eq.${activeChapterId}`,
+      }, async () => { await reload() })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') { stopPolling(); await reload() }
+        if (status === 'CHANNEL_ERROR' || status === 'CLOSED') { startPolling() }
+      })
+
+    return () => { stopPolling(); supabase.removeChannel(channel) }
+  }, [activeChapterId, reload])
+
+  useEffect(() => { return () => { if (pollingRef.current) clearInterval(pollingRef.current) } }, [])
 
   function showToast(msg: string) {
     setToastMsg(msg)
