@@ -4,12 +4,12 @@ import type { BookWithStats } from '@/types/domain'
 import type { BookStatus } from '@/types/domain'
 
 const PALETTE = [
-  { bg: '#FFF0DC', border: '#E8820C', accent: '#E8820C', text: '#E8820C' },
-  { bg: '#DCFCE7', border: '#16A34A', accent: '#16A34A', text: '#16A34A' },
-  { bg: '#FEF9C3', border: '#CA8A04', accent: '#CA8A04', text: '#CA8A04' },
-  { bg: '#E0F2FE', border: '#0369A1', accent: '#0369A1', text: '#0369A1' },
-  { bg: '#F3E8FF', border: '#7C3AED', accent: '#7C3AED', text: '#7C3AED' },
-  { bg: '#FCE7F3', border: '#BE185D', accent: '#BE185D', text: '#BE185D' },
+  { bg: '#C4614A', border: '#A84F3A' },
+  { bg: '#7B5080', border: '#623E6A' },
+  { bg: '#B85470', border: '#9A3E5A' },
+  { bg: '#4A7A68', border: '#386050' },
+  { bg: '#5A7A9A', border: '#486280' },
+  { bg: '#9A7060', border: '#7A5848' },
 ]
 
 function paletteFor(month: number) {
@@ -71,67 +71,51 @@ function BookSpine({ book, isNewest, navPath }: BookSpineProps) {
       onClick={handleTap}
       disabled={isDraft}
       aria-label={isDraft ? `${book.month}월 ${label}` : `${book.title} 읽기`}
-      className="relative flex-1 min-w-[40px] max-w-[54px] h-[112px] rounded-sm flex flex-col items-center justify-center"
+      className="relative flex-1 min-w-[36px] max-w-[80px] h-[186px] rounded flex flex-col items-center justify-between pt-3 pb-2.5 px-1"
       style={{
-        backgroundColor: isDraft ? '#EFEFEF' : c.bg,
-        border: `2px ${isDraft ? 'dashed #D1D5DB' : `solid ${c.border}`}`,
+        backgroundColor: isDraft ? '#E5E7EB' : c.bg,
+        border: `1px solid ${isDraft ? '#D1D5DB' : c.border}`,
         transform: transforms[pullState],
         transition: transitions[pullState],
         boxShadow: shadows[pullState],
       }}
     >
-      {/* 왼쪽 세로 accent 줄 */}
-      <div
-        className="absolute left-0 top-0 bottom-0 w-[5px] rounded-l-sm"
-        style={{ backgroundColor: isDraft ? '#D1D5DB' : c.accent, opacity: 0.5 }}
-      />
-
       {isDraft ? (
-        <p
-          className="text-[9px] text-[#9CA3AF] font-medium"
-          style={{ writingMode: 'vertical-rl' }}
-        >
+        <p className="flex-1 flex items-center text-[11px] text-[#9CA3AF] font-medium" style={{ writingMode: 'vertical-rl' }}>
           {label}
         </p>
       ) : (
-        <div className="flex flex-col items-center gap-1 px-1">
-          {/* NEW / 댓글 뱃지 */}
-          {isNewest ? (
-            <span
-              className="text-[7px] font-bold text-white px-1 py-0.5 rounded leading-none"
-              style={{ backgroundColor: c.accent }}
-            >
+        <>
+          {/* 상단 장식 라인 2개 */}
+          <div className="w-full flex flex-col gap-[3px] px-1">
+            <div className="h-[1.5px] rounded-full bg-white/50" />
+            <div className="h-[1px] rounded-full bg-white/25" />
+          </div>
+
+          {/* NEW 뱃지 */}
+          {isNewest && (
+            <span className="absolute top-2 right-1.5 text-[9px] font-bold text-white bg-white/30 px-1 py-0.5 rounded leading-none">
               N
             </span>
-          ) : book.commentCount > 0 ? (
-            <span
-              className="text-[7px] font-bold text-white px-1 py-0.5 rounded leading-none"
-              style={{ backgroundColor: c.accent }}
-            >
-              {book.commentCount}
-            </span>
-          ) : <span className="h-4" />}
+          )}
 
-          {/* 책 제목 세로 텍스트 */}
+          {/* 제목 */}
           <p
-            className="font-bold text-[11px] leading-tight overflow-hidden"
+            className="flex-1 flex items-center font-bold text-[15px] leading-snug text-white overflow-hidden py-1"
             style={{
-              color: c.text,
               writingMode: 'vertical-rl',
-              maxHeight: '64px',
+              letterSpacing: '0.04em',
+              maxHeight: '96px',
             }}
           >
             {book.title}
           </p>
 
-          {/* 연도 */}
-          <p
-            className="text-[8px] opacity-60"
-            style={{ color: c.text, writingMode: 'vertical-rl' }}
-          >
+          {/* 연도 가로 표시 */}
+          <p className="text-[10px] font-medium text-white/60 tracking-wide">
             {book.year}
           </p>
-        </div>
+        </>
       )}
     </button>
   )
@@ -142,12 +126,12 @@ function BookSpine({ book, isNewest, navPath }: BookSpineProps) {
 function InProgressPlaceholder() {
   return (
     <div
-      className="relative flex-1 flex items-center justify-center min-w-[40px] max-w-[54px] h-[112px] rounded-sm"
+      className="relative flex-1 flex items-center justify-center min-w-[36px] max-w-[80px] h-[186px] rounded-sm"
       style={{ backgroundColor: '#F3F4F6', border: '2px dashed #D1D5DB' }}
     >
       <div className="absolute left-0 top-0 bottom-0 w-[5px] rounded-l-sm bg-[#D1D5DB] opacity-40" />
       <p
-        className="text-[9px] text-[#9CA3AF] font-medium"
+        className="text-[11px] text-[#9CA3AF] font-medium"
         style={{ writingMode: 'vertical-rl' }}
       >
         집필 중
@@ -162,7 +146,7 @@ function ShelfRow({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex flex-col">
       {/* 책이 뽑힐 때 위로 올라갈 공간 */}
-      <div className="flex gap-2 px-3 pt-10 pb-1 overflow-x-auto">
+      <div className="flex gap-3 px-4 pt-14 pb-1 overflow-x-auto">
         {children}
       </div>
       {/* 나무 선반 */}
@@ -216,9 +200,9 @@ export function ShelfRack({
   if (loading) {
     return (
       <div className="flex flex-col rounded-xl overflow-hidden" style={{ backgroundColor: '#F5E6D0' }}>
-        <div className="flex gap-2 px-3 pt-10 pb-1">
+        <div className="flex gap-3 px-4 pt-14 pb-1">
           {Array.from({ length: rowSize }).map((_, i) => (
-            <div key={i} className="flex-1 h-[112px] rounded-sm bg-[#E5E7EB] animate-pulse" />
+            <div key={i} className="flex-1 h-[186px] rounded-sm bg-[#E5E7EB] animate-pulse" />
           ))}
         </div>
         <div className="h-4 mx-1 rounded-sm" style={{ backgroundColor: '#B8956A' }} />
