@@ -2,61 +2,43 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ChevronLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/shared/stores/authStore'
+import { useMemory, countByCategory } from '@/features/memory/hooks/useMemory'
+import type { MemoryItem } from '@/types/domain'
 
-type Category = '전체' | '취미' | '가족' | '추억' | '일상'
-
-interface Memory {
-  id: number
-  emoji: string
-  text: string
-  source: string
-  category: Exclude<Category, '전체'>
-}
-
-const INITIAL_MEMORIES: Memory[] = [
-  { id: 1, emoji: '🌱', text: '텃밭 가꾸기를 좋아해요', source: '4월 3일 대화에서 · "토마토 수확했어요"', category: '취미' },
-  { id: 2, emoji: '🌧', text: '비 오는 날 창가에 앉는 걸 좋아해요', source: '4월 9일 대화에서 · "봄비가 왔어요"', category: '취미' },
-  { id: 3, emoji: '📺', text: '저녁에 드라마 보는 걸 즐겨요', source: '3월 22일 대화에서 · "드라마가 재밌어요"', category: '취미' },
-  { id: 4, emoji: '☕', text: '아침에 따뜻한 차 한 잔 마셔요', source: '3월 15일 대화에서 · "아침 루틴이에요"', category: '취미' },
-  { id: 5, emoji: '👧', text: '손녀 수빈이가 올해 중학생이 됐어요', source: '4월 5일 대화에서 · "교복이 잘 어울려요"', category: '가족' },
-  { id: 6, emoji: '👨', text: '아들 민준이는 서울에 살아요', source: '3월 28일 대화에서 · "주말에 왔어요"', category: '가족' },
-  { id: 7, emoji: '🏠', text: '경기도 수원에 살고 있어요', source: '3월 10일 대화에서 · "동네 얘기를 했어요"', category: '가족' },
-  { id: 8, emoji: '🌸', text: '젊을 때 벚꽃 구경 다니는 걸 좋아했어요', source: '4월 11일 대화에서 · "봄 얘기를 했어요"', category: '추억' },
-  { id: 9, emoji: '🍚', text: '된장찌개를 제일 잘 끓인다고 하셨어요', source: '3월 19일 대화에서 · "요리 얘기를 했어요"', category: '추억' },
-]
-
-const CATEGORIES: { label: Category; count: number }[] = [
-  { label: '전체', count: 24 },
-  { label: '취미', count: 8 },
-  { label: '가족', count: 6 },
-  { label: '추억', count: 5 },
-  { label: '일상', count: 5 },
-]
+const ALL_TAB = '전체'
 
 export default function AiMemoryPage() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<Category>('전체')
-  const [memories, setMemories] = useState(INITIAL_MEMORIES)
-  const [deleteTarget, setDeleteTarget] = useState<Memory | null>(null)
-  const [clearAll, setClearAll] = useState(false)
+  const seniorId = useAuthStore((s) => s.user?.id ?? '')
 
-  const filtered = activeTab === '전체' ? memories : memories.filter((m) => m.category === activeTab)
+  const { items, categories, isLoading, error, deleteItem, clearAll } = useMemory(seniorId)
 
-  const grouped = (['취미', '가족', '추억', '일상'] as const).map((cat) => ({
-    category: cat,
-    items: filtered.filter((m) => m.category === cat),
-  })).filter((g) => g.items.length > 0)
+  const [activeTab, setActiveTab] = useState<string>(ALL_TAB)
+  const [deleteTarget, setDeleteTarget] = useState<MemoryItem | null>(null)
+  const [clearAllOpen, setClearAllOpen] = useState(false)
 
-  function handleDelete() {
-    if (deleteTarget) {
-      setMemories((prev) => prev.filter((m) => m.id !== deleteTarget.id))
-      setDeleteTarget(null)
-    }
+  const allTabs = [ALL_TAB, ...categories]
+  const counts = countByCategory(items, categories)
+
+  const filtered = activeTab === ALL_TAB
+    ? items
+    : items.filter((m) => m.category === activeTab)
+
+  // 전체 탭일 때는 카테고리별 그룹, 카테고리 탭일 때는 단일 그룹
+  const grouped = activeTab === ALL_TAB
+    ? categories.map((cat) => ({ category: cat, items: items.filter((m) => m.category === cat) }))
+    : [{ category: activeTab, items: filtered }]
+
+  async function handleDelete() {
+    if (!deleteTarget) return
+    await deleteItem(deleteTarget)
+    setDeleteTarget(null)
   }
 
-  function handleClearAll() {
-    setMemories([])
-    setClearAll(false)
+  async function handleClearAll() {
+    await clearAll()
+    setClearAllOpen(false)
   }
 
   return (
@@ -66,7 +48,9 @@ export default function AiMemoryPage() {
         <button type="button" onClick={() => navigate(-1)} className="flex items-center min-h-11">
           <ChevronLeft size={22} className="text-[#6B7280]" />
         </button>
-        <h1 className="absolute left-1/2 -translate-x-1/2 text-lg sm:text-xl text-[#1F2937] font-medium whitespace-nowrap">AI가 기억하는 것들</h1>
+        <h1 className="absolute left-1/2 -translate-x-1/2 text-lg sm:text-xl text-[#1F2937] font-medium whitespace-nowrap">
+          AI가 기억하는 것들
+        </h1>
       </header>
 
       <main className="flex-1 overflow-y-auto flex flex-col gap-4 px-4 sm:px-6 py-5 w-full max-w-2xl mx-auto">
@@ -82,68 +66,92 @@ export default function AiMemoryPage() {
           </div>
         </div>
 
-        {/* 카테고리 탭 */}
-        <div className="bg-white border border-[#E5E7EB] rounded-2xl px-2 py-2 flex gap-1 overflow-x-auto">
-          {CATEGORIES.map(({ label, count }) => (
-            <button
-              key={label}
-              type="button"
-              onClick={() => setActiveTab(label)}
-              className={cn(
-                'flex-shrink-0 rounded-xl px-3 py-1.5 text-base transition-colors',
-                activeTab === label
-                  ? 'bg-[#E8820C] text-white'
-                  : 'text-[#6B7280]',
-              )}
-            >
-              {label} {count}
-            </button>
-          ))}
-        </div>
-
-        {/* 기억 목록 */}
-        {grouped.map(({ category, items }) => (
-          <div key={category} className="flex flex-col gap-1">
-            <p className="text-base text-[#6B7280] px-1">{category}</p>
-            <div className="bg-white border border-[#E5E7EB] rounded-2xl divide-y divide-[#E5E7EB]">
-              {items.map((m) => (
-                <div key={m.id} className="flex items-center gap-3 px-5 py-4">
-                  <div className="w-9 h-9 rounded-xl bg-[#FFF0DC] flex items-center justify-center shrink-0 text-base">
-                    {m.emoji}
-                  </div>
-                  <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                    <p className="text-[1.125rem] text-[#1F2937]">{m.text}</p>
-                    <p className="text-sm text-[#6B7280]">{m.source}</p>
-                  </div>
+        {/* 카테고리 탭 — LLM이 생성한 카테고리를 동적으로 표시 */}
+        {/* rounded와 overflow-x-auto 충돌 방지: 외부 래퍼로 rounded, 내부에서 overflow 처리 */}
+        {allTabs.length > 1 && (
+          <div className="bg-white border border-[#E5E7EB] rounded-2xl">
+            <div className="overflow-x-auto scrollbar-none px-1.5 py-1.5">
+              <div className="flex gap-1 min-w-max">
+                {allTabs.map((label) => (
                   <button
+                    key={label}
                     type="button"
-                    onClick={() => setDeleteTarget(m)}
-                    className="bg-[#FEF2F2] rounded-lg px-3 py-1.5 shrink-0 min-h-11"
+                    onClick={() => setActiveTab(label)}
+                    className={cn(
+                      'rounded-xl px-3 py-1.5 text-sm transition-colors whitespace-nowrap',
+                      activeTab === label ? 'bg-[#E8820C] text-white' : 'text-[#6B7280]',
+                    )}
                   >
-                    <span className="text-sm text-[#DC2626]">기억 지우기</span>
+                    {label} {counts[label] ?? 0}
                   </button>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
+        )}
+
+        {/* 로딩 상태 */}
+        {isLoading && (
+          <div className="flex justify-center py-16">
+            <div className="w-14 h-14 rounded-full border-4 border-[#E8820C] border-t-transparent animate-spin" />
+          </div>
+        )}
+
+        {/* 에러 상태 */}
+        {!isLoading && error && (
+          <div className="flex flex-col items-center py-16 gap-3">
+            <p className="text-[1.0625rem] text-[#DC2626]">기억을 불러오지 못했어요</p>
+            <p className="text-base text-[#9CA3AF]">{error}</p>
+          </div>
+        )}
+
+        {/* 빈 상태 */}
+        {!isLoading && !error && items.length === 0 && (
+          <div className="flex flex-col items-center py-16 gap-3">
+            <p className="text-[1.0625rem] text-[#9CA3AF]">아직 나눈 대화가 없어요</p>
+            <p className="text-base text-[#9CA3AF]">AI 말동무와 대화하면 기억이 쌓여요</p>
+          </div>
+        )}
+
+        {/* 기억 목록 */}
+        {!isLoading && !error && grouped.map(({ category, items: catItems }) => (
+          catItems.length > 0 && (
+            <div key={category} className="flex flex-col gap-1">
+              <p className="text-base text-[#6B7280] px-1">{category}</p>
+              <div className="bg-white border border-[#E5E7EB] rounded-2xl divide-y divide-[#E5E7EB]">
+                {catItems.map((m) => (
+                  <div key={m.text} className="flex items-center gap-3 px-5 py-4">
+                    <div className="w-9 h-9 rounded-xl bg-[#FFF0DC] flex items-center justify-center shrink-0 text-base">
+                      {m.emoji}
+                    </div>
+                    <div className="flex-1 flex flex-col gap-0.5 min-w-0">
+                      <p className="text-[1.125rem] text-[#1F2937]">{m.text}</p>
+                      <p className="text-sm text-[#6B7280]">{m.category}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(m)}
+                      className="bg-[#FEF2F2] rounded-lg px-3 py-1.5 shrink-0 min-h-11"
+                    >
+                      <span className="text-sm text-[#DC2626]">기억 지우기</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
         ))}
 
         {/* 모든 기억 지우기 */}
-        {memories.length > 0 && (
+        {!isLoading && !error && items.length > 0 && (
           <div className="bg-white border border-[#FECACA] rounded-2xl">
             <button
               type="button"
-              onClick={() => setClearAll(true)}
+              onClick={() => setClearAllOpen(true)}
               className="w-full py-4 text-center"
             >
               <span className="text-[1.0625rem] text-[#DC2626]">모든 기억 지우기</span>
             </button>
-          </div>
-        )}
-
-        {memories.length === 0 && (
-          <div className="flex flex-col items-center py-16 gap-3">
-            <p className="text-[1.0625rem] text-[#9CA3AF]">저장된 기억이 없어요</p>
           </div>
         )}
 
@@ -181,7 +189,7 @@ export default function AiMemoryPage() {
       )}
 
       {/* 전체 지우기 다이얼로그 */}
-      {clearAll && (
+      {clearAllOpen && (
         <div className="absolute inset-0 bg-[#1F2937]/40 flex items-center justify-center z-50 px-10">
           <div className="w-full bg-white rounded-2xl px-6 py-6 flex flex-col items-center gap-4">
             <div className="w-12 h-12 rounded-full bg-[#FEF2F2] flex items-center justify-center">
@@ -194,7 +202,7 @@ export default function AiMemoryPage() {
             <div className="w-full flex gap-3">
               <button
                 type="button"
-                onClick={() => setClearAll(false)}
+                onClick={() => setClearAllOpen(false)}
                 className="flex-1 h-14 rounded-xl bg-[#F3F4F6] text-[1.0625rem] text-[#6B7280]"
               >
                 취소

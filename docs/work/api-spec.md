@@ -417,9 +417,9 @@ async function uploadAvatar(userId: string, file: File) {
 | 항목 | 내용 |
 |------|------|
 | 공개 여부 | public (조회만) |
-| 경로 패턴 | `{senior_id}/{book_id}/{cover_id}.webp` |
+| 경로 패턴 | `{senior_id}/{book_id}/{cover_id}.png` |
 | 업로드 주체 | 권오인 Edge Function(`generate-cover`) |
-| 허용 형식 | `image/webp` |
+| 허용 형식 | `image/png` (Deno 환경 WebP 변환 불가로 PNG 저장, D-05) |
 | 클라이언트 업로드 | **금지** (RLS로 차단) |
 
 ```ts
@@ -563,14 +563,228 @@ while (reader) {
 
 | 이름 | 담당 | 상태 | 비고 |
 |------|------|------|------|
-| `voice-chat` (LLM 스트리밍) | 권오인 | TBD | F-04 / 스트리밍 응답 |
-| `extract-memory` (세션 종료 후) | 권오인 | TBD | F-05 |
-| `tag-utterances` (발화 태그) | 권오인 | TBD | F-05 |
+| `voice-chat` (LLM 스트리밍) | 권오인 | DONE | F-04 / F-05 memories 주입 + 선제 질문 |
+| `extract-memory` (세션 종료 후) | 권오인 | DONE | F-04 |
+| `tag-utterances` (발화 태그) | 권오인 | DONE | F-05 |
 | `generate-book` (월말 pg_cron) | 권오인 | TBD | F-07 |
-| `generate-cover` (DALL-E 3) | 권오인 | TBD | F-13 `book-covers` 업로드 |
+| `generate-cover` (DALL-E 3) | 권오인 | DONE | F-07 표지 후보 생성 + `book-covers` 업로드 |
 | `retry-book-job` (수동 재시도) | 권오인 | TBD | F-08, RPC `retry_book_generation`과 연계 |
 
 > 상태: `TBD` (미구현) / `WIP` (구현 중) / `DONE` (완료). 각 Function 상세 스펙은 구현 PR에서 본 절에 추가.
+
+---
+
+### 7.X `generate-cover` — DALL-E 3 표지 후보 생성 (F-07)
+
+**경로**: `POST /functions/v1/generate-cover`  
+**인증**: `service_role` JWT (generate-book 내부 호출 전용, 클라이언트 직접 호출 금지)
+
+#### 요청
+
+```ts
+interface GenerateCoverRequest {
+  book_id: string    // 대상 책 UUID
+  senior_id: string  // 어르신 UUID (Storage 경로용)
+}
+```
+
+#### 처리 흐름
+
+```
+idempotent 체크 (cover_images 존재 OR job done 상태 → 200 early return)
+  → cover_requested 상태 job 조회 (book_id 기준)
+  → chapters 조회 (is_deleted=false, sort_order 순)
+  → gpt-4o-mini로 핵심 키워드 3~5개 추출 (한/영 동시)
+  → DALL-E 3 병렬 3회 호출 (n=1 고정, 3회 별도 호출 필수)
+  → 각 이미지: book-covers 버킷 PNG 업로드 → cover_images INSERT
+  → job → done / books → editing / notifications INSERT
+```
+
+#### 응답
+
+| 상황 | HTTP | body |
+|------|------|------|
+| 정상 완료 | 200 | `{ message: '표지 생성 완료', success_count: number }` |
+| 이미 생성됨 | 200 | `{ message: 'already generated' }` |
+| 파라미터 오류 | 400 | `{ error: string }` |
+| 인증 실패 | 401/403 | `{ error: string }` |
+| job 없음 | 404 | `{ error: string }` |
+| 전체 실패 | 500 | `{ error: string, details: string }` |
+
+#### 에러 처리
+
+- **개별 이미지 실패**: `Promise.allSettled`로 격리, 나머지 계속 생성
+- **성공 0개**: `job.status → 'failed'`, `error_log`에 상세 기록
+- **부분 성공 (1~2개)**: 생성된 것만으로 완료 처리
+
+#### Storage 결과
+
+- 경로: `{senior_id}/{book_id}/{cover_id}.png`
+- `cover_images.image_url`: `getPublicUrl()` 반환값 (signed URL 아님)
+- `cover_images.status`: `'candidate'` 고정 (F-13 useBookEdit 필터 조건)
+
+---
+
+### 7.5 `voice-chat` — LLM 스트리밍 응답 + memories 주입 (F-04 / F-05)
+
+| 항목 | 내용 |
+|------|------|
+| 경로 | `POST /functions/v1/voice-chat` |
+| 인증 | `Authorization: Bearer <access_token>` 필수 |
+| 응답 형식 | SSE 스트림 (Vercel AI SDK UIMessage 형식) |
+| 담당 | 권오인 |
+
+**입력**
+```ts
+{
+  messages: { role: 'user' | 'assistant'; content: string }[]  // 대화 히스토리
+  senior_id: string  // 어르신 profile UUID (memories 조회용)
+}
+```
+
+**동작 — memories 주입 (F-05)**
+1. `senior_id` 기준으로 `memories` 테이블 `data.items` 조회 (service_role, RLS 우회)
+2. `items`가 있으면 시스템 프롬프트에 `[어르신 관심사 정보]` 섹션 추가
+3. `messages.length === 0` (첫 메시지)이면 `[첫 대화 시작 지시]` 섹션 추가 → AI가 관심사 기반 선제 질문 생성
+4. `messages.length > 0` (이후 메시지)이면 선제 질문 지시 없음 — 일반 대화 흐름 유지
+
+**폴백 (에러 처리)**
+- memories 조회 실패 (DB 에러, PGRST116 등) → 조용히 기본 프롬프트로 폴백 (어르신 UX 방해 없음)
+- `items`가 없거나 빈 배열 → 기본 프롬프트 사용
+
+**환경변수 `ACTIVE_MODEL`**
+- `'gpt'` → `gpt-4o-mini` 사용
+- 기본값(`'gemini'`) → `gemini-2.5-flash` 사용 (개발·테스트 무료 티어)
+
+---
+
+### 7.6 `extract-memory` — 메모리 추출 (F-04)
+
+| 항목 | 내용 |
+|------|------|
+| 경로 | `POST /functions/v1/extract-memory` |
+| 인증 | `Authorization: Bearer <access_token>` 필수 |
+| 호출 시점 | 세션 종료 시 fire-and-forget (`keepalive: true` fetch) |
+| 담당 | 권오인 |
+
+**입력**
+```ts
+{
+  conversation_id: string  // 종료된 대화 세션 UUID
+  senior_id: string        // 어르신 profile UUID
+}
+```
+
+**출력**
+```ts
+// 성공 (메모리 갱신)
+{ success: true, updated_categories: string[] }
+
+// 성공 (발화 없음 — 건너뜀)
+{ success: true, skipped: true }
+
+// 실패 (기존 memories 항상 보존)
+{ success: false, error: string }
+```
+
+**호출 예시** (useVoiceChat.ts cleanup 내부)
+```ts
+// keepalive: true — 페이지 이탈 후에도 요청 완료 보장
+fetch(`${VITE_SUPABASE_URL}/functions/v1/extract-memory`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${accessToken}`,
+    'apikey': VITE_SUPABASE_ANON_KEY,
+  },
+  body: JSON.stringify({ conversation_id, senior_id }),
+  keepalive: true,
+})
+```
+
+**내부 동작**
+1. `utterances` 테이블에서 `speaker = 'senior'` 발화만 조회
+2. `memories` 테이블에서 기존 `data` JSONB 조회
+3. `gpt-4o-mini`로 새 관심사 추출 (카테고리: `hobbies`, `relationships`, `health`, `philosophy`, `recurring_topics`, `emotional_patterns`)
+4. 기존 data와 병합 (배열: concat+중복제거 / 객체: 키 단위 merge)
+5. `memories` UPSERT (`senior_id` 기준), `conversations.memory_extracted = true`
+
+**에러 처리**
+- LLM 실패 또는 JSON 파싱 오류 → 기존 memories 보존, `{ success: false, error }` 반환
+- 발화 0건 → `{ success: true, skipped: true }` (DB 변경 없음)
+
+**관련 RPC** (migration `010_memory_rpc.sql`)
+
+| RPC | 인자 | 설명 |
+|-----|------|------|
+| `remove_memory_item` | `p_senior_id`, `p_category`, `p_item_index?`, `p_item_key?` | 개별 항목 삭제 |
+| `clear_all_memories` | `p_senior_id` | 전체 초기화 (`data = '{}'`) |
+
+---
+
+### 7.7 `tag-utterances` — 발화 태그 분류 (F-05)
+
+| 항목 | 내용 |
+|------|------|
+| 경로 | `POST /functions/v1/tag-utterances` |
+| 인증 | `Authorization: Bearer <access_token>` 필수 |
+| 호출 시점 | 세션 종료 시 fire-and-forget (`keepalive: true` fetch), `extract-memory`와 독립·동시 호출 |
+| 담당 | 권오인 |
+
+**입력**
+```ts
+{
+  conversation_id: string  // 종료된 대화 세션 UUID
+  senior_id: string        // 어르신 profile UUID
+}
+```
+
+**출력**
+```ts
+// 성공
+{ success: true, tagged_count: number }
+
+// 성공 (어르신 발화 없음 — 건너뜀)
+{ success: true, skipped: true }
+
+// 실패 (utterances 원본 항상 보존)
+{ success: false, error: string }
+```
+
+**호출 예시** (useVoiceChat.ts cleanup 내부, extract-memory 바로 아래)
+```ts
+fetch(`${VITE_SUPABASE_URL}/functions/v1/tag-utterances`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${accessToken}`,
+    'apikey': VITE_SUPABASE_ANON_KEY,
+  },
+  body: JSON.stringify({ conversation_id, senior_id }),
+  keepalive: true,
+}).catch((err) => console.error('[useVoiceChat] tag-utterances 호출 실패', err))
+```
+
+**내부 동작**
+1. anon 클라이언트로 JWT 검증 + 호출자 uid === senior_id 검증
+2. service_role로 conversations.senior_id 소유권 확인
+3. `utterances`에서 `speaker = 'senior'`인 발화만 조회 (`sequence_number` 오름차순)
+4. `gpt-4o-mini`로 발화별 태그 일괄 분류
+5. `utterances.tags` 배열 batch UPDATE (`Promise.allSettled` — 개별 실패 허용)
+
+**태그 종류 (utterance_tag Enum)**
+
+| 태그 | 의미 |
+|------|------|
+| `daily_mundane` | 일상 잡담 (날씨, 식사, TV 등) |
+| `memory_recall` | 과거 추억 회상 (옛날 이야기, 어릴 때) |
+| `emotional_peak` | 강한 감정 표현 (기쁨, 슬픔, 그리움) |
+| `philosophy` | 삶의 가치관·신념·교훈 |
+| `relationship_event` | 가족·지인 관계 사건 |
+
+**에러 처리**
+- LLM 실패 / JSON 파싱 오류 → utterances 원본 보존, `{ success: false, error }` 반환
+- 개별 utterance UPDATE 실패 → 해당 항목만 console.error, 나머지 계속 진행
 
 ---
 

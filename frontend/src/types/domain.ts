@@ -94,3 +94,45 @@ export type NotificationItem = Notification & {
 
 export type SeniorNavTab = 'home' | 'chat' | 'books' | 'family' | 'settings'
 export type ReaderNavTab = 'home' | 'notifications' | 'settings'
+
+// ─── 책 생성 파이프라인 (F-06) ───────────────────────────────
+
+/** 책 생성 job 단계 상태 (ERD job_status Enum과 동일) */
+export type JobStatus =
+  | 'pending'          // job 생성됨, 파이프라인 시작 전
+  | 'aggregating'      // 발화 수집·선별 중
+  | 'chaptering'       // LLM 챕터 구성·서사 생성 중
+  | 'cover_requested'  // 표지 생성 요청 완료 (F-07 처리 중)
+  | 'done'             // 전체 파이프라인 완료
+  | 'failed'           // 임의 단계 실패
+
+/** 책 생성 job (book_generation_jobs 테이블 기반) */
+export interface BookGenerationJob {
+  id: string
+  senior_id: string
+  book_id: string | null        // chaptering 완료 후 채워짐
+  status: JobStatus
+  retry_count: number
+  error_log: string | null      // "[단계명] 에러 메시지" 형식
+  stage_payload: {
+    aggregated_ids?: string[]   // aggregating 단계 결과 보존
+    book_id?: string            // chaptering 완료 후 보존
+  }
+  created_at: string
+  updated_at: string
+}
+
+// ─── 메모리 (F-04) ────────────────────────────────────────────
+
+/** memories.data JSONB — LLM이 자동 생성하는 플랫 items 배열 */
+export interface MemoryData {
+  items?: MemoryItem[]
+}
+
+/** LLM이 추출·분류하는 메모리 항목 (DB 저장 단위) */
+export interface MemoryItem {
+  text: string          // 기억 내용
+  category: string      // LLM이 자유롭게 결정 (취미, 가족, 건강, 일상, 추억, 가치관 등)
+  emoji: string         // 카테고리에 맞는 이모지
+  expires_at?: string   // 일정 카테고리 전용 만료일 (YYYY-MM-DD), 지난 항목은 AI 컨텍스트에서 제외
+}

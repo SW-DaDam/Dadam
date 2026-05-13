@@ -1,10 +1,13 @@
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router'
 import { ChevronRight } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { useThemeStore } from '@/shared/stores/themeStore'
 import { useFontSizeStore, type FontSize } from '@/shared/stores/fontSizeStore'
+import { useMemory } from '@/features/memory/hooks/useMemory'
 import { cn } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
 
 const FONT_OPTIONS: { value: FontSize; label: string }[] = [
   { value: 'small', label: '작음' },
@@ -18,9 +21,26 @@ export default function SeniorSettingsPage() {
   const { fontSize, setFontSize } = useFontSizeStore()
   const user = useAuthStore((s) => s.user)
 
+  const profile = useAuthStore((s) => s.profile)
+  const setProfile = useAuthStore((s) => s.setProfile)
   const displayName: string = user?.user_metadata?.full_name ?? user?.email ?? '사용자'
   const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
   const avatarChar = displayName.charAt(0)
+  // DB에서 저장된 호칭 사용, 없으면 프로필 로드 전 기본값
+  const nickname: string = profile?.display_name ?? '...'
+
+  // 스토어에 profile이 없을 때 DB에서 직접 조회
+  useEffect(() => {
+    if (profile || !user) return
+    void supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => { if (data) setProfile(data) })
+  }, [user, profile, setProfile])
+
+  const { items: memoryItems } = useMemory(user?.id ?? '')
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -46,7 +66,7 @@ export default function SeniorSettingsPage() {
           </div>
           <div className="flex-1 flex flex-col gap-0.5">
             <p className="text-[1.375rem] text-[#1F2937]">{displayName}</p>
-            <p className="text-[1.0625rem] text-[#6B7280]">호칭: 엄마 · 저자</p>
+            <p className="text-[1.0625rem] text-[#6B7280]">호칭: {nickname} · 저자</p>
           </div>
           <button
             type="button"
@@ -74,7 +94,9 @@ export default function SeniorSettingsPage() {
                 <p className="text-[1.125rem] text-[#1F2937]">AI가 기억하는 것들</p>
                 <p className="text-base text-[#6B7280]">취미, 가족, 추억 등 쌓인 기억 확인</p>
               </div>
-              <span className="bg-[#FFF0DC] rounded-lg px-2 py-1 text-sm text-[#E8820C] shrink-0">24개</span>
+              {memoryItems.length > 0 && (
+                <span className="bg-[#FFF0DC] rounded-lg px-2 py-1 text-sm text-[#E8820C] shrink-0">{memoryItems.length}개</span>
+              )}
               <ChevronRight size={20} className="text-[#D1D5DB] shrink-0" />
             </button>
             {/* AI 목소리 설정 */}

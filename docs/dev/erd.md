@@ -40,6 +40,7 @@ erDiagram
 
     SENIOR_PROFILES {
         uuid id PK
+        text gender
         date birth_date
         text region
         text dialect
@@ -231,7 +232,8 @@ CREATE TYPE speaker_role AS ENUM ('senior', 'ai');
 | 컬럼 | 타입 | 제약조건 | 설명 |
 |------|------|---------|------|
 | `id` | UUID | PK, FK → profiles(id) ON DELETE CASCADE | profiles.id와 동일 |
-| `birth_date` | DATE | NULL | 생년월일 |
+| `gender` | TEXT | NULL, CHECK IN ('male','female') | 성별 — 표지 생성(generate-cover) 및 챗봇(voice-chat) 프롬프트에서 활용 |
+| `birth_date` | DATE | NULL | 생년월일 (나이대 선택 시 해당 연대 중간값으로 저장) |
 | `region` | TEXT | NULL | 거주 지역 (예: '경상남도 진주시') |
 | `dialect` | TEXT | NULL | 사투리 (예: '경상도') — Whisper/AI 대화 스타일 참고용 |
 | `interests_summary` | TEXT | NULL | 사람이 읽을 수 있는 관심사 요약 (UI 표시용) |
