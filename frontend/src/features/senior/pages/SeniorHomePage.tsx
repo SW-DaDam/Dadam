@@ -26,16 +26,16 @@ export default function SeniorHomePage() {
     <div className="flex flex-col min-h-full overflow-y-auto">
 
       {/* 헤더 */}
-      <header className="w-full h-[80px] bg-white border-b border-[#E5E7EB] flex items-center justify-between px-4 sm:px-6 shrink-0">
-        <span className="text-base sm:text-xl text-[#6B7280]">{todayLabel()}</span>
-        <div className="flex items-center gap-2">
+      <header className="w-full min-h-[72px] bg-white border-b border-[#E5E7EB] flex items-center justify-between px-4 sm:px-6 py-3 gap-3 shrink-0">
+        <span className="flex-1 min-w-0 truncate text-lg text-[#6B7280]">{todayLabel()}</span>
+        <div className="flex items-center gap-2 shrink-0">
           <NotificationBell role="senior" />
           <button
             type="button"
             onClick={() => navigate('/s/settings')}
-            className="w-14 h-14 rounded-xl bg-[#FFF0DC] flex flex-col items-center justify-center gap-0.5 min-h-11"
+            className="w-12 h-12 rounded-xl bg-[#FFF0DC] flex flex-col items-center justify-center gap-0.5"
           >
-            <Settings size={20} className="text-[#E8820C]" />
+            <Settings size={18} className="text-[#E8820C]" />
             <span className="text-xs text-[#E8820C]">설정</span>
           </button>
         </div>
