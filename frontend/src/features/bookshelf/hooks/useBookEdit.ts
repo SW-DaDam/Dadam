@@ -47,8 +47,8 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
   // 챕터 순서 기준으로 표지 정렬하는 헬퍼
   function sortCoversByChapterOrder(covers: CoverImage[], chapterIds: string[]): CoverImage[] {
     return [...covers].sort((a, b) => {
-      const ai = chapterIds.indexOf(a.chapter_id)
-      const bi = chapterIds.indexOf(b.chapter_id)
+      const ai = chapterIds.indexOf(a.chapter_id ?? '')
+      const bi = chapterIds.indexOf(b.chapter_id ?? '')
       if (ai === -1 && bi === -1) return 0
       if (ai === -1) return 1
       if (bi === -1) return -1

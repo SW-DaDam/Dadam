@@ -20,50 +20,6 @@ const MOCK_CHAPTERS: Chapter[] = [
   { id: 'mock-3', book_id: '', content: '오랜만에 봄비가 내렸다. 빗소리를 들으며 옛 생각이 났다. 젊은 시절 남편과 함께 걷던 골목이 떠올랐다.', title: '봄비 오던 날의 추억', sort_order: 3, is_deleted: false, theme: '추억', source_utterance_ids: null, created_at: '', updated_at: '' },
 ]
 
-const MOCK_COVERS = [
-  { id: 'mock-c1', bg: '#FFF0DC', accent: '#E8820C', label: '봄 텃밭', decoration: 'garden' },
-  { id: 'mock-c2', bg: '#DCFCE7', accent: '#16A34A', label: '가족과 함께', decoration: 'family' },
-  { id: 'mock-c3', bg: '#FEF9C3', accent: '#CA8A04', label: '따뜻한 봄날', decoration: 'sun' },
-]
-
-// ─── 장식 ─────────────────────────────────────────────────────────
-
-function GardenDecoration() {
-  return (
-    <div className="relative w-full h-full flex items-center justify-center">
-      {[0, 60, 120, 180, 240, 300].map((deg, i) => (
-        <div key={i} className="absolute w-3 h-5 rounded-full bg-[#E8820C] opacity-35"
-          style={{ transform: `rotate(${deg}deg) translateY(-14px)`, transformOrigin: 'center 14px' }} />
-      ))}
-      <div className="w-4 h-4 rounded-full bg-[#E8820C] opacity-60 z-10" />
-    </div>
-  )
-}
-function FamilyDecoration() {
-  return (
-    <div className="relative w-full h-full flex items-center justify-center gap-2">
-      <div className="w-8 h-8 rounded-full border-[1.5px] border-[#16A34A] opacity-50" />
-      <div className="flex flex-col gap-1">
-        <div className="w-5 h-5 rounded-full border-[1.5px] border-[#16A34A] opacity-40" />
-        <div className="w-5 h-5 rounded-full border-[1.5px] border-[#16A34A] opacity-40" />
-      </div>
-    </div>
-  )
-}
-function SunDecoration() {
-  return (
-    <div className="relative w-full h-full flex items-center justify-center">
-      <div className="w-10 h-10 rounded border-2 border-[#CA8A04] opacity-50" />
-      <div className="absolute w-10 h-[2px] bg-[#CA8A04] opacity-40" />
-      <div className="absolute w-[2px] h-10 bg-[#CA8A04] opacity-40" />
-    </div>
-  )
-}
-function CoverDecoration({ type }: { type: string }) {
-  if (type === 'garden') return <GardenDecoration />
-  if (type === 'family') return <FamilyDecoration />
-  return <SunDecoration />
-}
 
 // ─── 진행 표시기 ─────────────────────────────────────────────────
 
@@ -109,7 +65,7 @@ export default function BookEditPage() {
   const { book, chapters: realChapters, coverImages, loading, coverLoading, regenerating, extraCoverCount, extraCoverLimit, softDeleteChapter, restoreChapter, updateChapterTitle, selectCover, publishBook, regenerateCover } = useBookEdit(bookId)
 
   const [currentStep, setCurrentStep] = useState(1)
-  const [selectedCoverId, setSelectedCoverId] = useState<string>(MOCK_COVERS[1].id)
+  const [selectedCoverId, setSelectedCoverId] = useState<string>('')
 
   // 최초 로드 시에만 첫 번째 표지로 초기화
   // 재생성 후 coverImages가 갱신될 때 사용자가 선택한 표지가 리셋되지 않도록
@@ -545,46 +501,6 @@ function CoverSlider({ covers, selectedId, onSelect }: {
   )
 }
 
-// ─── 목업 표지 슬라이더 ──────────────────────────────────────────
-
-function MockCoverSlider({ covers, selectedId, onSelect }: {
-  covers: typeof MOCK_COVERS
-  selectedId: string
-  onSelect: (id: string) => void
-}) {
-  const currentIdx = covers.findIndex(c => c.id === selectedId)
-  const idx = currentIdx < 0 ? 0 : currentIdx
-
-  function prev() { onSelect(covers[(idx - 1 + covers.length) % covers.length].id) }
-  function next() { onSelect(covers[(idx + 1) % covers.length].id) }
-
-  const cover = covers[idx]
-  return (
-    <div className="flex flex-col items-center gap-4">
-      <div className="relative w-full">
-        <div className="rounded-2xl overflow-hidden border-[3px] border-[#E8820C] aspect-[4/3] w-full flex flex-col items-center justify-center"
-          style={{ backgroundColor: cover.bg }}>
-          <CoverDecoration type={cover.decoration} />
-          <p className="mt-4 text-base font-bold" style={{ color: cover.accent }}>{cover.label}</p>
-        </div>
-        <button type="button" onClick={prev}
-          className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/80 flex items-center justify-center shadow-md">
-          <ChevronLeft size={22} className="text-[#1F2937]" />
-        </button>
-        <button type="button" onClick={next}
-          className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/80 flex items-center justify-center shadow-md">
-          <ChevronLeft size={22} className="text-[#1F2937] rotate-180" />
-        </button>
-      </div>
-      <div className="flex items-center gap-2">
-        {covers.map((c, i) => (
-          <button key={c.id} type="button" onClick={() => onSelect(c.id)}
-            className={cn('rounded-full transition-all', i === idx ? 'w-3 h-3 bg-[#E8820C]' : 'w-2 h-2 bg-[#D1D5DB]')} />
-        ))}
-      </div>
-    </div>
-  )
-}
 
 // ─── Step 3: 헌사 입력 ───────────────────────────────────────────
 
