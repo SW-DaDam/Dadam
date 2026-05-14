@@ -102,6 +102,7 @@ function buildDallePrompt(
     `High quality publishing-grade illustration.`
 }
 
+
 // ─── 헬퍼: 이미지 1장 생성 + Storage 업로드 + cover_images upsert ─────────────
 
 async function generateAndUploadCover(
@@ -495,7 +496,6 @@ Deno.serve(async (req) => {
     const ageLabel = age ? `${Math.floor(age / 10) * 10}s` : 'elderly'
     const palette = gender ? (GENDER_PALETTE[gender] ?? GENDER_PALETTE['female']) : GENDER_PALETTE['female']
 
-    // 챕터 제목·내용을 영문으로 번역 (병렬) — gpt-image-2가 영문을 훨씬 잘 반영함
     // GPT-4o mini로 챕터별 씬 묘사 병렬 생성 — 각 챕터 내용에 맞는 구체적 장면 결정
     console.log(`[generate-cover] 챕터별 씬 묘사 생성 시작 (${(chapters as Chapter[]).length}개)`)
     const chaptersWithScene = await Promise.all(

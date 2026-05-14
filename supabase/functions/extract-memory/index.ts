@@ -1,4 +1,5 @@
 // extract-memory: 세션 종료 후 어르신 발화 → LLM 분석 → memories.data JSONB 병합 갱신
+// LLM이 기존 memories 전체를 보고 통합/업데이트/추가를 직접 판단하여 최종 배열 반환
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'npm:@supabase/supabase-js'
 import { createOpenAI } from 'npm:@ai-sdk/openai'
@@ -13,8 +14,9 @@ const CORS_HEADERS = {
 // memories.data JSONB — items 플랫 배열 구조
 interface MemoryItem {
   text: string
-  category: string  // LLM이 자유롭게 결정
+  category: string
   emoji: string
+  expires_at?: string  // 일정 카테고리 전용 만료일 (YYYY-MM-DD)
 }
 
 interface MemoryData {
@@ -25,22 +27,6 @@ interface MemoryData {
 interface ExtractMemoryRequest {
   conversation_id: string
   senior_id: string
-}
-
-/**
- * 기존 items와 LLM 추출 결과를 병합
- * - text 기준으로 중복 제거 (대소문자·공백 정규화 후 비교)
- * - 신규 항목만 기존 배열 뒤에 추가
- */
-function mergeItems(existing: MemoryItem[], extracted: MemoryItem[]): MemoryItem[] {
-  const normalizeText = (t: string) => t.trim().toLowerCase()
-  const existingTexts = new Set(existing.map((i) => normalizeText(i.text)))
-
-  const newItems = extracted.filter(
-    (item) => item.text && !existingTexts.has(normalizeText(item.text)),
-  )
-
-  return [...existing, ...newItems]
 }
 
 serve(async (req) => {
@@ -160,80 +146,109 @@ serve(async (req) => {
 
     const existingItems: MemoryItem[] = ((memoryRow?.data as MemoryData)?.items) ?? []
 
-    // LLM 호출로 새 메모리 항목 추출
+    // LLM 호출: 기존 memories 전체 + 새 발화를 보고 최종 배열을 직접 반환
     const utteranceTexts = utterances.map((u) => u.content).join('\n')
     const existingJson = JSON.stringify(existingItems, null, 2)
+    const today = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
 
     const openai = createOpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') ?? '' })
 
     // 영문 system prompt: LLM의 지시 이해도·토큰 효율이 한국어보다 높음
-    // 앞으로 이 파일에 추가하는 프롬프트도 반드시 영문으로 작성할 것
-    const systemPrompt = `You are an analyst that extracts memorable facts from a Korean elderly senior's conversation utterances.
+    const systemPrompt = `You are a memory curator for a Korean elderly senior's AI companion app.
+Today's date: ${today}
 
-[Rules]
-1. Never include anything already present in the existing memories.
-2. Extract only newly discovered information.
-3. Respond with a pure JSON array only — no markdown code blocks, no explanatory text.
-4. If there is nothing to extract, return an empty array [].
-5. Each item must follow this format: { "text": "...", "category": "...", "emoji": "..." }
+Your job is to return the COMPLETE, FINAL memory list after integrating the new conversation utterances into the existing memories.
 
-[Filtering rules — do NOT extract these]
-- Simple affirmations or back-channels: "네", "그렇군요", "맞아요", "그래요"
-- Utterances that contain only a bare yes/no with no concrete information
+[Output rules]
+- Return a pure JSON array only — no markdown, no explanation.
+- The array must contain ALL memory items (kept, merged, updated, and new).
+- If there is nothing to add or change, return the existing array unchanged.
+- Each item format: { "text": "...", "category": "...", "emoji": "..." }
+- For schedule items only, add: "expires_at": "YYYY-MM-DD" (the day after the event)
 
-[text writing rules — very important]
-- Write in short noun-form or predicative endings. Do not write long run-on sentences.
+[Four operations — apply the most appropriate one per existing item]
+1. KEEP: No related new information → keep the item exactly as-is.
+2. MERGE: New utterance adds detail to an existing item on the same topic/person/activity → combine into one richer item. Prefer the existing item's wording as the base.
+3. UPDATE: New utterance contradicts or supersedes an existing item (e.g., moved house, cancelled plan) → replace with the new information.
+4. ADD: Completely new information not related to any existing item → append as a new item.
+
+[When in doubt]
+- If unsure whether new info belongs to an existing item, keep them separate rather than merging incorrectly.
+- Never delete an existing item unless the new utterance explicitly contradicts it.
+
+[text writing rules]
+- Short noun-form or predicative endings. No long run-on sentences.
   Good: "수빈이는 자주 못 온다", "텃밭 가꾸기를 좋아함", "무릎이 안 좋아서 병원 다님"
-  Bad:  "수빈이는 자주 못 와서 혼자 먹어야지", "텃밭에서 토마토를 키우고 있어서 수확했어"
-- If a fact being extracted involves a person already in existing memories with a known relationship, include that relationship in the text.
-  Example: existing memory has "딸 수빈이" → new utterance "수빈이가 이사했어" → extract as "딸 수빈이가 이사함"
-- Do NOT re-extract a fact already in existing memories by merely rephrasing the relationship (duplicate prevention).
-- For a new person not in existing memories, use only their name — do NOT infer or add a relationship.
-  Example: first mention of "민준이" → "민준이가 도움을 줌" (no relationship label)
-- Relationships include not only family (딸, 아들, 손자, 며느리) but also friends, juniors, neighbours, classmates, etc.
+  Bad: "수빈이는 자주 못 와서 혼자 먹어야지", "텃밭에서 토마토를 키우고 있어서 수확했어"
+- If a fact involves a person already in existing memories with a known relationship, include that relationship.
+  Example: existing has "딸 수빈이" → new: "수빈이가 이사했어" → write: "딸 수빈이가 이사함"
+- For a new person not yet in memories, use only their name — do NOT infer a relationship.
 
 [Emoji rules]
-- Use exactly ONE emoji per item.
+- Exactly ONE emoji per item. Reuse the existing emoji when keeping or merging.
 
 [Categories — prefer these 7; create a new 2–4 character Korean word only if none fit]
 취미, 가족, 건강, 일상, 추억, 가치관, 일정
 
-If a date or scheduled event is mentioned, include the date in the text.
-Example: "손녀 졸업식 (5월 15일)" → category: "일정", emoji: "📅"
+[Schedule items — expires_at]
+- Only add "expires_at" for category "일정".
+- Set expires_at to the day AFTER the event (so the item is excluded from AI context once the event passes).
+- If no specific date is mentioned, do NOT add expires_at.
+- Format: "YYYY-MM-DD"
+
+[Filtering rules — do NOT extract from new utterances]
+- Simple affirmations or back-channels: "네", "그렇군요", "맞아요", "그래요"
+- Utterances that contain only a bare yes/no with no concrete information
 
 [Few-shot examples]
-Utterance: "이웃들이랑 모여서 얘기하는 게 참 좋아요. 치매 예방도 되고"
-→ {"text": "이웃들과 모여 담소 나누기를 좋아함", "category": "일상", "emoji": "😊"}
 
-Utterance: "사위가 같이 가자고 해서 딸네 휴가에 같이 갔다 왔어요"
-→ {"text": "사위 초대로 딸네 가족 휴가에 동참", "category": "가족", "emoji": "👨‍👩‍👧"}
+Example 1 — MERGE (same activity):
+Existing: [{"text": "동네 바둑 모임에 나감", "category": "일상", "emoji": "♟️"}]
+New utterance: "이번 주에 후배와 바둑 두러 가기로 함"
+Result: [{"text": "동네 바둑 모임 나가고, 후배와도 바둑을 즐김", "category": "취미", "emoji": "♟️"}]
 
-Utterance: "꽃 선물 받는 게 가장 좋죠. 어릴 때는 진달래, 개나리 많이 꺾었어"
-→ {"text": "꽃 선물 받는 것을 가장 좋아함", "category": "취미", "emoji": "🌸"}
+Example 2 — MERGE (same person, add detail):
+Existing: [{"text": "민준이와 자주 낚시 가는 편임", "category": "가족", "emoji": "🎣"}]
+New utterance: "작년 봄에 민준이랑 충주호에서 낚시함"
+Result: [{"text": "민준이와 자주 낚시 가는 편, 작년 봄엔 충주호 방문", "category": "가족", "emoji": "🎣"}]
+
+Example 3 — UPDATE (contradicts existing):
+Existing: [{"text": "딸 수빈이가 부산에 살고 있음", "category": "가족", "emoji": "👧"}]
+New utterance: "수빈이가 이사를 서울로 왔어"
+Result: [{"text": "딸 수빈이가 서울로 이사함", "category": "가족", "emoji": "👧"}]
+
+Example 4 — Schedule with expires_at:
+New utterance: "다음 달 15일에 손녀 졸업식이야" (assume today is 2026-05-12)
+Result item: {"text": "손녀 졸업식 (2026-06-15)", "category": "일정", "emoji": "🎓", "expires_at": "2026-06-16"}
 
 [Existing memories]
 ${existingJson}
 
-[Senior's utterances]
+[New utterances from this conversation]
 ${utteranceTexts}
 
-[Response format]
-[{"text": "텃밭 가꾸기를 좋아함", "category": "취미", "emoji": "🌱"}, ...]`
+Return the complete final memory array:`
 
-    // LLM 실패 시 upsert를 진행하지 않고 즉시 실패 반환
-    let extractedItems: MemoryItem[]
+    // LLM 실패 시 기존 memories 보존하고 즉시 실패 반환
+    let finalItems: MemoryItem[]
     try {
-      // system role로 분리하여 지시 명확성 향상
       const { text } = await generateText({
         model: openai('gpt-4o-mini'),
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: 'Extract memorable facts from the senior utterances provided in the system prompt.' },
+          { role: 'user', content: 'Return the complete final memory array integrating the new utterances.' },
         ],
-        temperature: 0.3,
+        temperature: 0.2,  // 낮은 temperature: 병합 판단의 일관성 확보
       })
-      extractedItems = JSON.parse(text.trim()) as MemoryItem[]
-      if (!Array.isArray(extractedItems)) extractedItems = []
+
+      const parsed = JSON.parse(text.trim()) as MemoryItem[]
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        // LLM이 빈 배열을 반환하면 기존 데이터를 잃을 위험 → 기존 items 유지
+        console.warn('[extract-memory] LLM이 빈 배열 반환, 기존 memories 보존')
+        finalItems = existingItems
+      } else {
+        finalItems = parsed
+      }
     } catch (llmErr) {
       console.error('[extract-memory] LLM 호출 또는 JSON 파싱 실패', llmErr)
       return new Response(
@@ -242,16 +257,13 @@ ${utteranceTexts}
       )
     }
 
-    // 기존 items와 LLM 결과 병합 (text 기준 중복 제거)
-    const mergedItems = mergeItems(existingItems, extractedItems)
-
     // memories 테이블 UPSERT (최초 대화 시 row가 없을 수 있음)
     const { error: upsertErr } = await supabase
       .from('memories')
       .upsert(
         {
           senior_id,
-          data: { items: mergedItems },
+          data: { items: finalItems },
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'senior_id' },
@@ -271,8 +283,9 @@ ${utteranceTexts}
       .update({ memory_extracted: true })
       .eq('id', conversation_id)
 
+    const addedCount = finalItems.length - existingItems.length
     return new Response(
-      JSON.stringify({ success: true, added_count: extractedItems.length }),
+      JSON.stringify({ success: true, total_count: finalItems.length, added_count: addedCount }),
       { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
     )
 

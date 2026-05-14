@@ -23,6 +23,7 @@ function useBookRead(bookId: string | undefined) {
   const [book, setBook] = useState<Book | null>(null)
   const [seniorName, setSeniorName] = useState<string>('')
   const [chapters, setChapters] = useState<ChapterWithComments[]>([])
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
@@ -37,6 +38,27 @@ function useBookRead(bookId: string | undefined) {
 
     if (!bookData) return
     setBook(bookData)
+
+    // 선택된 표지 이미지 조회 (selected 우선, 없으면 candidate 첫 번째)
+    const { data: selectedCover } = await supabase
+      .from('cover_images')
+      .select('image_url')
+      .eq('book_id', bookId)
+      .eq('status', 'selected')
+      .single()
+
+    if (selectedCover) {
+      setCoverImageUrl(selectedCover.image_url)
+    } else {
+      const { data: candidateCover } = await supabase
+        .from('cover_images')
+        .select('image_url')
+        .eq('book_id', bookId)
+        .eq('status', 'candidate')
+        .limit(1)
+        .single()
+      setCoverImageUrl(candidateCover?.image_url ?? null)
+    }
 
     // 시니어 프로필(이름) 조회
     const { data: profileData } = await supabase
@@ -100,7 +122,21 @@ function useBookRead(bookId: string | undefined) {
     load().finally(() => setLoading(false))
   }, [load])
 
-  return { book, seniorName, chapters, loading, reload: load }
+  return { book, seniorName, chapters, coverImageUrl, loading, reload: load }
+}
+
+// ─── 표지 플레이스홀더 팔레트 ────────────────────────────────────────────────
+
+const COVER_PALETTE = [
+  { from: '#C4614A', to: '#7B1F35' },
+  { from: '#7B5080', to: '#3D1F5A' },
+  { from: '#B85470', to: '#6B1F3A' },
+  { from: '#4A7A68', to: '#1A4A38' },
+  { from: '#5A7A9A', to: '#1A3A5A' },
+  { from: '#9A7060', to: '#5A3828' },
+]
+function coverPaletteFor(month: number) {
+  return COVER_PALETTE[(month - 1) % COVER_PALETTE.length]
 }
 
 // ─── 아바타 ───────────────────────────────────────────────────────────────────
@@ -125,7 +161,7 @@ export default function SeniorBookReadPage() {
   const { bookId } = useParams<{ bookId: string }>()
   const profile = useAuthStore((s) => s.profile)
   const user = useAuthStore((s) => s.user)
-  const { book, seniorName, chapters, loading, reload } = useBookRead(bookId)
+  const { book, seniorName, chapters, coverImageUrl, loading, reload } = useBookRead(bookId)
 
   // 카카오 실명: user_metadata.full_name → full_name → display_name 순으로 fallback
   const kakaoName: string =
@@ -134,6 +170,7 @@ export default function SeniorBookReadPage() {
     seniorName
 
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null)
+  const [readingOpen, setReadingOpen] = useState(false)
   const [commentText, setCommentText] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
@@ -197,7 +234,7 @@ export default function SeniorBookReadPage() {
   // ─── 렌더 ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-[#FFF8F0]">
+    <div className="flex-1 flex flex-col min-h-0 bg-[#FFF8F0] relative">
 
       {/* 헤더 */}
       <header className="w-full h-[80px] bg-[#FFF8F0] border-b border-[#E5E7EB] flex items-center px-4 sm:px-6 shrink-0 relative">
@@ -218,17 +255,6 @@ export default function SeniorBookReadPage() {
 
       <main className="flex-1 overflow-y-auto w-full max-w-2xl mx-auto">
 
-        {/* 책 표지 카드 */}
-        <div className="mx-3 mt-3 bg-[#FFF0DC] rounded-2xl px-6 py-5 flex flex-col items-center gap-2 relative overflow-hidden">
-          <div className="absolute top-0 bottom-0 left-0 w-2 bg-[#E8820C] opacity-25" />
-          <div className="absolute top-0 bottom-0 right-0 w-2 bg-[#E8820C] opacity-15" />
-          <div className="w-full h-[1.5px] border-t border-[#E8820C] opacity-20" />
-          <p className="text-[1.5rem] font-bold text-[#E8820C]">{book.title}</p>
-          <p className="text-base text-[#6B7280]">
-            {kakaoName} 지음 · {book.year}년 {book.month}월
-          </p>
-          <div className="w-full h-[1.5px] border-t border-[#E8820C] opacity-20" />
-        </div>
 
         {chapters.length === 0 ? (
           <div className="mx-3 mt-3 bg-white rounded-2xl px-6 py-10 text-center">
@@ -257,130 +283,233 @@ export default function SeniorBookReadPage() {
               ))}
             </div>
 
-            {/* 선택된 챕터 제목 표시 */}
-            {activeChapter && (
-              <div className="bg-white px-6 pt-4 pb-0">
-                <p className="text-sm text-[#9CA3AF]">
-                  {chapters.findIndex(c => c.id === activeChapterId) + 1}장 · {activeChapter.title}
-                </p>
-              </div>
-            )}
+            {/* 표지 카드 (항상 표시) */}
+            {activeChapter && (() => {
+              const cp = coverPaletteFor(book.month)
+              return (
+                <button
+                  type="button"
+                  onClick={() => setReadingOpen(true)}
+                  className="mx-3 mt-3 rounded-2xl overflow-hidden w-[calc(100%-1.5rem)] aspect-[3/4] relative flex flex-col items-center justify-between p-8"
+                  style={{ background: coverImageUrl ? undefined : `linear-gradient(155deg, ${cp.from} 0%, ${cp.to} 100%)` }}
+                >
+                  {coverImageUrl && (
+                    <img src={coverImageUrl} alt={book.title} className="absolute inset-0 w-full h-full object-cover" />
+                  )}
+                  <div className="absolute inset-0 bg-black/20 rounded-2xl" />
+                  <div className="relative w-full flex flex-col gap-1">
+                    <div className="h-[1.5px] rounded-full bg-white/50" />
+                    <div className="h-[1px] rounded-full bg-white/25" />
+                  </div>
+                  <div className="relative flex flex-col items-center gap-3">
+                    <p className="text-[1.75rem] font-bold text-white text-center leading-snug drop-shadow">
+                      {book.title}
+                    </p>
+                    <p className="text-base text-white/70">
+                      {kakaoName} 지음 · {book.year}년 {book.month}월
+                    </p>
+                  </div>
+                  <div className="relative flex flex-col items-center gap-2">
+                    <div className="h-[1px] w-12 rounded-full bg-white/40" />
+                    <p className="text-sm text-white/60 tracking-wide">눌러서 읽기</p>
+                  </div>
+                </button>
+              )
+            })()}
 
-            {/* 본문 */}
+            {/* 댓글 섹션 (표지 아래 항상 표시) */}
             {activeChapter && (
-              <>
-                <div className="bg-white px-6 py-5 flex flex-col gap-3">
-                  <p className="text-[1.0625rem] text-[#1F2937] leading-relaxed whitespace-pre-wrap">
-                    {activeChapter.content}
-                  </p>
-                </div>
+              <div className="bg-white mx-3 mt-3 rounded-2xl px-5 py-5 flex flex-col gap-4">
+                <p className="text-[1.125rem] font-bold text-[#1F2937]">
+                  가족 댓글 {totalComments}개
+                </p>
 
                 <div className="h-px bg-[#E5E7EB]" />
 
-                {/* 댓글 섹션 */}
-                <div className="bg-white px-6 py-5 flex flex-col gap-4">
-                  <p className="text-[1.125rem] font-bold text-[#1F2937]">
-                    가족 댓글 {totalComments}개
+                {activeChapter.comments.length === 0 ? (
+                  <p className="text-base text-[#9CA3AF] text-center py-2">
+                    아직 댓글이 없어요
                   </p>
-
-                  <div className="h-px bg-[#E5E7EB]" />
-
-                  {activeChapter.comments.length === 0 ? (
-                    <p className="text-base text-[#9CA3AF] text-center py-2">
-                      아직 댓글이 없어요
-                    </p>
-                  ) : (
-                    activeChapter.comments.map((comment) => {
-                      const style = avatarStyle(comment.author_id)
-                      return (
-                        <div key={comment.id} className="flex flex-col gap-3">
-                          {/* 댓글 */}
-                          <div className="flex items-start gap-3">
-                            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-                              style={{ backgroundColor: style.bg }}>
-                              <span className="text-sm font-bold" style={{ color: style.color }}>
-                                {initial(comment.author?.display_name)}
+                ) : (
+                  activeChapter.comments.map((comment) => {
+                    const style = avatarStyle(comment.author_id)
+                    return (
+                      <div key={comment.id} className="flex flex-col gap-3">
+                        <div className="flex items-start gap-3">
+                          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                            style={{ backgroundColor: style.bg }}>
+                            <span className="text-sm font-bold" style={{ color: style.color }}>
+                              {initial(comment.author?.display_name)}
+                            </span>
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <p className="text-base font-bold text-[#1F2937]">
+                              {comment.author?.display_name ?? '가족'}
+                            </p>
+                            <p className="text-[1.125rem] text-[#1F2937]">{comment.content}</p>
+                            <p className="text-sm text-[#6B7280]">
+                              {new Date(comment.created_at).toLocaleDateString('ko-KR', {
+                                month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                              })}
+                            </p>
+                          </div>
+                        </div>
+                        {comment.replies.map((reply) => (
+                          <div key={reply.id} className="ml-6 flex items-start gap-3">
+                            <div className="w-9 h-9 rounded-full bg-[#E8820C] flex items-center justify-center shrink-0">
+                              <span className="text-xs font-bold text-white">
+                                {initial(seniorName)}
                               </span>
                             </div>
                             <div className="flex flex-col gap-0.5">
-                              <p className="text-base font-bold text-[#1F2937]">
-                                {comment.author?.display_name ?? '가족'}
+                              <p className="text-[0.9375rem] font-bold text-[#E8820C]">
+                                {seniorName || '저자'}의 답장
                               </p>
-                              <p className="text-[1.125rem] text-[#1F2937]">{comment.content}</p>
+                              <p className="text-[1.125rem] text-[#1F2937]">{reply.content}</p>
                               <p className="text-sm text-[#6B7280]">
-                                {new Date(comment.created_at).toLocaleDateString('ko-KR', {
+                                {new Date(reply.created_at).toLocaleDateString('ko-KR', {
                                   month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
                                 })}
                               </p>
                             </div>
                           </div>
+                        ))}
+                      </div>
+                    )
+                  })
+                )}
 
-                          {/* 시니어 답장 */}
-                          {comment.replies.map((reply) => (
-                            <div key={reply.id} className="ml-6 flex items-start gap-3">
-                              <div className="w-9 h-9 rounded-full bg-[#E8820C] flex items-center justify-center shrink-0">
-                                <span className="text-xs font-bold text-white">
-                                  {initial(seniorName)}
-                                </span>
-                              </div>
-                              <div className="flex flex-col gap-0.5">
-                                <p className="text-[0.9375rem] font-bold text-[#E8820C]">
-                                  {seniorName || '저자'}의 답장
-                                </p>
-                                <p className="text-[1.125rem] text-[#1F2937]">{reply.content}</p>
-                                <p className="text-sm text-[#6B7280]">
-                                  {new Date(reply.created_at).toLocaleDateString('ko-KR', {
-                                    month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
-                                  })}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )
-                    })
-                  )}
+                <div className="h-px bg-[#E5E7EB]" />
 
-                  <div className="h-px bg-[#E5E7EB]" />
-
-                  {/* 댓글 입력 */}
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={commentText}
-                      onChange={(e) => setCommentText(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') handleSubmitComment() }}
-                      placeholder="댓글 남기기"
-                      className="flex-1 bg-[#FFF8F0] border border-[#E5E7EB] rounded-xl px-4 py-3 text-[1.125rem] text-[#1F2937] placeholder-[#D1D5DB] outline-none focus:border-[#E8820C]"
-                    />
-                    <button type="button"
-                      onClick={handleSubmitComment}
-                      disabled={submitting || !commentText.trim()}
-                      className="bg-[#E8820C] rounded-xl px-4 py-3 min-h-11 shrink-0 disabled:opacity-50">
-                      <span className="text-[1.125rem] text-white">
-                        {submitting ? '전달 중…' : '전달하기'}
-                      </span>
-                    </button>
-                  </div>
-
-                  {/* 음성 댓글 안내 */}
-                  <div className="bg-[#FFF8F0] rounded-2xl px-4 py-4 flex flex-col items-center gap-3">
-                    <p className="text-base text-[#6B7280] text-center">
-                      음성으로 댓글을 남기려면 마이크 버튼을 눌러주세요
-                    </p>
-                    <button type="button"
-                      className="w-12 h-12 rounded-full bg-[#FFF0DC] flex items-center justify-center">
-                      <Mic size={22} className="text-[#E8820C]" />
-                    </button>
-                    <span className="text-base text-[#E8820C]">음성 댓글</span>
-                  </div>
+                {/* 댓글 입력 */}
+                <div className="flex flex-col gap-2">
+                  <input
+                    type="text"
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSubmitComment() }}
+                    placeholder="댓글 남기기"
+                    className="w-full bg-[#FFF8F0] border border-[#E5E7EB] rounded-xl px-4 py-3 text-[1.125rem] text-[#1F2937] placeholder-[#D1D5DB] outline-none focus:border-[#E8820C]"
+                  />
+                  <button type="button"
+                    onClick={handleSubmitComment}
+                    disabled={submitting || !commentText.trim()}
+                    className="w-full bg-[#E8820C] rounded-xl py-3 min-h-11 disabled:opacity-50">
+                    <span className="text-[1.125rem] text-white">
+                      {submitting ? '전달 중…' : '전달하기'}
+                    </span>
+                  </button>
                 </div>
-              </>
+
+                {/* 음성 댓글 안내 */}
+                <div className="bg-[#FFF8F0] rounded-2xl px-4 py-4 flex flex-col items-center gap-3">
+                  <p className="text-base text-[#6B7280] text-center">
+                    음성으로 댓글을 남기려면 마이크 버튼을 눌러주세요
+                  </p>
+                  <button type="button"
+                    className="w-12 h-12 rounded-full bg-[#FFF0DC] flex items-center justify-center">
+                    <Mic size={22} className="text-[#E8820C]" />
+                  </button>
+                  <span className="text-base text-[#E8820C]">음성 댓글</span>
+                </div>
+              </div>
             )}
           </>
         )}
 
       </main>
+
+      {/* 풀스크린 읽기 오버레이 */}
+      {readingOpen && activeChapter && (() => {
+        const chapterIdx = chapters.findIndex(c => c.id === activeChapterId)
+        const hasPrev = chapterIdx > 0
+        const hasNext = chapterIdx < chapters.length - 1
+        return (
+          <div className="absolute inset-0 z-50 flex flex-col" style={{ backgroundColor: '#FFFBF5' }}>
+
+            {/* 상단 바 */}
+            <div className="flex items-center justify-between px-4 h-[56px] shrink-0 border-b border-[#EDE0CC]">
+              <button
+                type="button"
+                onClick={() => setReadingOpen(false)}
+                className="flex items-center gap-1 min-h-11 min-w-11"
+              >
+                <ChevronLeft size={20} className="text-[#9CA3AF]" />
+                <span className="text-[0.9375rem] text-[#9CA3AF]">표지</span>
+              </button>
+              <p className="text-sm text-[#9CA3AF]">{book.title}</p>
+              <span className="text-sm text-[#9CA3AF] min-w-11 text-right">
+                {chapterIdx + 1} / {chapters.length}
+              </span>
+            </div>
+
+            {/* 본문 영역 */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="w-full max-w-xl mx-auto px-6 pt-10 pb-12">
+
+                {/* 챕터 번호 */}
+                <p className="text-[0.8125rem] font-semibold tracking-[0.15em] text-[#E8820C] mb-3">
+                  {chapterIdx + 1}장
+                </p>
+
+                {/* 챕터 제목 */}
+                <h2 className="text-[1.5rem] font-bold text-[#1F2937] leading-snug mb-6">
+                  {activeChapter.title}
+                </h2>
+
+                {/* 구분선 */}
+                <div className="flex items-center gap-3 mb-8">
+                  <div className="h-px flex-1 bg-[#EDE0CC]" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#E8820C] opacity-50" />
+                  <div className="h-px flex-1 bg-[#EDE0CC]" />
+                </div>
+
+                {/* 본문 */}
+                <p className="text-[1.125rem] text-[#2D2D2D] leading-[2.1] whitespace-pre-wrap tracking-wide">
+                  {activeChapter.content}
+                </p>
+              </div>
+            </div>
+
+            {/* 하단 챕터 이동 */}
+            <div className="shrink-0 border-t border-[#EDE0CC] flex items-center" style={{ backgroundColor: '#FFFBF5' }}>
+              <button
+                type="button"
+                onClick={() => hasPrev && setActiveChapterId(chapters[chapterIdx - 1].id)}
+                disabled={!hasPrev}
+                className="flex-1 flex items-center justify-center gap-1.5 py-4 disabled:opacity-30"
+              >
+                <ChevronLeft size={18} className="text-[#6B7280]" />
+                <span className="text-base text-[#6B7280]">이전 장</span>
+              </button>
+
+              <div className="flex gap-1.5 px-4">
+                {chapters.map((_, i) => (
+                  <div
+                    key={i}
+                    className="rounded-full transition-all"
+                    style={{
+                      width: i === chapterIdx ? '20px' : '6px',
+                      height: '6px',
+                      backgroundColor: i === chapterIdx ? '#E8820C' : '#D1D5DB',
+                    }}
+                  />
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => hasNext && setActiveChapterId(chapters[chapterIdx + 1].id)}
+                disabled={!hasNext}
+                className="flex-1 flex items-center justify-center gap-1.5 py-4 disabled:opacity-30"
+              >
+                <span className="text-base text-[#6B7280]">다음 장</span>
+                <ChevronLeft size={18} className="text-[#6B7280] rotate-180" />
+              </button>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* 토스트 */}
       {toastMsg && (

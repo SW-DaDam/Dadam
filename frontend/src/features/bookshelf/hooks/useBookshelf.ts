@@ -12,6 +12,13 @@ export interface BookWithChapterCount extends Book {
 export function useBookshelf() {
   const [books, setBooks] = useState<BookWithChapterCount[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  // 외부에서 await 가능한 새로고침 함수 — fetchBooks 완료를 보장해야 하는 호출자(MyBooksPage)용
+  const refresh = async () => {
+    setRefreshKey((k) => k + 1)
+    await fetchBooks()
+  }
 
   async function fetchBooks() {
     // chapters left join: 챕터 0개인 책도 포함
@@ -50,13 +57,7 @@ export function useBookshelf() {
 
   useEffect(() => {
     fetchBooks().finally(() => setLoading(false))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // 외부에서 명시적으로 목록 갱신이 필요할 때 호출 (새 책 생성 완료 후 등)
-  async function refresh() {
-    await fetchBooks()
-  }
+  }, [refreshKey])
 
   return { books, loading, refresh }
 }

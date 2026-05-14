@@ -131,7 +131,8 @@ export interface MemoryData {
 
 /** LLM이 추출·분류하는 메모리 항목 (DB 저장 단위) */
 export interface MemoryItem {
-  text: string       // 기억 내용
-  category: string   // LLM이 자유롭게 결정 (취미, 가족, 건강, 일상, 추억, 가치관 등)
-  emoji: string      // 카테고리에 맞는 이모지
+  text: string          // 기억 내용
+  category: string      // LLM이 자유롭게 결정 (취미, 가족, 건강, 일상, 추억, 가치관 등)
+  emoji: string         // 카테고리에 맞는 이모지
+  expires_at?: string   // 일정 카테고리 전용 만료일 (YYYY-MM-DD), 지난 항목은 AI 컨텍스트에서 제외
 }

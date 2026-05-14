@@ -11,6 +11,7 @@ import {
   buildChapteringUserMessage,
   type BookOutput,
   type UtteranceItem,
+  type MemoryItem,
 } from './prompts.ts'
 
 // CORS 헤더: pg_cron 내부 호출 + 개발 중 수동 POST 모두 허용
@@ -293,6 +294,37 @@ async function runPipelineForSenior(
 
   console.log(`[generate-book] job ${jobId} — ${selectedUtterances.length}건 발화 선별 완료`)
 
+  // ── chaptering 전처리: senior_profiles + memories로 저자 프로필 컨텍스트 구성 ──
+  // 발화가 주재료, 프로필은 성별·나이·관계명·관심사를 서술에 자연스럽게 반영하는 보조 컨텍스트
+  // 조회 실패 시 프로필 없이 진행 (어르신 UX 방해 금지)
+  let authorProfile: string | undefined
+  try {
+    const [{ data: memoryRow }, { data: profileRow }] = await Promise.all([
+      supabase.from('memories').select('data').eq('senior_id', seniorId).single(),
+      supabase.from('senior_profiles').select('gender, birth_date').eq('id', seniorId).single(),
+    ])
+
+    const profileLines: string[] = []
+    if (profileRow) {
+      if (profileRow.gender) profileLines.push(`- gender: ${profileRow.gender}`)
+      if (profileRow.birth_date) {
+        const age = new Date().getFullYear() - new Date(profileRow.birth_date).getFullYear()
+        profileLines.push(`- age: approx. ${age}`)
+      }
+    }
+
+    const allItems: MemoryItem[] = (memoryRow?.data as { items?: MemoryItem[] })?.items ?? []
+    const today = new Date().toISOString().slice(0, 10)
+    const items = allItems.filter((item) => !item.expires_at || item.expires_at > today)
+    for (const item of items) {
+      profileLines.push(`- [${item.category}] ${item.text} ${item.emoji}`)
+    }
+
+    if (profileLines.length > 0) authorProfile = profileLines.join('\n')
+  } catch (memErr) {
+    console.warn(`[generate-book] job ${jobId} — 저자 프로필 조회 실패, 프로필 없이 진행:`, memErr)
+  }
+
   // ── chaptering: LLM으로 챕터 구성·서사 생성 ───────────────────
   // 스펙 §5: 서사 변환 품질을 위해 gpt-4o 사용 (gpt-4o-mini 대비 서사 품질 우수)
   // 스펙 §6: JSON 파싱 실패 시 1회 재시도
@@ -306,7 +338,7 @@ async function runPipelineForSenior(
       model: openai('gpt-4o'),
       messages: [
         { role: 'system', content: CHAPTERING_SYSTEM_PROMPT },
-        { role: 'user', content: buildChapteringUserMessage(selectedUtterances) },
+        { role: 'user', content: buildChapteringUserMessage(selectedUtterances, authorProfile) },
       ],
       temperature: 0.7,   // 서사 생성은 분류보다 창의성이 필요하므로 0.7 사용
     })

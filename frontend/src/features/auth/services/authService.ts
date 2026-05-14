@@ -4,7 +4,9 @@ import { supabase } from '@/lib/supabase'
 // 트리거 미완료로 profiles row가 없을 경우에도 안전하게 생성
 export async function setupSeniorProfile(
   userId: string,
-  displayName: string
+  displayName: string,
+  gender: 'male' | 'female' | null,
+  birthDate: string | null  // 'YYYY-MM-DD' 형식
 ): Promise<{ error: unknown }> {
   const { error: profileError } = await supabase
     .from('profiles')
@@ -17,7 +19,12 @@ export async function setupSeniorProfile(
 
   const { error: seniorError } = await supabase
     .from('senior_profiles')
-    .upsert({ id: userId, onboarding_completed: false })
+    .upsert({
+      id: userId,
+      onboarding_completed: false,
+      gender,
+      birth_date: birthDate,
+    })
 
   if (seniorError) {
     console.error('[Auth] senior_profiles 생성 실패', seniorError)

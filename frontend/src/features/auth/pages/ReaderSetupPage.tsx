@@ -5,25 +5,19 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { setupFamilyProfile } from '../services/authService'
 import { getDbErrorMessage } from '@/lib/errorMessages'
+import StepIndicator from '../components/StepIndicator'
 
-const RELATIONS = ['아들', '딸', '손자', '손녀', '사위', '며느리', '직접 입력']
-const CODE_LENGTH = 6
+const QUICK_RELATIONS = ['아들', '딸', '손자', '손녀']
+const CODE_LENGTH = 6 // 초대 코드 최대 길이
 
 export default function ReaderSetupPage() {
   const navigate = useNavigate()
   const kakaoProfile = useAuthStore((s) => s.kakaoProfile)
   const user = useAuthStore((s) => s.user)
-  const [relation, setRelation] = useState('아들')
-  const [customRelation, setCustomRelation] = useState('')
-  const [inviteCode, setInviteCode] = useState(['A', '3', 'K', '7', '', ''])
+  const [relation, setRelation] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-
-  function handleCodeChange(index: number, value: string) {
-    const next = [...inviteCode]
-    next[index] = value.toUpperCase().slice(-1)
-    setInviteCode(next)
-  }
 
   async function handleConfirm() {
     if (!user) return
@@ -42,24 +36,26 @@ export default function ReaderSetupPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="flex-1 flex flex-col overflow-y-auto">
 
       {/* 헤더 */}
-      <header className="w-full h-[80px] bg-white border-b border-[#E5E7EB] flex items-center px-6 relative shrink-0">
+      <header className="w-full h-[80px] bg-white border-b border-[#E5E7EB] flex items-center px-6 relative">
         <button
           type="button"
           onClick={() => navigate(-1)}
           className="flex items-center min-h-11"
         >
           <ChevronLeft size={22} className="text-[#6B7280]" />
-          
         </button>
         <h1 className="absolute left-1/2 -translate-x-1/2 text-lg sm:text-xl text-[#1F2937] whitespace-nowrap font-medium">
           독자 프로필 만들기
         </h1>
       </header>
 
-      <main className="flex-1 flex flex-col items-center px-4 sm:px-6 md:px-8 py-6 md:py-8 gap-5 md:gap-6 overflow-y-auto w-full max-w-2xl mx-auto">
+      {/* 단계 표시 */}
+      <StepIndicator currentStep={2} />
+
+      <main className="flex-1 flex flex-col items-center px-4 sm:px-6 md:px-8 pt-0 pb-6 md:pb-8 gap-5 md:gap-6 w-full max-w-2xl mx-auto">
 
         {/* 안내 텍스트 */}
         <section className="flex flex-col items-center gap-2">
@@ -69,11 +65,7 @@ export default function ReaderSetupPage() {
 
         {/* 카카오 자동완성 카드 */}
         <div className="w-full bg-white border border-[#E5E7EB] rounded-2xl px-6 py-5">
-          <div className="flex flex-col gap-3">
-            <div className="bg-[#FEE500] self-start rounded px-2 py-0.5">
-              <span className="text-sm text-[#3C1E1E]">카카오 자동 완성</span>
-            </div>
-            <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4">
             <div className="shrink-0">
               <div className="w-[76px] h-[76px] rounded-full bg-[#FEE500] overflow-hidden flex items-center justify-center">
                 {kakaoProfile?.avatarUrl ? (
@@ -96,7 +88,6 @@ export default function ReaderSetupPage() {
               ))}
             </div>
           </div>
-          </div>
         </div>
 
         {/* STEP 1 — 관계 선택 */}
@@ -107,48 +98,52 @@ export default function ReaderSetupPage() {
               <p className="text-[1.0625rem] text-[#6B7280]">저자가 나를 어떻게 부르나요?</p>
             </div>
             <div className="bg-[#E8820C] rounded px-3 py-1">
-              <span className="text-[0.9375rem] text-white">STEP 1</span>
+              <span className="text-[0.9375rem] text-white">입력 필요</span>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {RELATIONS.map((r) => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => setRelation(r)}
-                className={cn(
-                  'h-12 px-5 rounded-xl text-lg border transition-all',
-                  relation === r
-                    ? 'bg-[#FFF0DC] border-[#E8820C] text-[#E8820C]'
-                    : 'bg-[#F3F4F6] border-[#E5E7EB] text-[#6B7280]',
-                )}
-              >
-                {r}
-              </button>
-            ))}
+
+          {/* 예시 */}
+          <div className="bg-[#FFF0DC] rounded-lg px-4 py-2">
+            <span className="text-base text-[#E8820C]">예: "홍길동(아들)(이)가 댓글을 작성했어요"</span>
           </div>
-          {relation === '직접 입력' && (
-            <input
-              type="text"
-              value={customRelation}
-              onChange={(e) => setCustomRelation(e.target.value)}
-              placeholder="관계를 입력해주세요"
-              className="w-full h-[56px] bg-[#FFF8F0] border-2 border-[#E8820C] rounded-xl px-5 text-lg text-[#1F2937] outline-none placeholder:text-[#9CA3AF]"
-              autoFocus
-            />
-          )}
+
+          {/* 직접입력 필드 */}
+          <input
+            type="text"
+            value={relation}
+            onChange={(e) => setRelation(e.target.value)}
+            placeholder="직접입력"
+            className="w-full h-[72px] bg-[#FFF8F0] border-2 border-[#E8820C] rounded-xl px-5 text-[1.375rem] text-[#1F2937] outline-none placeholder:text-[#E8820C]/40"
+          />
+
+          {/* 자주 쓰는 관계 */}
+          <div className="flex flex-col gap-2">
+            <p className="text-base text-[#6B7280]">자주 쓰는 관계</p>
+            <div className="flex gap-2 flex-wrap">
+              {QUICK_RELATIONS.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setRelation(r)}
+                  className={cn(
+                    'h-12 px-5 rounded-xl text-lg border transition-all',
+                    relation === r
+                      ? 'bg-[#FFF0DC] border-[#E8820C] text-[#E8820C]'
+                      : 'bg-[#F3F4F6] border-[#E5E7EB] text-[#6B7280]',
+                  )}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
-        {/* STEP 2 — 책장 연결 */}
+        {/* 책장 연결 */}
         <div className="w-full bg-white border border-[#E5E7EB] rounded-2xl px-6 py-5 flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col gap-0.5">
-              <p className="text-xl text-[#1F2937]">책장 연결하기</p>
-              <p className="text-[1.0625rem] text-[#6B7280]">초대 링크를 받아주세요</p>
-            </div>
-            <div className="bg-[#6B7280] rounded px-3 py-1">
-              <span className="text-[0.9375rem] text-white">STEP 2</span>
-            </div>
+          <div className="flex flex-col gap-0.5">
+            <p className="text-xl text-[#1F2937]">책장 연결하기</p>
+            <p className="text-[1.0625rem] text-[#6B7280]">초대 링크를 받아주세요</p>
           </div>
 
           {/* 카카오 링크 옵션 */}
@@ -177,24 +172,18 @@ export default function ReaderSetupPage() {
           {/* 코드 직접 입력 */}
           <div className="flex flex-col gap-3">
             <p className="text-[1.0625rem] text-[#6B7280]">초대 코드 직접 입력</p>
-            <div className="flex gap-1.5">
-              {Array.from({ length: CODE_LENGTH }).map((_, i) => (
-                <input
-                  key={i}
-                  type="text"
-                  maxLength={1}
-                  value={inviteCode[i] ?? ''}
-                  onChange={(e) => handleCodeChange(i, e.target.value)}
-                  className={cn(
-                    'flex-1 min-w-0 aspect-square bg-[#F3F4F6] border border-[#E5E7EB] rounded-lg',
-                    'text-xl text-[#1F2937] text-center outline-none',
-                    'focus:border-[#E8820C] focus:bg-white transition-colors',
-                  )}
-                />
-              ))}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                placeholder="초대 코드 입력"
+                maxLength={CODE_LENGTH}
+                className="flex-1 h-12 bg-[#F3F4F6] border border-[#E5E7EB] rounded-lg px-4 text-xl text-[#1F2937] outline-none focus:border-[#E8820C] focus:bg-white transition-colors tracking-widest"
+              />
               <button
                 type="button"
-                className="w-14 shrink-0 aspect-square bg-[#E8820C] rounded-lg text-sm text-white"
+                className="w-16 shrink-0 h-12 bg-[#E8820C] rounded-lg text-base text-white"
               >
                 확인
               </button>
