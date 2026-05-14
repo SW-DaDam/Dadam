@@ -106,7 +106,7 @@ function StepIndicator({ currentStep, onStepClick }: { currentStep: number; onSt
 export default function BookEditPage() {
   const navigate = useNavigate()
   const { bookId } = useParams<{ bookId: string }>()
-  const { book, chapters: realChapters, coverImages, loading, regenerating, extraCoverCount, extraCoverLimit, softDeleteChapter, restoreChapter, updateChapterTitle, selectCover, publishBook, regenerateCover } = useBookEdit(bookId)
+  const { book, chapters: realChapters, coverImages, loading, coverLoading, regenerating, extraCoverCount, extraCoverLimit, softDeleteChapter, restoreChapter, updateChapterTitle, selectCover, publishBook, regenerateCover } = useBookEdit(bookId)
 
   const [currentStep, setCurrentStep] = useState(1)
   const [selectedCoverId, setSelectedCoverId] = useState<string>(MOCK_COVERS[1].id)
@@ -276,17 +276,24 @@ export default function BookEditPage() {
                 onSelect={setSelectedCoverId}
               />
             ) : (
-              <MockCoverSlider
-                covers={MOCK_COVERS}
-                selectedId={selectedCoverId}
-                onSelect={setSelectedCoverId}
-              />
+              <div className="w-full aspect-[4/3] rounded-2xl border-2 border-dashed border-[#E5E7EB] bg-[#FFF8F0] flex flex-col items-center justify-center gap-3">
+                {coverLoading ? (
+                  <>
+                    <div className="w-10 h-10 rounded-full border-4 border-[#E8820C] border-t-transparent animate-spin" />
+                    <p className="text-[1.0625rem] text-[#6B7280]">AI가 표지를 만들고 있어요</p>
+                    <p className="text-sm text-[#9CA3AF]">잠시만 기다려 주세요 (약 1분)</p>
+                  </>
+                ) : (
+                  <p className="text-[1.0625rem] text-[#9CA3AF]">표지를 불러올 수 없어요</p>
+                )}
+              </div>
             )}
           </main>
 
           <div className="shrink-0 bg-white border-t border-[#E5E7EB] px-4 sm:px-6 py-4">
             <button type="button" onClick={() => setCurrentStep(2)}
-              className="w-full max-w-2xl mx-auto block bg-[#E8820C] rounded-2xl py-4 text-center">
+              disabled={coverImages.length === 0}
+              className="w-full max-w-2xl mx-auto block bg-[#E8820C] disabled:opacity-40 rounded-2xl py-4 text-center">
               <span className="text-[1.25rem] text-white">이 표지로 할게요</span>
             </button>
           </div>
