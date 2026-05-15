@@ -174,7 +174,7 @@ export type Database = {
       comments: {
         Row: {
           author_id: string
-          chapter_id: string
+          book_id: string
           content: string
           created_at: string
           id: string
@@ -182,7 +182,7 @@ export type Database = {
         }
         Insert: {
           author_id: string
-          chapter_id: string
+          book_id: string
           content: string
           created_at?: string
           id?: string
@@ -190,7 +190,7 @@ export type Database = {
         }
         Update: {
           author_id?: string
-          chapter_id?: string
+          book_id?: string
           content?: string
           created_at?: string
           id?: string
@@ -205,10 +205,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "comments_chapter_id_fkey"
-            columns: ["chapter_id"]
+            foreignKeyName: "comments_book_id_fkey"
+            columns: ["book_id"]
             isOneToOne: false
-            referencedRelation: "chapters"
+            referencedRelation: "books"
             referencedColumns: ["id"]
           },
         ]
@@ -597,6 +597,39 @@ export type Database = {
         Returns: Database["public"]["Enums"]["user_role"]
       }
       is_family_of: { Args: { p_senior_id: string }; Returns: boolean }
+      net_http_post_cover:
+        | {
+            Args: {
+              p_anon_key: string
+              p_book_id: string
+              p_chapter_id: string
+              p_secret: string
+              p_senior_id: string
+              p_url: string
+            }
+            Returns: number
+          }
+        | {
+            Args: {
+              p_book_id: string
+              p_chapter_id: string
+              p_secret: string
+              p_senior_id: string
+              p_url: string
+            }
+            Returns: undefined
+          }
+        | {
+            Args: {
+              p_anon_key: string
+              p_book_id: string
+              p_chapter_id: string
+              p_secret: string
+              p_senior_id: string
+              p_url: string
+            }
+            Returns: number
+          }
       publish_book: {
         Args: { book_id: string; dedication?: string }
         Returns: undefined

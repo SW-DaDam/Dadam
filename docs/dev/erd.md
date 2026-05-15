@@ -25,7 +25,7 @@ erDiagram
     CONVERSATIONS ||--o{ UTTERANCES : "contains"
     BOOKS ||--o{ CHAPTERS : "contains"
     BOOKS ||--o{ COVER_IMAGES : "candidates"
-    CHAPTERS ||--o{ COMMENTS : "has"
+    BOOKS ||--o{ COMMENTS : "has"
     COMMENTS ||--o| REPLIES : "has-max-1"
 
     PROFILES {
@@ -125,7 +125,7 @@ erDiagram
 
     COMMENTS {
         uuid id PK
-        uuid chapter_id FK
+        uuid book_id FK
         uuid author_id FK
         text content
         timestamp created_at
@@ -392,12 +392,12 @@ CREATE TYPE speaker_role AS ENUM ('senior', 'ai');
 
 ### 3.9 `comments` — 가족 댓글
 
-> 가족이 챕터에 남기는 댓글. 모든 가족에게 공개.
+> 가족이 책에 남기는 댓글. 챕터 단위가 아닌 책 단위로 관리. 모든 가족에게 공개.
 
 | 컬럼 | 타입 | 제약조건 | 설명 |
 |------|------|---------|------|
 | `id` | UUID | PK, DEFAULT gen_random_uuid() | |
-| `chapter_id` | UUID | NOT NULL, FK → chapters(id) ON DELETE CASCADE | 대상 챕터 |
+| `book_id` | UUID | NOT NULL, FK → books(id) ON DELETE CASCADE | 대상 책 |
 | `author_id` | UUID | NOT NULL, FK → profiles(id) ON DELETE CASCADE | 작성자 (가족) |
 | `content` | TEXT | NOT NULL | 댓글 내용 |
 | `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT now() | 생성일 |
@@ -488,7 +488,7 @@ profiles       1 ── N  notifications          (recipient_id)
 conversations  1 ── N  utterances
 books          1 ── N  chapters
 books          1 ── N  cover_images
-chapters       1 ── N  comments
+books          1 ── N  comments
 comments       1 ── 1  replies                (UNIQUE comment_id)
 ```
 
@@ -544,9 +544,9 @@ CREATE INDEX idx_books_published_at
 CREATE INDEX idx_chapters_book_order
   ON chapters(book_id, sort_order) WHERE is_deleted = false;
 
--- comments: 챕터의 댓글 목록 (시간순)
-CREATE INDEX idx_comments_chapter_created
-  ON comments(chapter_id, created_at);
+-- comments: 책의 댓글 목록 (시간순)
+CREATE INDEX idx_comments_book_created
+  ON comments(book_id, created_at);
 
 -- replies: 댓글의 답글 조회
 CREATE INDEX idx_replies_comment
@@ -665,17 +665,28 @@ CREATE POLICY "family_reads_published_chapters" ON chapters
 
 #### `comments` — 가족 작성 + 가족/어르신 전체 공개
 
+> 댓글은 챕터 단위가 아닌 **책 단위**로 달린다. book_id 직접 참조.
+
 ```sql
 -- 본인 댓글: 전체 접근
 CREATE POLICY "own_comments" ON comments
   FOR ALL USING (author_id = auth.uid());
 
--- 가족: 연결된 어르신 책의 모든 댓글 읽기
+-- 가족: 연결된 어르신의 출간 책 댓글 읽기
 CREATE POLICY "family_reads_comments" ON comments
   FOR SELECT USING (
-    chapter_id IN (
-      SELECT c.id FROM chapters c
-      JOIN books b ON c.book_id = b.id
+    book_id IN (
+      SELECT b.id FROM books b
+      WHERE b.status = 'published' AND is_family_of(b.senior_id)
+    )
+  );
+
+-- 가족: 출간 책에 댓글 작성
+CREATE POLICY "family_inserts_comments" ON comments
+  FOR INSERT WITH CHECK (
+    author_id = auth.uid()
+    AND book_id IN (
+      SELECT b.id FROM books b
       WHERE b.status = 'published' AND is_family_of(b.senior_id)
     )
   );
@@ -683,9 +694,8 @@ CREATE POLICY "family_reads_comments" ON comments
 -- 어르신: 자신의 책 댓글 읽기
 CREATE POLICY "senior_reads_comments" ON comments
   FOR SELECT USING (
-    chapter_id IN (
-      SELECT c.id FROM chapters c
-      JOIN books b ON c.book_id = b.id
+    book_id IN (
+      SELECT b.id FROM books b
       WHERE b.senior_id = auth.uid()
     )
   );
@@ -703,8 +713,7 @@ CREATE POLICY "family_reads_replies" ON replies
   FOR SELECT USING (
     comment_id IN (
       SELECT cm.id FROM comments cm
-      JOIN chapters ch ON cm.chapter_id = ch.id
-      JOIN books b ON ch.book_id = b.id
+      JOIN books b ON cm.book_id = b.id
       WHERE b.status = 'published' AND is_family_of(b.senior_id)
     )
   );

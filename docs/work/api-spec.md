@@ -296,26 +296,28 @@ export function useNotificationChannel(userId: string, onInsert: (n: Notificatio
 }
 ```
 
-### 3.2 `comments:chapter:{chapter_id}` — 챕터 댓글 스트림
+### 3.2 `comments:book:{book_id}` — 책 댓글 스트림
+
+> 댓글은 챕터 단위가 아닌 **책 단위**로 달린다. 필터 기준이 `chapter_id` → `book_id`로 변경됨.
 
 | 항목 | 내용 |
 |------|------|
 | 대상 테이블 | `comments` |
 | 이벤트 | `INSERT`, `UPDATE` |
-| 필터 | `chapter_id=eq.{chapterId}` |
+| 필터 | `book_id=eq.{bookId}` |
 | 용도 | F-15 댓글 실시간 표시/수정 반영 |
 
 ```ts
 const channel = supabase
-  .channel(`comments:chapter:${chapterId}`)
+  .channel(`comments:book:${bookId}`)
   .on(
     'postgres_changes',
-    { event: 'INSERT', schema: 'public', table: 'comments', filter: `chapter_id=eq.${chapterId}` },
+    { event: 'INSERT', schema: 'public', table: 'comments', filter: `book_id=eq.${bookId}` },
     (payload) => handleInsert(payload.new)
   )
   .on(
     'postgres_changes',
-    { event: 'UPDATE', schema: 'public', table: 'comments', filter: `chapter_id=eq.${chapterId}` },
+    { event: 'UPDATE', schema: 'public', table: 'comments', filter: `book_id=eq.${bookId}` },
     (payload) => handleUpdate(payload.new)
   )
   .subscribe()
