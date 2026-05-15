@@ -25,6 +25,7 @@ interface UseBookEditReturn {
   softDeleteChapter: (chapterId: string) => Promise<void>
   restoreChapter: (chapterId: string) => Promise<void>
   updateChapterTitle: (chapterId: string, newTitle: string) => Promise<void>
+  updateChapterContent: (chapterId: string, newContent: string) => Promise<void>
   selectCover: (coverId: string) => Promise<void>
   publishBook: (dedication: string) => Promise<void>
   regenerateCover: (chapterId: string) => Promise<void>
@@ -47,8 +48,12 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
   const pollAttemptsRef = useRef(0)
 
   // 챕터 순서 기준으로 표지 정렬하는 헬퍼
+  // selected 표지를 맨 앞에 두어 편집 재진입 시 선택된 표지가 첫 번째로 표시되도록 함
   function sortCoversByChapterOrder(covers: CoverImage[], chapterIds: string[]): CoverImage[] {
     return [...covers].sort((a, b) => {
+      // selected 상태가 항상 먼저 오도록
+      if (a.status === 'selected' && b.status !== 'selected') return -1
+      if (a.status !== 'selected' && b.status === 'selected') return 1
       const ai = chapterIds.indexOf(a.chapter_id ?? '')
       const bi = chapterIds.indexOf(b.chapter_id ?? '')
       if (ai === -1 && bi === -1) return 0
@@ -74,7 +79,7 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
       const [bookRes, chaptersRes, coversRes] = await Promise.all([
         supabase.from('books').select('*').eq('id', id).single(),
         supabase.from('chapters').select('*').eq('book_id', id).order('sort_order'),
-        supabase.from('cover_images').select('*').eq('book_id', id).eq('status', 'candidate'),
+        supabase.from('cover_images').select('*').eq('book_id', id).in('status', ['candidate', 'selected']),
       ])
 
       // fetch 에러 시 에러 상태로 전환 (생성 중 폴링과 구분)
@@ -116,7 +121,7 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
             .from('cover_images')
             .select('*')
             .eq('book_id', id)
-            .eq('status', 'candidate')
+            .in('status', ['candidate', 'selected'])
           if (pollErr) {
             setCoverLoading(false)
             setCoverError(true)
@@ -166,6 +171,21 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
     }
   }, [chapters])
 
+  // chapters RLS: senior_own_chapters (ALL) — 클라이언트 직접 UPDATE 허용
+  const updateChapterContent = useCallback(async (chapterId: string, newContent: string) => {
+    const prevContent = chapters.find(c => c.id === chapterId)?.content
+    setChapters(prev => prev.map(c => c.id === chapterId ? { ...c, content: newContent } : c))
+    const { error } = await supabase
+      .from('chapters')
+      .update({ content: newContent, updated_at: new Date().toISOString() })
+      .eq('id', chapterId)
+    if (error) {
+      if (prevContent !== undefined)
+        setChapters(prev => prev.map(c => c.id === chapterId ? { ...c, content: prevContent } : c))
+      throw error
+    }
+  }, [chapters])
+
   const selectCover = useCallback(async (coverId: string) => {
     if (!bookId) return
     const { error } = await rpc('select_cover', { book_id: bookId, cover_id: coverId })
@@ -200,16 +220,49 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
         }
       )
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? '표지 생성 실패')
+      // 202: 백그라운드 생성 시작 (EdgeRuntime.waitUntil) — 에러 아님
+      if (!res.ok && res.status !== 202) throw new Error(data.error ?? '표지 생성 실패')
 
-      // 새로 생성된 표지를 DB에서 다시 조회 후 챕터 순서에 맞게 정렬
-      const [{ data: newCovers }, { data: currentChapters }] = await Promise.all([
-        supabase.from('cover_images').select('*').eq('book_id', bookId).eq('status', 'candidate'),
-        supabase.from('chapters').select('id').eq('book_id', bookId).order('sort_order'),
-      ])
-      if (newCovers) {
-        const chapterIds = currentChapters?.map((c) => c.id) ?? []
-        setCoverImages(sortCoversByChapterOrder(newCovers, chapterIds))
+      // single 모드는 동기 200(성공) / 500(실패) 반환
+      // 202는 향후 비동기 전환 시를 위해 count 기반 폴링으로 처리 (clock skew 무관)
+      if (res.status === 202) {
+        setCoverLoading(true)
+        const prevCount = coverImages.length  // 호출 전 표지 수
+        pollAttemptsRef.current = 0
+        if (pollTimerRef.current) clearInterval(pollTimerRef.current)
+        pollTimerRef.current = setInterval(async () => {
+          pollAttemptsRef.current += 1
+          if (pollAttemptsRef.current > COVER_POLL_MAX_ATTEMPTS) {
+            setCoverLoading(false)
+            setCoverError(true)
+            if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null }
+            return
+          }
+          const { data: newCovers } = await supabase
+            .from('cover_images')
+            .select('*')
+            .eq('book_id', bookId)
+            .in('status', ['candidate', 'selected'])
+          // row 수가 늘었으면 새 이미지 완성됨 (서버/클라이언트 시계 차이에 무관)
+          if (newCovers && newCovers.length > prevCount) {
+            const { data: currentChapters } = await supabase
+              .from('chapters').select('id').eq('book_id', bookId).order('sort_order')
+            const chapterIds = currentChapters?.map((c) => c.id) ?? []
+            setCoverImages(sortCoversByChapterOrder(newCovers, chapterIds))
+            setCoverLoading(false)
+            if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null }
+          }
+        }, COVER_POLL_INTERVAL_MS)
+      } else {
+        // 200: 동기 완료 — DB에서 바로 조회
+        const [{ data: newCovers }, { data: currentChapters }] = await Promise.all([
+          supabase.from('cover_images').select('*').eq('book_id', bookId).in('status', ['candidate', 'selected']),
+          supabase.from('chapters').select('id').eq('book_id', bookId).order('sort_order'),
+        ])
+        if (newCovers) {
+          const chapterIds = currentChapters?.map((c) => c.id) ?? []
+          setCoverImages(sortCoversByChapterOrder(newCovers, chapterIds))
+        }
       }
     } finally {
       setRegenerating(false)
@@ -219,6 +272,6 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
   return {
     book, chapters, coverImages, loading, coverLoading, coverError,
     regenerating, extraCoverCount, extraCoverLimit: EXTRA_COVER_LIMIT,
-    softDeleteChapter, restoreChapter, updateChapterTitle, selectCover, publishBook, regenerateCover,
+    softDeleteChapter, restoreChapter, updateChapterTitle, updateChapterContent, selectCover, publishBook, regenerateCover,
   }
 }

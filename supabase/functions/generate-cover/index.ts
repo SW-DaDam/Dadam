@@ -14,7 +14,7 @@ const CORS_HEADERS = {
 }
 
 const EXTRA_COVER_LIMIT = 3      // 사용자가 추가로 생성할 수 있는 최대 표지 수 (챕터 수 기준 초과분)
-const IMAGE_SIZE = '1024x1024'   // gpt-image-2 지원 크기: 1024x1024 | 1536x1024 | 1024x1536
+const IMAGE_SIZE = '1024x1536'   // 책 표지 2:3 세로 비율 — 상단 여백 확보용
 const BUCKET = 'book-covers'     // Supabase Storage 버킷명
 
 // ─── 타입 ─────────────────────────────────────────────────────────────────────
@@ -43,67 +43,157 @@ const GENDER_PALETTE: Record<string, string> = {
   male: 'clear sky blue, warm amber, fresh olive green, soft teal, light sandy beige',
 }
 
-// ─── 헬퍼: GPT-4o mini로 챕터 내용 기반 구체적 이미지 씬 생성 ─────────────────
-// 챕터 내용을 분석해 "어떤 장면을 그릴지" 자체를 GPT-4o mini가 결정하도록 위임
-// gpt-image-2에는 씬 묘사 + 스타일 지시만 넘겨 내용 반영도를 높임
-async function generateSceneDescription(
+// ─── 씬 레이아웃 타입 (LLM Blueprint 패턴) ───────────────────────────────────
+// GPT-4o mini가 출력하는 구조화된 씬 정보
+interface SceneLayout {
+  background: string          // 구체적 장소·시대·날씨·빛 방향
+  foreground_objects: Array<{
+    object: string            // 인물 또는 사물
+    position: string          // 화면 내 위치 (lower-left, center, etc.)
+    action: string            // 구체적 동작 또는 자세
+  }>
+  lighting: string            // 빛의 성질·방향·분위기
+  mood: string                // 감정 톤 1단어 (English)
+  selected_scene_reason: string  // 이 씬을 선택한 이유 (디버깅용)
+}
+
+// ─── 헬퍼: 3단계 씬 파이프라인 ───────────────────────────────────────────────
+//
+// [Step 1] 챕터 전체 내용 분석 → 시각화 후보 3개 추출
+//   기준: 감정 강도 / 시각적 구체성(장소·사물·행동) / 인물 관계 표현
+//
+// [Step 2] 후보 중 gpt-image-2 수채화로 가장 임팩트 있을 1개 선택
+//   + LLM Blueprint 방식으로 레이아웃 JSON 구조화 출력
+//
+// [Step 3] JSON → buildDallePrompt()로 최종 프롬프트 조립
+//
+// 이전 방식 문제:
+//   - 챕터 앞 300자만 입력 → 핵심 장면 누락 가능
+//   - 씬 후보 선택 없음 → "혼자 먼 곳 바라보기" 패턴 수렴
+//   - 구조 없음 → 배경·인물 배치가 모델 임의 결정
+async function generateSceneLayout(
   openai: OpenAI,
   chapter: Chapter,
   genderLabel: string,
   ageLabel: string,
-): Promise<string> {
+): Promise<SceneLayout | null> {
   try {
     const res = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: [
-            'You are an art director creating book cover scene descriptions for a Korean senior memoir.',
-            'Given a chapter title and content (in Korean), describe ONE specific visual scene in English that captures the essence of the story.',
-            'Rules:',
-            '- The scene must be directly tied to the specific story content — not generic.',
-            `- Include ONE ${ageLabel} ${genderLabel} figure naturally placed in the scene. Choose the most fitting pose and angle — side view, looking away, sitting, walking, standing, etc. No need to show the back only.`,
-            '- The scene can be indoors or outdoors depending on the story (a bakery interior, a stream, a village alley, etc.).',
-            '- Write only the scene description in 2-3 sentences. No explanation, no title, no style instructions.',
-          ].join('\n'),
+          content: `You are an expert art director for a Korean senior memoir publishing house.
+Your task is a two-step process to select and describe the BEST scene from a chapter for a watercolor book cover.
+
+[Step 1 — Extract 3 candidate scenes]
+Read the FULL chapter content carefully. Identify 3 specific moments that would make great book cover images.
+Score each candidate on:
+- Emotional intensity (joy, longing, warmth, pride — NOT vague nostalgia)
+- Visual specificity (concrete place, object, action — NOT abstract feelings)
+- Relationship expression (are other people involved? interaction is better than solitude)
+
+[Step 2 — Select best scene and output layout JSON]
+Choose the candidate with the highest total score.
+Then output a layout JSON with this exact structure — no markdown, no explanation, ONLY the JSON object:
+
+{
+  "background": "<specific location, era, time of day, weather, light direction>",
+  "foreground_objects": [
+    { "object": "<who or what>", "position": "<lower-center / left / right / etc.>", "action": "<concrete physical action — NEVER 'gazing into the distance' or 'looking away nostalgically'>" },
+    { "object": "<optional second figure or key prop>", "position": "<position>", "action": "<action>" }
+  ],
+  "lighting": "<quality and direction of light — e.g. warm afternoon sunlight streaming through window>",
+  "mood": "<single English word — e.g. joy / warmth / longing / pride>",
+  "selected_scene_reason": "<one sentence: why this scene beats the other two>"
+}
+
+Rules for foreground_objects:
+- The protagonist is ONE ${ageLabel} ${genderLabel}.
+- If the chapter mentions another person (spouse, grandchild, friend, colleague), INCLUDE them as a second object.
+- Actions must be concrete and specific: "handing a letter", "lifting a child", "sharing kimbap", "shaking hands", "cooking together" — NOT "looking away" or "gazing nostalgically".
+- Position protagonist in the lower 60% of frame to leave upper 30% as open sky or soft background for title text.
+
+[CRITICAL — Era and Age Rules]
+Determine the TIME PERIOD of the scene BEFORE describing characters:
+
+PAST MEMORY (회상) — if the chapter contains keywords like: 어릴 때, 그 시절, 옛날, 어린 시절, 그때, 보릿고개, 젊었을 때, 학교 다닐 때, 6·25, 피난, 전쟁, 예전에, 고향에서 어렸을 때:
+  → The scene takes place in THAT ERA (1940s–1970s Korea)
+  → The protagonist must appear at the AGE they were in that memory (child, teenager, or young adult — NOT elderly)
+  → Background must reflect the era: thatched-roof houses, dirt roads, traditional Korean village, period-appropriate clothing
+  → Other characters (father, mother, friends) also appear at their age from that time
+  → This is a FLASHBACK scene — depict it as a vivid memory, not the present day
+
+PRESENT / NEAR FUTURE — if the chapter describes current daily life or near-future plans ("요즘", "매일", "오늘", "가보려 한다"):
+  → The protagonist appears as a ${ageLabel} ${genderLabel} in modern or contemporary setting
+
+STORYTELLING TO OTHERS — if the chapter describes the author telling a past story to grandchildren/family:
+  → Show the PAST SCENE being described (the memory itself), not the act of telling
+  → Characters in the memory appear at their historical age`,
         },
         {
           role: 'user',
-          content: `Chapter title: ${chapter.title}\nChapter content: ${chapter.content.slice(0, 300)}`,
+          // 전체 챕터 내용 전달 (이전: 앞 300자만)
+          content: `Chapter title: ${chapter.title}\nChapter content (full):\n${chapter.content}`,
         },
       ],
-      max_tokens: 200,
+      max_tokens: 400,
       temperature: 0.7,
+      response_format: { type: 'json_object' },
     })
-    return res.choices[0]?.message?.content?.trim() ?? ''
-  } catch {
-    return ''
+
+    const raw = res.choices[0]?.message?.content?.trim()
+    if (!raw) return null
+    return JSON.parse(raw) as SceneLayout
+  } catch (e) {
+    console.error('[generate-cover] SceneLayout 파싱 실패:', e)
+    return null
   }
 }
 
-// ─── 헬퍼: 챕터별 이미지 프롬프트 구성 ──────────────────────────────────────
-// - GPT-4o mini가 생성한 씬 묘사를 중심으로 프롬프트 구성
-// - 스타일·색감·금지 지시는 고정 래퍼로 감쌈
-
+// ─── 헬퍼: SceneLayout JSON → gpt-image-2 프롬프트 조립 ─────────────────────
+// LLM Blueprint 방식: 구조화된 레이아웃을 자연어 프롬프트로 변환
+// subject → lighting → composition → style → constraints 순서 (OpenAI Cookbook 권장)
 function buildDallePrompt(
-  sceneDescription: string,
+  layout: SceneLayout,
   palette: string,
 ): string {
-  return `A beautiful illustrated book cover for a Korean senior memoir. ` +
-    `Scene: ${sceneDescription} ` +
-    `Style: bright and cheerful watercolor illustration — warm light, clear and luminous colors, ` +
-    `not gloomy or dark, not overly saturated or garish. ` +
-    `Think Korean literary novel cover art or Japanese watercolor picture book with a gentle brightness. ` +
-    `NOT photorealistic, NOT manga, NOT comic book style. ` +
-    `Faces may appear but should be soft and impressionistic — no hyper-realistic or detailed facial features. ` +
-    `Color palette: ${palette} — bright, airy, and emotionally warm. Avoid dark or muddy tones. ` +
-    `Absolutely NO text, NO letters, NO numbers anywhere in the image. ` +
-    `High quality publishing-grade illustration.`
+  // foreground_objects를 자연어로 조립
+  const subjects = layout.foreground_objects
+    .map(o => `${o.object} (${o.position}): ${o.action}`)
+    .join('; ')
+
+  return [
+    // 1. 장르·용도 선언
+    `A beautiful watercolor book cover illustration for a Korean senior memoir.`,
+    // 2. 배경 (구체적 장소·시대·빛)
+    `Background: ${layout.background}.`,
+    // 3. 인물·오브젝트 (위치+동작 명시)
+    `Foreground: ${subjects}.`,
+    // 4. 조명
+    `Lighting: ${layout.lighting}.`,
+    // 5. 감정 톤
+    `Overall mood: ${layout.mood}.`,
+    // 6. 레이아웃 — 상단 여백 (제목 텍스트용)
+    `Composition: subjects placed in the lower 60% of the frame; upper 30% is open sky, soft bokeh, or minimal background to leave space for title text overlay.`,
+    // 7. 스타일 (재질·기법 명시로 실제 수채화 느낌 유도)
+    `Style: hand-painted watercolor illustration, soft cold-pressed paper texture, visible brushwork at edges, translucent color washes, gentle ink outline.`,
+    `Warm light, clear and luminous colors, not gloomy or dark, not overly saturated.`,
+    `Think Korean literary novel cover art or Japanese watercolor picture book with gentle brightness.`,
+    `NOT photorealistic, NOT manga, NOT comic book style.`,
+    `Faces may appear but should be soft and impressionistic — no hyper-realistic facial features.`,
+    // 8. 색 팔레트
+    `Color palette: ${palette} — bright, airy, emotionally warm. Avoid dark or muddy tones.`,
+    // 9. 절대 금지
+    `Absolutely NO text, NO letters, NO numbers, NO watermarks anywhere in the image.`,
+  ].join(' ')
 }
 
 
 // ─── 헬퍼: 이미지 1장 생성 + Storage 업로드 + cover_images upsert ─────────────
+// rate limit(429) 시 최대 3회까지 재시도 (60초 대기)
+const IMAGE_GEN_MAX_RETRIES = 3
+const RATE_LIMIT_WAIT_MS = 65_000  // 429 에러 후 65초 대기 (분당 5개 제한 리셋)
 
 async function generateAndUploadCover(
   openai: OpenAI,
@@ -116,13 +206,30 @@ async function generateAndUploadCover(
 ): Promise<void> {
   // gpt-image-2는 n=1 고정 — 3장은 반드시 3회 별도 호출 필요
   // response_format 파라미터 없음 — 항상 b64_json으로 반환
-  const imageRes = await openai.images.generate({
-    model: 'gpt-image-2',
-    prompt: dallePrompt,
-    n: 1,
-    size: IMAGE_SIZE,
-  })
-
+  // rate limit(429) 발생 시 65초 대기 후 재시도
+  let imageRes: Awaited<ReturnType<typeof openai.images.generate>> | null = null
+  for (let attempt = 1; attempt <= IMAGE_GEN_MAX_RETRIES; attempt++) {
+    try {
+      imageRes = await openai.images.generate({
+        model: 'gpt-image-2',
+        prompt: dallePrompt,
+        n: 1,
+        size: IMAGE_SIZE,
+        quality: 'low',  // low: 3~8초, medium: 20~40초 — 퀄리티 테스트 후 결정
+      })
+      break  // 성공 시 루프 탈출
+    } catch (err: unknown) {
+      const msg = String(err)
+      const is429 = msg.includes('429') || msg.includes('Rate limit')
+      if (is429 && attempt < IMAGE_GEN_MAX_RETRIES) {
+        console.warn(`[generate-cover] rate limit 429 — ${RATE_LIMIT_WAIT_MS / 1000}초 대기 후 재시도 (${attempt}/${IMAGE_GEN_MAX_RETRIES})`)
+        await new Promise(r => setTimeout(r, RATE_LIMIT_WAIT_MS))
+        continue
+      }
+      throw err  // 429 아닌 에러 또는 최대 재시도 초과 시 즉시 throw
+    }
+  }
+  if (!imageRes) throw new Error(`gpt-image-2 이미지 생성 실패 (최대 재시도 초과, index ${index})`)
   const b64 = imageRes.data[0]?.b64_json
   if (!b64) throw new Error(`gpt-image-2 응답에 b64_json 없음 (index ${index})`)
 
@@ -282,10 +389,12 @@ Deno.serve(async (req) => {
 
       // 이미지 생성·업로드 실패 시 job을 failed로 마킹해 영구 limbo 방지
       try {
-        const sceneDescription = await generateSceneDescription(openai, chapter as Chapter, genderLabel, ageLabel)
-        const dallePrompt = buildDallePrompt(sceneDescription, palette)
+        const layout = await generateSceneLayout(openai, chapter as Chapter, genderLabel, ageLabel)
+        if (!layout) throw new Error('SceneLayout 생성 실패')
+        const dallePrompt = buildDallePrompt(layout, palette)
 
-        console.log(`[generate-cover] batch_single — chapter ${chapterId} (${chapter.title}) 씬: ${sceneDescription}`)
+        console.log(`[generate-cover] batch_single — chapter ${chapterId} (${chapter.title}) 선택 이유: ${layout.selected_scene_reason}`)
+        console.log(`[generate-cover] batch_single — mood: ${layout.mood}, layout:`, JSON.stringify(layout.foreground_objects))
         await generateAndUploadCover(openai, supabaseAdmin, bookId, seniorId, chapterId, dallePrompt, chapter.sort_order - 1)
       } catch (genErr) {
         console.error(`[generate-cover] batch_single 실패 — chapter ${chapterId}:`, genErr)
@@ -428,16 +537,25 @@ Deno.serve(async (req) => {
       const ageLabel = age ? `${Math.floor(age / 10) * 10}s` : 'elderly'
       const palette = gender ? (GENDER_PALETTE[gender] ?? GENDER_PALETTE['female']) : GENDER_PALETTE['female']
 
-      // GPT-4o mini로 챕터 내용 기반 구체적 씬 생성
-      const sceneDescription = await generateSceneDescription(openai, chapter as Chapter, genderLabel, ageLabel)
-      const dallePrompt = buildDallePrompt(sceneDescription, palette)
+      // 동기 실행 — waitUntil은 Supabase Edge Runtime에서 응답 후 즉시 종료되어 동작하지 않음
+      // 실패 시 500을 반환해 프론트엔드가 즉시 에러를 인지하도록 함
+      const layout = await generateSceneLayout(openai, chapter as Chapter, genderLabel, ageLabel)
+      if (!layout) {
+        console.error('[generate-cover] single 모드 — SceneLayout 생성 실패')
+        return new Response(
+          JSON.stringify({ error: 'SceneLayout 생성에 실패했습니다' }),
+          { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+        )
+      }
 
+      const dallePrompt = buildDallePrompt(layout, palette)
       console.log(`[generate-cover] single 모드 — 챕터 재생성 (chapter_id: ${chapterId}, extra: ${extraCount + 1}/${EXTRA_COVER_LIMIT})`)
-      console.log(`[generate-cover] 씬 묘사: ${sceneDescription}`)
+      console.log(`[generate-cover] 선택 씬 이유: ${layout.selected_scene_reason}, mood: ${layout.mood}`)
       await generateAndUploadCover(openai, supabaseAdmin, bookId, seniorId, chapterId, dallePrompt, totalCount)
+      console.log(`[generate-cover] single 모드 — 생성 완료 (chapter_id: ${chapterId})`)
 
       return new Response(
-        JSON.stringify({ message: '표지 1장 추가 생성 완료', extra_count: extraCount + 1, extra_limit: EXTRA_COVER_LIMIT }),
+        JSON.stringify({ message: '표지 생성 완료', extra_count: extraCount + 1, extra_limit: EXTRA_COVER_LIMIT }),
         { status: 200, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
       )
     }
@@ -522,11 +640,13 @@ Deno.serve(async (req) => {
 
     // GPT-4o mini로 챕터별 씬 묘사 병렬 생성 — 각 챕터 내용에 맞는 구체적 장면 결정
     console.log(`[generate-cover] 챕터별 씬 묘사 생성 시작 (${(chapters as Chapter[]).length}개)`)
-    const chaptersWithScene = await Promise.all(
+    // 챕터별 씬 레이아웃 병렬 생성 (GPT-4o mini — 빠름)
+    console.log(`[generate-cover] 챕터별 씬 레이아웃 생성 시작 (${(chapters as Chapter[]).length}개)`)
+    const chaptersWithLayout = await Promise.all(
       (chapters as Chapter[]).map(async (chapter) => {
-        const sceneDescription = await generateSceneDescription(openai, chapter, genderLabel, ageLabel)
-        console.log(`[generate-cover] 챕터 "${chapter.title}" 씬: ${sceneDescription}`)
-        return { chapter, sceneDescription }
+        const layout = await generateSceneLayout(openai, chapter, genderLabel, ageLabel)
+        console.log(`[generate-cover] 챕터 "${chapter.title}" — 선택 이유: ${layout?.selected_scene_reason ?? '실패'}, mood: ${layout?.mood ?? '-'}`)
+        return { chapter, layout }
       }),
     )
 
@@ -534,8 +654,9 @@ Deno.serve(async (req) => {
     console.log(`[generate-cover] 챕터별 표지 병렬 생성 시작 (${(chapters as Chapter[]).length}장, book_id: ${bookId})`)
 
     const results = await Promise.allSettled(
-      chaptersWithScene.map(({ chapter, sceneDescription }, i) => {
-        const dallePrompt = buildDallePrompt(sceneDescription, palette)
+      chaptersWithLayout.map(({ chapter, layout }, i) => {
+        if (!layout) return Promise.reject(new Error(`chapter ${chapter.id} SceneLayout 생성 실패`))
+        const dallePrompt = buildDallePrompt(layout, palette)
         return generateAndUploadCover(openai, supabaseAdmin, bookId, seniorId, chapter.id, dallePrompt, i)
       }),
     )
