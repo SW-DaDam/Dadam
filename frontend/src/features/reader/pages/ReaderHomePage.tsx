@@ -2,60 +2,41 @@ import { useNavigate } from 'react-router'
 import { Settings } from 'lucide-react'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { NotificationBell } from '@/features/notifications/components/NotificationBell'
-import { useBookshelf } from '@/features/bookshelf/hooks/useBookshelf'
+import { useFamilyBookshelf } from '@/features/bookshelf/hooks/useFamilyBookshelf'
 import { ShelfRack } from '@/features/bookshelf/components/ShelfRack'
+import type { BookWithStats } from '@/types/domain'
 
 function todayLabel() {
   return new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' })
 }
-
-const ACTIVITIES = [
-  {
-    id: 1,
-    iconBg: '#FFF0DC',
-    icon: '↩',
-    iconColor: '#E8820C',
-    title: '엄마가 내 댓글에 답장했어요',
-    meta: '3월 책 · 챕터 2 · 30분 전',
-    actionLabel: '답장 듣기 ›',
-    actionBg: '#FFF0DC',
-    actionColor: '#E8820C',
-  },
-  {
-    id: 2,
-    iconBg: '#DCFCE7',
-    icon: '🖼',
-    iconColor: '#16A34A',
-    title: '이수빈이 3월 책에 사진을 추가했어요',
-    meta: '3월 책 · 어제',
-    actionLabel: '보러가기 ›',
-    actionBg: '#F3F4F6',
-    actionColor: '#6B7280',
-  },
-]
 
 export default function ReaderHomePage() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const displayName: string = user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? '사용자'
 
-  const { books, loading } = useBookshelf()
-  const latestBook = books.find((b) => b.status === 'published')
+  const { books, seniorName, loading } = useFamilyBookshelf()
+  const seniorLabel = seniorName || '어르신'
+  const latestBook = books[0] ?? null
+
+  function getNavPath(book: BookWithStats) {
+    return `/r/books/${book.id}`
+  }
 
   return (
     <div className="flex flex-col h-full">
 
       {/* 헤더 */}
-      <header className="w-full h-[80px] bg-white border-b border-[#E5E7EB] flex items-center justify-between px-4 sm:px-6 shrink-0">
-        <span className="text-base sm:text-xl text-[#6B7280]">{todayLabel()}</span>
-        <div className="flex items-center gap-2">
+      <header className="w-full min-h-[72px] bg-white border-b border-[#E5E7EB] flex items-center justify-between px-4 sm:px-6 py-3 gap-3 shrink-0">
+        <span className="flex-1 min-w-0 truncate text-lg text-[#6B7280]">{todayLabel()}</span>
+        <div className="flex items-center gap-2 shrink-0">
           <NotificationBell role="reader" />
           <button
             type="button"
             onClick={() => navigate('/r/settings')}
-            className="w-14 h-14 rounded-xl bg-[#FFF0DC] flex flex-col items-center justify-center gap-0.5"
+            className="w-12 h-12 rounded-xl bg-[#FFF0DC] flex flex-col items-center justify-center gap-0.5"
           >
-            <Settings size={20} className="text-[#E8820C]" />
+            <Settings size={18} className="text-[#E8820C]" />
             <span className="text-xs text-[#E8820C]">설정</span>
           </button>
         </div>
@@ -73,7 +54,11 @@ export default function ReaderHomePage() {
           <div className="flex-1 bg-white rounded-xl px-4 py-3 flex flex-col gap-0.5">
             <p className="text-[1.0625rem] text-[#1F2937]">{displayName} 님, 반가워요 :)</p>
             <p className="text-base text-[#6B7280]">
-              {latestBook ? '엄마가 새 책을 출간했어요. 읽어보셨나요?' : '엄마가 새 책을 준비 중이에요'}
+              {loading
+                ? '책장을 불러오는 중이에요'
+                : latestBook
+                ? `${seniorLabel}이 새 책을 출간했어요. 읽어보셨나요?`
+                : `${seniorLabel}이 책을 준비 중이에요`}
             </p>
           </div>
         </div>
@@ -93,7 +78,6 @@ export default function ReaderHomePage() {
             </div>
 
             <div className="flex items-stretch gap-4 px-5 pt-6 pb-5">
-              {/* 책 표지 */}
               <div className="relative w-[72px] shrink-0">
                 {latestBook.cover_image_url ? (
                   <img
@@ -103,22 +87,17 @@ export default function ReaderHomePage() {
                   />
                 ) : (
                   <div className="w-full bg-[#FFF0DC] border-[1.5px] border-[#E8820C] rounded-lg py-4 flex flex-col items-center gap-0">
-                    <p className="text-xs text-[#E8820C] text-center px-1 leading-tight">
-                      {latestBook.title}
-                    </p>
+                    <p className="text-xs text-[#E8820C] text-center px-1 leading-tight">{latestBook.title}</p>
                     <p className="text-xs text-[#6B7280] mt-1">{latestBook.month}월</p>
                   </div>
                 )}
                 <div className="absolute top-0 bottom-0 left-0 w-1.5 bg-[#E8820C] opacity-35 rounded-l-lg" />
               </div>
 
-              {/* 책 정보 */}
               <div className="flex-1 flex flex-col justify-between">
                 <div className="flex flex-col gap-1">
                   <p className="text-[1.25rem] text-[#1F2937]">{latestBook.title}</p>
-                  <p className="text-base text-[#6B7280]">
-                    {latestBook.year}년 {latestBook.month}월
-                  </p>
+                  <p className="text-base text-[#6B7280]">{latestBook.year}년 {latestBook.month}월</p>
                   <p className="text-base text-[#6B7280]">
                     챕터 {latestBook.chapter_count}개
                     {latestBook.dedication ? ' · 에필로그 포함' : ''}
@@ -137,60 +116,30 @@ export default function ReaderHomePage() {
           </div>
         )}
 
-        {/* 최근 활동 카드 */}
-        <div className="bg-white border border-[#E5E7EB] rounded-2xl">
-          <p className="text-[1.25rem] text-[#1F2937] px-5 pt-4 pb-3">최근 활동</p>
-          <div className="divide-y divide-[#E5E7EB]">
-            {ACTIVITIES.map((a) => (
-              <div key={a.id} className="flex items-center gap-3 px-5 py-3">
-                <div
-                  className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-base"
-                  style={{ backgroundColor: a.iconBg }}
-                >
-                  <span style={{ color: a.iconColor }}>{a.icon}</span>
-                </div>
-                <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                  <p className="text-[1.0625rem] text-[#1F2937]">{a.title}</p>
-                  <p className="text-sm text-[#6B7280]">{a.meta}</p>
-                </div>
-                <button
-                  type="button"
-                  className="rounded-lg px-3 py-1.5 shrink-0 min-h-11"
-                  style={{ backgroundColor: a.actionBg }}
-                >
-                  <span className="text-sm" style={{ color: a.actionColor }}>{a.actionLabel}</span>
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* 엄마의 책장 미리보기 */}
+        {/* 어르신 책장 */}
         <div className="bg-white border border-[#E5E7EB] rounded-2xl px-5 py-4 flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <p className="text-[1.25rem] text-[#1F2937]">엄마의 책장</p>
-            <button type="button" onClick={() => navigate('/r/bookshelf')}>
-              <span className="text-base text-[#E8820C]">모두 보기 ›</span>
-            </button>
-          </div>
-
+          <p className="text-[1.25rem] text-[#1F2937]">{seniorLabel}의 책장</p>
           <ShelfRack
-            books={books.slice(0, 4)}
+            books={books}
             loading={loading}
-            showInProgressPlaceholder
+            getNavPath={getNavPath}
+            showInProgressPlaceholder={false}
             rowSize={4}
           />
+          {!loading && books.length === 0 && (
+            <p className="text-base text-[#9CA3AF] text-center py-4">아직 출간된 책이 없어요</p>
+          )}
         </div>
 
         {/* 댓글 CTA */}
-        {latestBook && (
+        {!loading && latestBook && (
           <div className="bg-white border border-[#E5E7EB] rounded-2xl px-5 py-4 flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-[#FFF0DC] flex items-center justify-center shrink-0 text-lg">
               💬
             </div>
             <div className="flex-1 flex flex-col gap-0.5">
-              <p className="text-[1.125rem] text-[#1F2937]">엄마에게 첫 댓글을 남겨보세요</p>
-              <p className="text-sm text-[#6B7280]">{latestBook.month}월 책에 아직 댓글이 없어요</p>
+              <p className="text-[1.125rem] text-[#1F2937]">{seniorLabel}에게 댓글을 남겨보세요</p>
+              <p className="text-sm text-[#6B7280]">{latestBook.month}월 책에 소감을 남겨요</p>
             </div>
             <button
               type="button"
