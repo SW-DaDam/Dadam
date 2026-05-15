@@ -7,10 +7,11 @@ import type { Chapter, CoverImage } from '@/types/domain'
 
 // ─── 상수 ────────────────────────────────────────────────────────
 
+// 스텝 순서: 챕터 확인 → 표지 선택 → 작가의 말 → 출간
 const STEPS = [
-  { n: 1, label: '표지 선택' },
-  { n: 2, label: '챕터 확인' },
-  { n: 3, label: '헌사' },
+  { n: 1, label: '챕터 확인' },
+  { n: 2, label: '표지 선택' },
+  { n: 3, label: '작가의 말' },
   { n: 4, label: '출간' },
 ]
 
@@ -20,6 +21,7 @@ const MOCK_CHAPTERS: Chapter[] = [
   { id: 'mock-3', book_id: '', content: '오랜만에 봄비가 내렸다. 빗소리를 들으며 옛 생각이 났다. 젊은 시절 남편과 함께 걷던 골목이 떠올랐다.', title: '봄비 오던 날의 추억', sort_order: 3, is_deleted: false, theme: '추억', source_utterance_ids: null, created_at: '', updated_at: '' },
 ]
 
+const CONTENT_MAX = 2000  // 챕터 내용 수정 최대 글자 수
 
 // ─── 진행 표시기 ─────────────────────────────────────────────────
 
@@ -34,7 +36,6 @@ function StepIndicator({ currentStep, onStepClick }: { currentStep: number; onSt
         {STEPS.map((step) => {
           const done = step.n < currentStep
           const active = step.n === currentStep
-          // 이미 완료된 단계 또는 현재 단계만 클릭 이동 허용
           const clickable = step.n <= currentStep
           return (
             <button key={step.n} type="button"
@@ -62,24 +63,35 @@ function StepIndicator({ currentStep, onStepClick }: { currentStep: number; onSt
 export default function BookEditPage() {
   const navigate = useNavigate()
   const { bookId } = useParams<{ bookId: string }>()
-  const { book, chapters: realChapters, coverImages, loading, coverLoading, coverError, regenerating, extraCoverCount, extraCoverLimit, softDeleteChapter, restoreChapter, updateChapterTitle, selectCover, publishBook, regenerateCover } = useBookEdit(bookId)
+  const {
+    book, chapters: realChapters, coverImages, loading, coverLoading, coverError,
+    regenerating, extraCoverCount, extraCoverLimit,
+    softDeleteChapter, restoreChapter, updateChapterTitle, updateChapterContent,
+    selectCover, publishBook, regenerateCover,
+  } = useBookEdit(bookId)
 
   const [currentStep, setCurrentStep] = useState(1)
   const [selectedCoverId, setSelectedCoverId] = useState<string>('')
 
   // 최초 로드 시에만 첫 번째 표지로 초기화
   // 재생성 후 coverImages가 갱신될 때 사용자가 선택한 표지가 리셋되지 않도록
-  // 현재 선택된 ID가 목록에 없을 때만 첫 번째로 교정
   useEffect(() => {
     if (coverImages.length > 0 && !coverImages.some(c => c.id === selectedCoverId)) {
       setSelectedCoverId(coverImages[0].id)
     }
   }, [coverImages, selectedCoverId])
+
   const [viewingChapter, setViewingChapter] = useState<Chapter | null>(null)
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null)
+  // 제목 편집
   const [editingChapterId, setEditingChapterId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
-  const [dedication, setDedication] = useState('')
+  // 내용 편집 모달
+  const [editingContentChapter, setEditingContentChapter] = useState<Chapter | null>(null)
+  const [editingContent, setEditingContent] = useState('')
+  const [savingContent, setSavingContent] = useState(false)
+
+  const [authorNote, setAuthorNote] = useState('')  // 작가의 말 (구 헌사)
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [published, setPublished] = useState(false)
@@ -118,12 +130,33 @@ export default function BookEditPage() {
     setEditingChapterId(null)
   }
 
+  // ─── 챕터 내용 편집 ─────────────────────────────────────────────
+
+  function openEditContent(chapter: Chapter) {
+    setEditingContentChapter(chapter)
+    setEditingContent(chapter.content)
+  }
+
+  async function confirmEditContent() {
+    if (!editingContentChapter || !editingContent.trim()) return
+    if (isMock) { setEditingContentChapter(null); return }
+    setSavingContent(true)
+    try {
+      await updateChapterContent(editingContentChapter.id, editingContent.trim())
+      showToast('내용이 수정됐어요')
+    } catch {
+      showToast('내용 수정에 실패했어요')
+    } finally {
+      setSavingContent(false)
+      setEditingContentChapter(null)
+    }
+  }
+
   // ─── 챕터 빼기 / 되돌리기 ───────────────────────────────────────
 
   async function handleRemoveChapter(id: string) {
     setConfirmRemoveId(null)
     if (isMock) {
-      // 목업: 로컬 상태 변경 없음 (MOCK_CHAPTERS는 불변). 안내만.
       showToast('목업 데이터입니다. 실제 데이터 연동 후 적용돼요')
       return
     }
@@ -149,12 +182,12 @@ export default function BookEditPage() {
     setPublishConfirmOpen(false)
     setPublishing(true)
     try {
-      // 실제 커버가 있고 선택된 경우에만 select_cover 호출
       if (!isMock && coverImages.length > 0) {
         await selectCover(selectedCoverId)
       }
       if (!isMock && bookId) {
-        await publishBook(dedication)
+        // dedication 파라미터에 작가의 말 저장 (DB 컬럼명 유지)
+        await publishBook(authorNote.trim())
       }
       setPublished(true)
       setCurrentStep(4)
@@ -193,84 +226,8 @@ export default function BookEditPage() {
 
       {currentStep < 4 && <StepIndicator currentStep={currentStep} onStepClick={n => setCurrentStep(n as 1 | 2 | 3 | 4)} />}
 
-      {/* ── Step 1: 표지 선택 (F-13) ── */}
+      {/* ── Step 1: 챕터 확인 (F-12) ── */}
       {currentStep === 1 && (
-        <>
-          <main className="flex-1 overflow-hidden w-full max-w-2xl mx-auto px-4 sm:px-6 py-3 flex flex-col gap-3">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex flex-col gap-1">
-                <p className="text-[1.25rem] font-bold text-[#1F2937] whitespace-nowrap">이번 달 책 표지를 골라주세요</p>
-                <p className="text-[1.0625rem] text-[#6B7280]">AI가 이번 달 이야기를 바탕으로 만들었어요</p>
-              </div>
-              {/* 표지 추가 생성 버튼 — 최대 3장 추가 가능 */}
-              {coverImages.length > 0 && (
-                <button type="button"
-                  disabled={regenerating || extraCoverCount >= extraCoverLimit}
-                  className="shrink-0 flex flex-col items-center gap-1 mt-1 disabled:opacity-40"
-                  onClick={async () => {
-                    // 현재 선택된 표지의 chapter_id를 찾아 해당 챕터 표지 재생성
-                    const chapterId = coverImages.find(c => c.id === selectedCoverId)?.chapter_id
-                    if (!chapterId) return
-                    try {
-                      await regenerateCover(chapterId)
-                    } catch (e) {
-                      showToast(e instanceof Error ? e.message : '표지 생성에 실패했어요')
-                    }
-                  }}>
-                  <div className="w-11 h-11 rounded-full bg-[#FFF0DC] border border-[#E8820C] flex items-center justify-center">
-                    <RefreshCw size={20} className={cn('text-[#E8820C]', regenerating && 'animate-spin')} />
-                  </div>
-                  <span className="text-xs text-[#E8820C]">
-                    {regenerating ? '생성 중…' : `다시 만들기 (${extraCoverCount}/${extraCoverLimit})`}
-                  </span>
-                </button>
-              )}
-            </div>
-
-            {/* 표지 슬라이드 선택 */}
-            {coverImages.length > 0 ? (
-              <CoverSlider
-                covers={coverImages}
-                selectedId={selectedCoverId}
-                onSelect={setSelectedCoverId}
-              />
-            ) : (
-              <div className="w-full aspect-[4/3] rounded-2xl border-2 border-dashed border-[#E5E7EB] bg-[#FFF8F0] flex flex-col items-center justify-center gap-3">
-                {coverError ? (
-                  // fetch 에러 또는 생성 타임아웃: 재시도 유도
-                  <>
-                    <p className="text-[1.0625rem] text-[#6B7280]">표지를 불러오지 못했어요</p>
-                    <button
-                      type="button"
-                      onClick={() => window.location.reload()}
-                      className="text-sm text-[#E8820C] underline underline-offset-2">
-                      다시 시도
-                    </button>
-                  </>
-                ) : coverLoading ? (
-                  // 표지 생성 중 (에러 없음)
-                  <>
-                    <div className="w-10 h-10 rounded-full border-4 border-[#E8820C] border-t-transparent animate-spin" />
-                    <p className="text-[1.0625rem] text-[#6B7280]">AI가 표지를 만들고 있어요</p>
-                    <p className="text-sm text-[#9CA3AF]">잠시만 기다려 주세요 (약 1분)</p>
-                  </>
-                ) : null}
-              </div>
-            )}
-          </main>
-
-          <div className="shrink-0 bg-white border-t border-[#E5E7EB] px-4 sm:px-6 py-4">
-            <button type="button" onClick={() => setCurrentStep(2)}
-              disabled={coverImages.length === 0}
-              className="w-full max-w-2xl mx-auto block bg-[#E8820C] disabled:opacity-40 rounded-2xl py-4 text-center">
-              <span className="text-[1.25rem] text-white">이 표지로 할게요</span>
-            </button>
-          </div>
-        </>
-      )}
-
-      {/* ── Step 2: 챕터 확인 (F-12) ── */}
-      {currentStep === 2 && (
         <>
           <main className="flex-1 overflow-y-auto w-full max-w-2xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-4">
             <div className="flex flex-col items-center gap-2 text-center">
@@ -320,11 +277,18 @@ export default function BookEditPage() {
                     </div>
                   </div>
 
-                  <div className="flex justify-end gap-2">
+                  {/* 버튼 행: 내용 보기 / 내용 수정 / 이야기 빼기 */}
+                  <div className="flex justify-end gap-2 flex-wrap">
                     <button type="button" onClick={() => setViewingChapter(chapter)}
                       className="bg-[#F3F4F6] rounded-xl px-4 py-2 min-h-11 flex items-center gap-1.5">
                       <BookOpen size={15} className="text-[#6B7280]" />
                       <span className="text-base text-[#6B7280]">내용 보기</span>
+                    </button>
+                    <button type="button" onClick={() => openEditContent(chapter)}
+                      disabled={editingChapterId === chapter.id}
+                      className="bg-[#EFF6FF] rounded-xl px-4 py-2 min-h-11 flex items-center gap-1.5 disabled:opacity-40">
+                      <Pencil size={15} className="text-[#3B82F6]" />
+                      <span className="text-base text-[#3B82F6]">내용 수정</span>
                     </button>
                     <button type="button" onClick={() => setConfirmRemoveId(chapter.id)}
                       disabled={editingChapterId === chapter.id}
@@ -362,7 +326,7 @@ export default function BookEditPage() {
           </main>
 
           <div className="shrink-0 bg-white border-t border-[#E5E7EB] px-4 sm:px-6 py-4">
-            <button type="button" onClick={() => setCurrentStep(3)}
+            <button type="button" onClick={() => setCurrentStep(2)}
               disabled={activeChapters.length === 0}
               className="w-full max-w-2xl mx-auto block bg-[#E8820C] disabled:opacity-40 rounded-2xl py-4 text-center">
               <span className="text-[1.25rem] text-white">다음으로</span>
@@ -374,7 +338,6 @@ export default function BookEditPage() {
             <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0">
               <div className="absolute inset-0 bg-[#1F2937] opacity-45" onClick={() => setViewingChapter(null)} />
               <div className="relative bg-white rounded-2xl w-full max-w-sm flex flex-col gap-4 z-10 max-h-[75vh]">
-                {/* 모달 헤더 */}
                 <div className="flex items-center justify-between px-5 pt-5">
                   <p className="text-[1.125rem] font-bold text-[#E8820C] flex-1 pr-2">{viewingChapter.title}</p>
                   <button type="button" onClick={() => setViewingChapter(null)}
@@ -382,11 +345,50 @@ export default function BookEditPage() {
                     <X size={16} className="text-[#6B7280]" />
                   </button>
                 </div>
-                {/* 본문 스크롤 영역 */}
                 <div className="overflow-y-auto px-5 pb-5">
                   <p className="text-[1.0625rem] text-[#1F2937] leading-relaxed whitespace-pre-wrap">
                     {viewingChapter.content}
                   </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 챕터 내용 수정 모달 */}
+          {editingContentChapter && (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0">
+              <div className="absolute inset-0 bg-[#1F2937] opacity-45" onClick={() => !savingContent && setEditingContentChapter(null)} />
+              <div className="relative bg-white rounded-2xl w-full max-w-sm flex flex-col z-10 max-h-[85vh]">
+                {/* 모달 헤더 */}
+                <div className="flex items-center justify-between px-5 pt-5 pb-3 shrink-0">
+                  <p className="text-[1.125rem] font-bold text-[#1F2937] flex-1 pr-2">내용 수정</p>
+                  <button type="button" onClick={() => !savingContent && setEditingContentChapter(null)}
+                    className="w-8 h-8 rounded-full bg-[#F3F4F6] flex items-center justify-center shrink-0">
+                    <X size={16} className="text-[#6B7280]" />
+                  </button>
+                </div>
+                <p className="px-5 pb-3 text-sm text-[#E8820C] shrink-0">{editingContentChapter.title}</p>
+                {/* 텍스트 편집 영역 */}
+                <div className="flex-1 overflow-y-auto px-5 pb-3 min-h-0">
+                  <textarea
+                    autoFocus
+                    value={editingContent}
+                    onChange={e => setEditingContent(e.target.value.slice(0, CONTENT_MAX))}
+                    rows={10}
+                    className="w-full bg-[#FFF8F0] border border-[#E5E7EB] rounded-xl px-4 py-3 text-[1.0625rem] text-[#1F2937] resize-none outline-none focus:border-[#E8820C] leading-relaxed"
+                  />
+                  <p className="text-right text-sm text-[#9CA3AF] mt-1">{editingContent.length} / {CONTENT_MAX}</p>
+                </div>
+                {/* 하단 버튼 */}
+                <div className="px-5 pb-5 flex gap-3 shrink-0">
+                  <button type="button" onClick={() => !savingContent && setEditingContentChapter(null)}
+                    className="flex-1 bg-[#F3F4F6] rounded-xl py-3 text-center min-h-11">
+                    <span className="text-[1.0625rem] text-[#6B7280]">취소</span>
+                  </button>
+                  <button type="button" onClick={confirmEditContent} disabled={savingContent || !editingContent.trim()}
+                    className="flex-[2] bg-[#E8820C] rounded-xl py-3 text-center min-h-11 disabled:opacity-50">
+                    <span className="text-[1.0625rem] text-white">{savingContent ? '저장 중…' : '저장하기'}</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -418,11 +420,84 @@ export default function BookEditPage() {
         </>
       )}
 
-      {/* ── Step 3: 헌사 입력 (F-13) ── */}
+      {/* ── Step 2: 표지 선택 (F-13) ── */}
+      {currentStep === 2 && (
+        <>
+          <main className="flex-1 overflow-hidden w-full max-w-2xl mx-auto px-4 sm:px-6 py-3 flex flex-col gap-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex flex-col gap-1">
+                <p className="text-[1.25rem] font-bold text-[#1F2937] whitespace-nowrap">이번 달 책 표지를 골라주세요</p>
+                <p className="text-[1.0625rem] text-[#6B7280]">AI가 이번 달 이야기를 바탕으로 만들었어요</p>
+              </div>
+              {/* 표지 추가 생성 버튼 — 최대 3장 추가 가능 */}
+              {coverImages.length > 0 && (
+                <button type="button"
+                  disabled={regenerating || extraCoverCount >= extraCoverLimit}
+                  className="shrink-0 flex flex-col items-center gap-1 mt-1 disabled:opacity-40"
+                  onClick={async () => {
+                    const chapterId = coverImages.find(c => c.id === selectedCoverId)?.chapter_id
+                    if (!chapterId) return
+                    try {
+                      await regenerateCover(chapterId)
+                    } catch (e) {
+                      showToast(e instanceof Error ? e.message : '표지 생성에 실패했어요')
+                    }
+                  }}>
+                  <div className="w-11 h-11 rounded-full bg-[#FFF0DC] border border-[#E8820C] flex items-center justify-center">
+                    <RefreshCw size={20} className={cn('text-[#E8820C]', regenerating && 'animate-spin')} />
+                  </div>
+                  <span className="text-xs text-[#E8820C]">
+                    {regenerating ? '생성 중…' : `다시 만들기 (${extraCoverCount}/${extraCoverLimit})`}
+                  </span>
+                </button>
+              )}
+            </div>
+
+            {/* 표지 슬라이드 선택 */}
+            {coverImages.length > 0 ? (
+              <CoverSlider
+                covers={coverImages}
+                selectedId={selectedCoverId}
+                onSelect={setSelectedCoverId}
+              />
+            ) : (
+              <div className="w-full aspect-[4/3] rounded-2xl border-2 border-dashed border-[#E5E7EB] bg-[#FFF8F0] flex flex-col items-center justify-center gap-3">
+                {coverError ? (
+                  <>
+                    <p className="text-[1.0625rem] text-[#6B7280]">표지를 불러오지 못했어요</p>
+                    <button
+                      type="button"
+                      onClick={() => window.location.reload()}
+                      className="text-sm text-[#E8820C] underline underline-offset-2">
+                      다시 시도
+                    </button>
+                  </>
+                ) : coverLoading ? (
+                  <>
+                    <div className="w-10 h-10 rounded-full border-4 border-[#E8820C] border-t-transparent animate-spin" />
+                    <p className="text-[1.0625rem] text-[#6B7280]">AI가 표지를 만들고 있어요</p>
+                    <p className="text-sm text-[#9CA3AF]">잠시만 기다려 주세요 (약 1분)</p>
+                  </>
+                ) : null}
+              </div>
+            )}
+          </main>
+
+          <div className="shrink-0 bg-white border-t border-[#E5E7EB] px-4 sm:px-6 py-4">
+            <button type="button" onClick={() => setCurrentStep(3)}
+              disabled={coverImages.length === 0}
+              className="w-full max-w-2xl mx-auto block bg-[#E8820C] disabled:opacity-40 rounded-2xl py-4 text-center">
+              <span className="text-[1.25rem] text-white">이 표지로 할게요</span>
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ── Step 3: 작가의 말 입력 ── */}
       {currentStep === 3 && (
-        <Step3Dedication
-          dedication={dedication}
-          onChangeDedication={setDedication}
+        <Step3AuthorNote
+          authorNote={authorNote}
+          onChangeAuthorNote={setAuthorNote}
           onNext={() => setPublishConfirmOpen(true)}
           onSkip={() => setPublishConfirmOpen(true)}
         />
@@ -484,8 +559,9 @@ function CoverSlider({ covers, selectedId, onSelect }: {
 
   return (
     <div className="relative w-full">
-      <div className="rounded-2xl overflow-hidden border-[3px] border-[#E8820C] aspect-[4/3] w-full">
-        <img src={covers[idx].image_url} alt="선택된 표지" className="w-full h-full object-cover" />
+      {/* 이미지 비율 2:3 (생성 이미지 1024×1536). 높이를 뷰포트 기준으로 고정해 전체 표시 */}
+      <div className="rounded-2xl overflow-hidden border-[3px] border-[#E8820C] w-full" style={{ height: 'min(480px, 60svh)' }}>
+        <img src={covers[idx].image_url} alt="선택된 표지" className="w-full h-full object-contain" />
       </div>
 
       {/* 점 인디케이터 — 이미지 상단에 오버레이 */}
@@ -511,24 +587,23 @@ function CoverSlider({ covers, selectedId, onSelect }: {
   )
 }
 
+// ─── Step 3: 작가의 말 입력 ──────────────────────────────────────
 
-// ─── Step 3: 헌사 입력 ───────────────────────────────────────────
-
-function Step3Dedication({
-  dedication, onChangeDedication, onNext, onSkip,
+function Step3AuthorNote({
+  authorNote, onChangeAuthorNote, onNext, onSkip,
 }: {
-  dedication: string
-  onChangeDedication: (v: string) => void
+  authorNote: string
+  onChangeAuthorNote: (v: string) => void
   onNext: () => void
   onSkip: () => void
 }) {
-  const MAX = 200
+  const MAX = 500
   return (
     <>
       <main className="flex-1 overflow-y-auto w-full max-w-2xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-4">
         <div className="flex flex-col items-center gap-2 text-center">
-          <p className="text-[1.5rem] text-[#1F2937]">이번 달 마무리 한마디</p>
-          <p className="text-[1.125rem] text-[#6B7280]">짧아도 괜찮아요. 가족에게 전하는 헌사예요</p>
+          <p className="text-[1.5rem] text-[#1F2937]">작가의 말</p>
+          <p className="text-[1.125rem] text-[#6B7280]">책의 맨 앞에 실려요. 독자(가족)에게 전하는 한마디예요</p>
         </div>
 
         <div className="bg-[#FFF0DC] rounded-2xl px-4 py-4 flex items-start gap-3">
@@ -536,7 +611,7 @@ function Step3Dedication({
             <span className="text-sm text-white font-medium">AI</span>
           </div>
           <div className="flex-1 bg-white rounded-xl px-4 py-3">
-            <p className="text-base text-[#1F2937]">"4월 한 달, 어떤 마음이셨나요? 가족에게 남기고 싶은 한마디를 써주세요."</p>
+            <p className="text-base text-[#1F2937]">"이 책을 쓰면서 어떤 마음이셨나요? 이 책을 읽을 가족에게 전하고 싶은 말을 써주세요."</p>
           </div>
         </div>
 
@@ -559,13 +634,13 @@ function Step3Dedication({
         <div className="bg-white border border-[#E5E7EB] rounded-2xl px-5 py-4 flex flex-col gap-3">
           <p className="text-[1.125rem] text-[#1F2937]">직접 입력하기</p>
           <textarea
-            value={dedication}
-            onChange={e => onChangeDedication(e.target.value.slice(0, MAX))}
-            rows={4}
-            placeholder="이번 달 마무리 한마디를 입력해주세요"
+            value={authorNote}
+            onChange={e => onChangeAuthorNote(e.target.value.slice(0, MAX))}
+            rows={5}
+            placeholder="가족에게 전하고 싶은 말을 입력해주세요"
             className="w-full bg-[#FFF8F0] border border-[#E5E7EB] rounded-xl px-4 py-3 text-[1.0625rem] text-[#1F2937] resize-none outline-none focus:border-[#E8820C]"
           />
-          <p className="text-right text-sm text-[#9CA3AF]">{dedication.length} / {MAX}</p>
+          <p className="text-right text-sm text-[#9CA3AF]">{authorNote.length} / {MAX}</p>
         </div>
       </main>
 

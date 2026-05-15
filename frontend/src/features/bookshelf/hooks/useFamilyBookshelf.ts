@@ -37,10 +37,10 @@ export function useFamilyBookshelf() {
 
       setSeniorName(profile?.display_name ?? '')
 
-      // 3. published 책 + 챕터·댓글 수 조회
+      // 3. published 책 + 챕터·댓글 수 조회 (댓글은 book_id 직접 참조)
       const { data } = await supabase
         .from('books')
-        .select('*, chapters(id, is_deleted, comments(id))')
+        .select('*, chapters(id, is_deleted), comments(id)')
         .eq('senior_id', linkedSeniorId)
         .eq('status', 'published')
         .order('year', { ascending: false })
@@ -49,16 +49,16 @@ export function useFamilyBookshelf() {
       if (!data) { setLoading(false); return }
 
       setBooks(
-        data.map(({ chapters, ...book }) => {
+        data.map(({ chapters, comments, ...book }) => {
           const chapterList = (chapters as {
             id: string
             is_deleted: boolean
-            comments: { id: string }[] | null
           }[] | null) ?? []
           const active = chapterList.filter((ch) => !ch.is_deleted)
           return {
             ...book,
-            commentCount: active.reduce((s, ch) => s + (ch.comments?.length ?? 0), 0),
+            chapterCount: active.length,
+            commentCount: (comments as { id: string }[] | null)?.length ?? 0,
           }
         }),
       )

@@ -22,21 +22,20 @@ export function useBookshelf() {
 
   async function fetchBooks() {
     // chapters left join: 챕터 0개인 책도 포함
-    // comments left join (chapters → comments 2단계): 댓글 배지 표시용
+    // comments는 이제 book_id 직접 참조 — 챕터 경유 없이 책에서 바로 조회
     const { data, error } = await supabase
       .from('books')
-      .select('*, chapters(id, is_deleted, comments(id))')
+      .select('*, chapters(id, is_deleted), comments(id)')
       .order('year', { ascending: false })
       .order('month', { ascending: false })
 
     if (error || !data) return
 
     setBooks(
-      data.map(({ chapters, ...book }) => {
+      data.map(({ chapters, comments, ...book }) => {
         const chapterList = (chapters as {
           id: string
           is_deleted: boolean
-          comments: { id: string }[] | null
         }[] | null) ?? []
 
         // is_deleted=false 챕터만 카운트
@@ -45,11 +44,8 @@ export function useBookshelf() {
         return {
           ...book,
           chapterCount: activeChapters.length,
-          // 삭제되지 않은 챕터의 댓글 수 합산
-          commentCount: activeChapters.reduce(
-            (sum, ch) => sum + (ch.comments?.length ?? 0),
-            0,
-          ),
+          // 댓글은 책 단위로 집계
+          commentCount: (comments as { id: string }[] | null)?.length ?? 0,
         }
       }),
     )
