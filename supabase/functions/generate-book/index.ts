@@ -1,5 +1,6 @@
 // generate-book: 월말 자동 책 초안 생성 파이프라인
-// 단계: pending → aggregating → chaptering → cover_requested → done (실패 시 failed)
+// 단계: pending → aggregating → chaptering → cover_requested (여기서 즉시 반환)
+// cover_requested 상태 변경 → Database Webhook → generate-cover 자동 트리거
 // 트리거: pg_cron (매월 말일) 또는 수동 POST 호출 (service_role 키 필요)
 
 import { createClient } from 'npm:@supabase/supabase-js'
@@ -204,14 +205,17 @@ async function aggregateUtterancesFallback(
  *   - 지정 시: 해당 job을 이어서 처리 (중복 체크 생략, job 신규 생성 생략)
  *   - 미지정 시: 기존 active job 없으면 새 job 생성
  */
+interface PipelineResult {
+  outcome: 'success' | 'failed' | 'skipped'
+}
+
 async function runPipelineForSenior(
-  callerAuthHeader: string,  // 원래 요청의 Authorization 헤더 (generate-cover 내부 호출 시 전달)
   supabase: ReturnType<typeof createClient>,
   seniorId: string,
   year: number,
   month: number,
   existingPendingJobId?: string,
-): Promise<'success' | 'failed' | 'skipped'> {
+): Promise<PipelineResult> {
   let jobId: string
 
   if (existingPendingJobId) {
@@ -232,7 +236,7 @@ async function runPipelineForSenior(
 
     if (existingJob) {
       console.log(`[generate-book] senior ${seniorId} 이미 처리됨 (job: ${existingJob.id}, status: ${existingJob.status}), skip`)
-      return 'skipped'
+      return { outcome: 'skipped' }
     }
 
     // ── pending: job 신규 생성 ─────────────────────────────────────
@@ -248,7 +252,7 @@ async function runPipelineForSenior(
 
     if (jobErr || !job) {
       console.error(`[generate-book] job 생성 실패 (senior: ${seniorId})`, jobErr)
-      return 'failed'
+      return { outcome: 'failed' }
     }
 
     jobId = job.id
@@ -270,7 +274,7 @@ async function runPipelineForSenior(
       await updateJobStatus(supabase, jobId, 'failed', {
         error_log: `[aggregating] ${String(err)} / fallback: ${String(fallbackErr)}`,
       })
-      return 'failed'
+      return { outcome: 'failed' }
     }
   }
 
@@ -279,7 +283,7 @@ async function runPipelineForSenior(
       error_log: '[aggregating] utterances not found',
     })
     console.log(`[generate-book] job ${jobId} — 발화 0건, failed 처리`)
-    return 'failed'
+    return { outcome: 'failed' }
   }
 
   // aggregated_ids를 stage_payload에 보존 (chaptering 재시도 시 재수집 불필요)
@@ -381,7 +385,7 @@ async function runPipelineForSenior(
     await updateJobStatus(supabase, jobId, 'failed', {
       error_log: `[chaptering] ${String(err)}`,
     })
-    return 'failed'
+    return { outcome: 'failed' }
   }
 
   // books INSERT
@@ -403,7 +407,7 @@ async function runPipelineForSenior(
     await updateJobStatus(supabase, jobId, 'failed', {
       error_log: `[chaptering] books INSERT 실패: ${bookErr?.message}`,
     })
-    return 'failed'
+    return { outcome: 'failed' }
   }
 
   const bookId = book.id
@@ -430,7 +434,7 @@ async function runPipelineForSenior(
     await updateJobStatus(supabase, jobId, 'failed', {
       error_log: `[chaptering] chapters INSERT 실패: ${chaptersErr.message}`,
     })
-    return 'failed'
+    return { outcome: 'failed' }
   }
 
   // books.chapter_count 업데이트
@@ -447,50 +451,41 @@ async function runPipelineForSenior(
 
   console.log(`[generate-book] job ${jobId} — book ${bookId} 생성 완료 (챕터 ${chaptersToInsert.length}개)`)
 
-  // ── cover_requested: generate-cover 동기 호출 후 결과 확인 ──────────────
-  // fire-and-forget이 아닌 응답 확인 방식 — 호출 실패 시 job을 failed로 전환
+  // ── cover_requested: 챕터별 generate-cover 개별 호출 ────────────────────
+  // 이전: Webhook으로 1번 호출 → 전체 챕터 병렬 처리 → 150s 타임아웃 초과 (챕터 3개 이상 시)
+  // 변경: 챕터마다 pg_net으로 개별 호출 → 각 호출이 1개 챕터만 처리 → 타임아웃 없음
   await updateJobStatus(supabase, jobId, 'cover_requested', { book_id: bookId })
 
-  try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+  const internalSecret = Deno.env.get('INTERNAL_COVER_SECRET')!
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
 
-    // batch 모드 내부 호출: Authorization 대신 X-Internal-Secret으로 인증
-    // INTERNAL_COVER_SECRET는 두 함수 모두에 동일하게 설정된 공유 secret
-    // 외부 클라이언트는 이 값을 알 수 없으므로 batch 엔드포인트에 직접 접근 불가
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
-    const internalSecret = Deno.env.get('INTERNAL_COVER_SECRET') ?? ''
-    const coverRes = await fetch(`${supabaseUrl}/functions/v1/generate-cover`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': callerAuthHeader,  // Supabase 게이트웨이 통과용 (JWT 형식 필요)
-        'apikey': anonKey,
-        'X-Internal-Secret': internalSecret,
-      },
-      body: JSON.stringify({ book_id: bookId, senior_id: seniorId, mode: 'batch' }),
-    })
+  // 챕터 id 조회 (chapters INSERT 시점엔 id가 없으므로 DB에서 재조회)
+  const { data: insertedChapters } = await supabase
+    .from('chapters')
+    .select('id, sort_order')
+    .eq('book_id', bookId)
+    .eq('is_deleted', false)
+    .order('sort_order')
 
-    if (!coverRes.ok) {
-      const errBody = await coverRes.text().catch(() => '(응답 본문 없음)')
-      console.error(`[generate-book] generate-cover 호출 실패 (${coverRes.status}): ${errBody}`)
-      await updateJobStatus(supabase, jobId, 'failed', {
-        error_log: `generate-cover 호출 실패 (${coverRes.status}): ${errBody}`,
+  if (insertedChapters && insertedChapters.length > 0) {
+    for (const ch of insertedChapters) {
+      // pg_net으로 챕터 1개씩 비동기 호출 — 각 호출이 ~50s 독립 실행, 150s 타임아웃 없음
+      await supabase.rpc('net_http_post_cover', {
+        p_url: `${supabaseUrl}/functions/v1/generate-cover`,
+        p_book_id: bookId,
+        p_senior_id: seniorId,
+        p_chapter_id: ch.id,
+        p_secret: internalSecret,
+        p_anon_key: anonKey,
       })
-      return 'failed'
+      console.log(`[generate-book] job ${jobId} — chapter ${ch.id} (sort: ${ch.sort_order}) cover 호출 예약`)
     }
-  } catch (err) {
-    // 네트워크 오류 등 — job을 failed로 전환하여 재시도 가능 상태로 만듦
-    console.error(`[generate-book] generate-cover 호출 예외:`, err)
-    await updateJobStatus(supabase, jobId, 'failed', {
-      error_log: `generate-cover 호출 예외: ${String(err)}`,
-    })
-    return 'failed'
   }
 
-  // done 전환 및 알림 발송은 generate-cover가 담당
-  // generate-cover가 cover_images INSERT 완료 후 job → done + book_draft_ready 알림을 발송함
-  console.log(`[generate-book] job ${jobId} — cover_requested 완료, generate-cover에 위임 (senior: ${seniorId})`)
-  return 'success'
+  console.log(`[generate-book] job ${jobId} — cover_requested 완료, ${insertedChapters?.length ?? 0}개 챕터 개별 호출 예약`)
+
+  return { outcome: 'success' }
 }
 
 Deno.serve(async (req) => {
@@ -587,9 +582,9 @@ Deno.serve(async (req) => {
       const jobYear = payload.target_year ?? now.getFullYear()
       const jobMonth = payload.target_month ?? (now.getMonth() + 1)
 
-      const result = await runPipelineForSenior(authHeader, supabase, pendingJob.senior_id, jobYear, jobMonth, pendingJob.id)
+      const { outcome } = await runPipelineForSenior(supabase, pendingJob.senior_id, jobYear, jobMonth, pendingJob.id)
       return new Response(
-        JSON.stringify({ message: '파이프라인 완료', job_id: body.job_id, result }),
+        JSON.stringify({ message: '파이프라인 완료', job_id: body.job_id, result: outcome }),
         { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
       )
     }
@@ -653,12 +648,11 @@ Deno.serve(async (req) => {
 
     for (const senior of seniors) {
       try {
-        const result = await runPipelineForSenior(authHeader, supabase, senior.id, year, month)
-        if (result === 'success') successCount++
-        else if (result === 'failed') failCount++
+        const { outcome } = await runPipelineForSenior(supabase, senior.id, year, month)
+        if (outcome === 'success') successCount++
+        else if (outcome === 'failed') failCount++
         else skippedCount++
       } catch (err) {
-        // 예상치 못한 예외 (네트워크 오류 등)
         failCount++
         console.error(`[generate-book] senior ${senior.id} 파이프라인 예외:`, err)
       }
