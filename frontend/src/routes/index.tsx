@@ -117,6 +117,9 @@ export const router = createBrowserRouter([
 
       // 테스트 전용 — 인증 없이 ChatPage 직접 접근 (test/voice-chat-f03 브랜치 한정)
       { path: '/test/chat', element: withSuspense(<ChatPage />) },
+      // 테스트 전용 — role 체크 없이 가족(독자) 화면 직접 접근 (F-14/F-15 테스트용)
+      { path: '/test/reader', element: withSuspense(<ReaderHomePage />) },
+      { path: '/test/reader/books/:bookId', element: withSuspense(<BookReadPage />) },
 
       // 루트 — 로그인 상태·역할에 따라 리다이렉트 (App.tsx에서 처리)
       { path: '/', element: withSuspense(<LoginPage />) },

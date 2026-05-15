@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { ChevronLeft, Share2, Mic } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -155,6 +155,7 @@ export default function SeniorBookReadPage() {
   const [commentText, setCommentText] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // 챕터 로드 완료 시 첫 번째 챕터 선택
   // dedication이 있으면 0장(작가의 말)이 기본이므로 자동 설정 생략
@@ -164,14 +165,42 @@ export default function SeniorBookReadPage() {
     }
   }, [chapters, activeChapterId, book?.dedication])
 
+  // Realtime 댓글 구독 — book_id 기반 (F-15)
+  useEffect(() => {
+    if (!bookId) return
+
+    function startPolling() {
+      if (pollingRef.current) return
+      pollingRef.current = setInterval(async () => { await reload() }, 10_000)
+    }
+    function stopPolling() {
+      if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null }
+    }
+
+    const channel = supabase
+      .channel(`comments:book:${bookId}`)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'comments',
+        filter: `book_id=eq.${bookId}`,
+      }, async () => { await reload() })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') { stopPolling(); await reload() }
+        if (status === 'CHANNEL_ERROR' || status === 'CLOSED') { startPolling() }
+      })
+
+    return () => { stopPolling(); supabase.removeChannel(channel) }
+  }, [bookId, reload])
+
+  useEffect(() => { return () => { if (pollingRef.current) clearInterval(pollingRef.current) } }, [])
+
   function showToast(msg: string) {
     setToastMsg(msg)
     setTimeout(() => setToastMsg(null), 2500)
   }
 
-  // 댓글 전송 — 댓글은 책 단위로 저장
+  // 댓글 전송 — 댓글은 책 단위로 저장, 어르신에게 알림 발송 (F-15)
   async function handleSubmitComment() {
-    if (!commentText.trim() || !bookId || !profile) return
+    if (!commentText.trim() || !bookId || !profile || !book) return
     setSubmitting(true)
     try {
       const { error } = await supabase.from('comments').insert({
@@ -180,6 +209,17 @@ export default function SeniorBookReadPage() {
         content: commentText.trim(),
       })
       if (error) throw error
+
+      // 어르신에게 새 댓글 알림 발송
+      await supabase.from('notifications').insert({
+        recipient_id: book.senior_id,
+        type: 'new_comment',
+        title: `${kakaoName}이 댓글을 남겼어요`,
+        body: commentText.trim(),
+        reference_id: bookId,
+        reference_type: 'book',
+      })
+
       setCommentText('')
       showToast('댓글을 전달했어요')
       await reload()
