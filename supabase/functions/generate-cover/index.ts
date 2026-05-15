@@ -280,11 +280,35 @@ Deno.serve(async (req) => {
       const ageLabel = age ? `${Math.floor(age / 10) * 10}s` : 'elderly'
       const palette = gender ? (GENDER_PALETTE[gender] ?? GENDER_PALETTE['female']) : GENDER_PALETTE['female']
 
-      const sceneDescription = await generateSceneDescription(openai, chapter as Chapter, genderLabel, ageLabel)
-      const dallePrompt = buildDallePrompt(sceneDescription, palette)
+      // 이미지 생성·업로드 실패 시 job을 failed로 마킹해 영구 limbo 방지
+      try {
+        const sceneDescription = await generateSceneDescription(openai, chapter as Chapter, genderLabel, ageLabel)
+        const dallePrompt = buildDallePrompt(sceneDescription, palette)
 
-      console.log(`[generate-cover] batch_single — chapter ${chapterId} (${chapter.title}) 씬: ${sceneDescription}`)
-      await generateAndUploadCover(openai, supabaseAdmin, bookId, seniorId, chapterId, dallePrompt, chapter.sort_order - 1)
+        console.log(`[generate-cover] batch_single — chapter ${chapterId} (${chapter.title}) 씬: ${sceneDescription}`)
+        await generateAndUploadCover(openai, supabaseAdmin, bookId, seniorId, chapterId, dallePrompt, chapter.sort_order - 1)
+      } catch (genErr) {
+        console.error(`[generate-cover] batch_single 실패 — chapter ${chapterId}:`, genErr)
+
+        // job을 failed로 전환해 cover_requested limbo 방지
+        const { data: failedJob } = await supabaseAdmin
+          .from('book_generation_jobs')
+          .select('id')
+          .eq('book_id', bookId)
+          .eq('status', 'cover_requested')
+          .maybeSingle()
+        if (failedJob) {
+          await supabaseAdmin
+            .from('book_generation_jobs')
+            .update({ status: 'failed', stage_payload: { error: String(genErr), failed_chapter_id: chapterId } })
+            .eq('id', failedJob.id)
+        }
+
+        return new Response(
+          JSON.stringify({ error: '표지 생성 실패', chapter_id: chapterId }),
+          { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+        )
+      }
 
       // 모든 챕터 표지가 완성됐는지 확인 후 job/book 상태 업데이트
       const [{ data: allChapters }, { data: allCovers }] = await Promise.all([

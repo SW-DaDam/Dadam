@@ -18,6 +18,7 @@ interface UseBookEditReturn {
   coverImages: CoverImage[]
   loading: boolean
   coverLoading: boolean          // 표지 생성 대기 중 여부 (폴링 중)
+  coverError: boolean            // 표지 fetch 실패 여부 (에러 vs 생성 중 구분)
   regenerating: boolean          // 표지 재생성 중 여부
   extraCoverCount: number        // 현재까지 추가 생성한 수
   extraCoverLimit: number        // 추가 생성 최대 수
@@ -35,6 +36,7 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
   const [coverImages, setCoverImages] = useState<CoverImage[]>([])
   const [loading, setLoading] = useState(true)
   const [coverLoading, setCoverLoading] = useState(false)  // 폴링 중 = 표지 생성 대기 중
+  const [coverError, setCoverError] = useState(false)      // fetch 실패 (에러 vs 생성 중 구분)
   const [regenerating, setRegenerating] = useState(false)
 
   // 추가 생성 횟수: 전체 표지 수에서 초기 3장을 뺀 값
@@ -74,6 +76,19 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
         supabase.from('chapters').select('*').eq('book_id', id).order('sort_order'),
         supabase.from('cover_images').select('*').eq('book_id', id).eq('status', 'candidate'),
       ])
+
+      // fetch 에러 시 에러 상태로 전환 (생성 중 폴링과 구분)
+      if (bookRes.error || chaptersRes.error || coversRes.error) {
+        console.error('[useBookEdit] 데이터 로드 실패', { bookRes, chaptersRes, coversRes })
+        setCoverError(true)
+        setCoverLoading(false)
+        stopPolling()
+        if (bookRes.data) setBook(bookRes.data)
+        if (chaptersRes.data) setChapters(chaptersRes.data)
+        return
+      }
+
+      setCoverError(false)
       if (bookRes.data) setBook(bookRes.data)
       if (chaptersRes.data) setChapters(chaptersRes.data)
 
@@ -83,7 +98,7 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
         setCoverLoading(false)
         stopPolling()
       } else {
-        // 표지가 없으면 생성 중으로 판단 — 완료될 때까지 폴링
+        // 표지가 없고 에러도 없으면 생성 중으로 판단 — 완료될 때까지 폴링
         setCoverImages([])
         setCoverLoading(true)
         stopPolling()
@@ -91,15 +106,23 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
         pollTimerRef.current = setInterval(async () => {
           pollAttemptsRef.current += 1
           if (pollAttemptsRef.current > COVER_POLL_MAX_ATTEMPTS) {
+            // 타임아웃: 생성 실패로 간주
             setCoverLoading(false)
+            setCoverError(true)
             stopPolling()
             return
           }
-          const { data: newCovers } = await supabase
+          const { data: newCovers, error: pollErr } = await supabase
             .from('cover_images')
             .select('*')
             .eq('book_id', id)
             .eq('status', 'candidate')
+          if (pollErr) {
+            setCoverLoading(false)
+            setCoverError(true)
+            stopPolling()
+            return
+          }
           if (newCovers && newCovers.length > 0) {
             setCoverImages(sortCoversByChapterOrder(newCovers, chapterIds))
             setCoverLoading(false)
@@ -194,7 +217,7 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
   }, [bookId, book?.senior_id])
 
   return {
-    book, chapters, coverImages, loading, coverLoading,
+    book, chapters, coverImages, loading, coverLoading, coverError,
     regenerating, extraCoverCount, extraCoverLimit: EXTRA_COVER_LIMIT,
     softDeleteChapter, restoreChapter, updateChapterTitle, selectCover, publishBook, regenerateCover,
   }

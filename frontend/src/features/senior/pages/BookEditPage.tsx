@@ -62,7 +62,7 @@ function StepIndicator({ currentStep, onStepClick }: { currentStep: number; onSt
 export default function BookEditPage() {
   const navigate = useNavigate()
   const { bookId } = useParams<{ bookId: string }>()
-  const { book, chapters: realChapters, coverImages, loading, coverLoading, regenerating, extraCoverCount, extraCoverLimit, softDeleteChapter, restoreChapter, updateChapterTitle, selectCover, publishBook, regenerateCover } = useBookEdit(bookId)
+  const { book, chapters: realChapters, coverImages, loading, coverLoading, coverError, regenerating, extraCoverCount, extraCoverLimit, softDeleteChapter, restoreChapter, updateChapterTitle, selectCover, publishBook, regenerateCover } = useBookEdit(bookId)
 
   const [currentStep, setCurrentStep] = useState(1)
   const [selectedCoverId, setSelectedCoverId] = useState<string>('')
@@ -236,15 +236,25 @@ export default function BookEditPage() {
               />
             ) : (
               <div className="w-full aspect-[4/3] rounded-2xl border-2 border-dashed border-[#E5E7EB] bg-[#FFF8F0] flex flex-col items-center justify-center gap-3">
-                {coverLoading ? (
+                {coverError ? (
+                  // fetch 에러 또는 생성 타임아웃: 재시도 유도
+                  <>
+                    <p className="text-[1.0625rem] text-[#6B7280]">표지를 불러오지 못했어요</p>
+                    <button
+                      type="button"
+                      onClick={() => window.location.reload()}
+                      className="text-sm text-[#E8820C] underline underline-offset-2">
+                      다시 시도
+                    </button>
+                  </>
+                ) : coverLoading ? (
+                  // 표지 생성 중 (에러 없음)
                   <>
                     <div className="w-10 h-10 rounded-full border-4 border-[#E8820C] border-t-transparent animate-spin" />
                     <p className="text-[1.0625rem] text-[#6B7280]">AI가 표지를 만들고 있어요</p>
                     <p className="text-sm text-[#9CA3AF]">잠시만 기다려 주세요 (약 1분)</p>
                   </>
-                ) : (
-                  <p className="text-[1.0625rem] text-[#9CA3AF]">표지를 불러올 수 없어요</p>
-                )}
+                ) : null}
               </div>
             )}
           </main>
