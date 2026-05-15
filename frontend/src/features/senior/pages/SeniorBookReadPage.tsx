@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { ChevronLeft, Share2, Mic } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/shared/stores/authStore'
 import type { Book, Chapter, Comment, Reply, Profile } from '@/types/domain'
@@ -436,7 +435,6 @@ export default function SeniorBookReadPage() {
         const totalPages = (hasAuthorNote ? 1 : 0) + chapters.length
         // 현재 페이지 인덱스 (작가의 말 = 0, 1장 = 1, ...)
         const currentPageIdx = hasAuthorNote ? chapterIdx + 1 : chapterIdx
-        const isAuthorNotePage = false  // 현재 activeChapterId로 챕터 페이지만 표시
 
         // hasAuthorNote면 1장(chapterIdx=0)에서도 이전(작가의 말)으로 이동 가능
         const hasPrev = hasAuthorNote ? chapterIdx >= 0 : chapterIdx > 0
