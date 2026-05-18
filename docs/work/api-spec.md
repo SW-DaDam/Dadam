@@ -565,14 +565,30 @@ while (reader) {
 
 | 이름 | 담당 | 상태 | 비고 |
 |------|------|------|------|
-| `voice-chat` (LLM 스트리밍) | 권오인 | DONE | F-04 / F-05 memories 주입 + 선제 질문 |
+| `voice-chat` (LLM 스트리밍) | 권오인 | DONE | F-04 / F-05 memories 주입 + 선제 질문. **7주차 STT/TTS 외부 연동 교체 진행** (Whisper API + Naver Clova TTS) |
 | `extract-memory` (세션 종료 후) | 권오인 | DONE | F-04 |
-| `tag-utterances` (발화 태그) | 권오인 | DONE | F-05 |
-| `generate-book` (월말 pg_cron) | 권오인 | TBD | F-07 |
-| `generate-cover` (DALL-E 3) | 권오인 | DONE | F-07 표지 후보 생성 + `book-covers` 업로드 |
+| `tag-utterances` (발화 태그) | 권오인 | DONE | F-05. **7주차 확장**: `short_book_candidate` 태그 판단 로직 추가 (F-18 트리거 신호) |
+| `generate-book` (월말 pg_cron + 외전 트리거) | 권오인 | WIP | F-06 / F-18. **7주차**: `book_type: 'monthly' \| 'short'` 분기 추가 (`short`: chapter_count=1, target_pages=2) |
+| `generate-cover` (DALL-E 3) | 권오인 | DONE | F-07 표지 후보 생성 + `book-covers` 업로드. F-18에서도 그대로 재사용 |
 | `retry-book-job` (수동 재시도) | 권오인 | TBD | F-08, RPC `retry_book_generation`과 연계 |
+| `stt-whisper` *(또는 voice-chat 내부 통합)* | 권오인 | TBD | F-03 STT — `whisper-large-v3-turbo` 호출, MediaRecorder Blob → 텍스트 변환. 구현 형태(별도 Function vs voice-chat 통합)는 구현 시 결정 |
+| `tts-naver` *(또는 voice-chat 내부 통합)* | 권오인 | TBD | F-03 TTS — Naver Clova Voice 호출, 텍스트 → MP3 응답. 구현 형태는 구현 시 결정 |
 
 > 상태: `TBD` (미구현) / `WIP` (구현 중) / `DONE` (완료). 각 Function 상세 스펙은 구현 PR에서 본 절에 추가.
+
+#### F-18 외전 책 트리거 흐름
+
+```
+utterances 누적
+  → tag-utterances 실행 → 단일 주제 2쪽 분량 충족 판단
+  → 충족 시: 후보 발화에 'short_book_candidate' 태그 부여
+            + book_generation_jobs INSERT (book_type='short')
+  → generate-book 호출 (book_type='short', chapter_count=1, target_pages=2)
+  → generate-cover 호출 (책 단위, 분기 없이 동일 호출)
+  → notifications INSERT ('book_draft_ready')
+```
+
+> 동일 주제 중복 생성 방지: 최근 N건 `books.subtitle` 또는 별도 `topic_hash` 비교. 구현 시 확정.
 
 ---
 

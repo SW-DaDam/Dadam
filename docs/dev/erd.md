@@ -178,15 +178,18 @@ CREATE TYPE invite_status AS ENUM ('pending', 'accepted', 'expired', 'revoked');
 CREATE TYPE book_status AS ENUM ('draft', 'editing', 'published');
 
 -- 책 유형: 월간 정기 / 주제 단편 조기 출간
+-- 'monthly' : F-06 월말 책 (pg_cron 자동 생성, 매월 1권)
+-- 'short'   : F-18 외전 책 (단일 주제 2쪽 분량 충족 시 자동 생성, 챕터 1개)
 CREATE TYPE book_type AS ENUM ('monthly', 'short');
 
--- 발화 태그 분류 (AI 자동 태깅)
+-- 발화 태그 분류 (AI 자동 태깅, F-05 tag-utterances + F-18 외전 판단)
 CREATE TYPE utterance_tag AS ENUM (
-  'daily_mundane',       -- 일상 잡담 (책 제외 후보)
-  'memory_recall',       -- 추억 회상
-  'emotional_peak',      -- 감정 고조
-  'philosophy',          -- 가치관/철학
-  'relationship_event'   -- 관계 사건
+  'daily_mundane',         -- 일상 잡담 (책 제외 후보)
+  'memory_recall',         -- 추억 회상
+  'emotional_peak',        -- 감정 고조
+  'philosophy',            -- 가치관/철학
+  'relationship_event',    -- 관계 사건
+  'short_book_candidate'   -- F-18 외전 책 후보 (단일 주제 누적 분량 충족)
 );
 
 -- 알림 유형
