@@ -413,6 +413,7 @@ export type Database = {
           reference_type?: string | null
           title: string
           type: Database["public"]["Enums"]["notification_type"]
+          updated_at?: string
         }
         Update: {
           body?: string | null
@@ -424,6 +425,7 @@ export type Database = {
           reference_type?: string | null
           title?: string
           type?: Database["public"]["Enums"]["notification_type"]
+          updated_at?: string
         }
         Relationships: [
           {
@@ -560,6 +562,7 @@ export type Database = {
           sequence_number: number
           speaker: Database["public"]["Enums"]["speaker_role"]
           tags: Database["public"]["Enums"]["utterance_tag"][]
+          used_in_short_book_id: string | null
         }
         Insert: {
           content: string
@@ -569,6 +572,7 @@ export type Database = {
           sequence_number: number
           speaker: Database["public"]["Enums"]["speaker_role"]
           tags?: Database["public"]["Enums"]["utterance_tag"][]
+          used_in_short_book_id?: string | null
         }
         Update: {
           content?: string
@@ -578,6 +582,7 @@ export type Database = {
           sequence_number?: number
           speaker?: Database["public"]["Enums"]["speaker_role"]
           tags?: Database["public"]["Enums"]["utterance_tag"][]
+          used_in_short_book_id?: string | null
         }
         Relationships: [
           {
@@ -585,6 +590,13 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "utterances_used_in_short_book_id_fkey"
+            columns: ["used_in_short_book_id"]
+            isOneToOne: false
+            referencedRelation: "books"
             referencedColumns: ["id"]
           },
         ]
@@ -622,17 +634,6 @@ export type Database = {
             }
             Returns: undefined
           }
-        | {
-            Args: {
-              p_anon_key: string
-              p_book_id: string
-              p_chapter_id: string
-              p_secret: string
-              p_senior_id: string
-              p_url: string
-            }
-            Returns: number
-          }
       publish_book: {
         Args: { book_id: string; dedication?: string }
         Returns: undefined
@@ -656,6 +657,14 @@ export type Database = {
       soft_delete_chapter: { Args: { chapter_id: string }; Returns: undefined }
       trigger_book_generation: {
         Args: { p_month: number; p_senior_id: string; p_year: number }
+        Returns: string
+      }
+      trigger_short_book_generation: {
+        Args: {
+          p_senior_id: string
+          p_topic_title: string
+          p_utterance_ids: string[]
+        }
         Returns: string
       }
       update_chapter_title: {

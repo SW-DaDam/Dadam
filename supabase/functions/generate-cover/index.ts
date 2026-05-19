@@ -49,6 +49,7 @@ interface SceneLayout {
   background: string          // 구체적 장소·시대·날씨·빛 방향
   foreground_objects: Array<{
     object: string            // 인물 또는 사물
+    age_description: string  // 해당 씬 시점 기준 나이 묘사 (e.g. "man in his late 20s", "boy around 8")
     position: string          // 화면 내 위치 (lower-left, center, etc.)
     action: string            // 구체적 동작 또는 자세
   }>
@@ -79,7 +80,7 @@ async function generateSceneLayout(
 ): Promise<SceneLayout | null> {
   try {
     const res = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-5.4-mini',
       messages: [
         {
           role: 'system',
@@ -100,36 +101,43 @@ Then output a layout JSON with this exact structure — no markdown, no explanat
 {
   "background": "<specific location, era, time of day, weather, light direction>",
   "foreground_objects": [
-    { "object": "<who or what>", "position": "<lower-center / left / right / etc.>", "action": "<concrete physical action — NEVER 'gazing into the distance' or 'looking away nostalgically'>" },
-    { "object": "<optional second figure or key prop>", "position": "<position>", "action": "<action>" }
+    { "object": "<who or what>", "age_description": "<age at the time of THIS scene — e.g. 'man in his late 20s', 'boy around 8', 'middle-aged woman in her 40s', 'elderly man in his 70s'>", "position": "<lower-center / left / right / etc.>", "action": "<concrete physical action>" },
+    { "object": "<optional second figure or key prop>", "age_description": "<age at the time of THIS scene>", "position": "<position>", "action": "<action>" }
   ],
   "lighting": "<quality and direction of light — e.g. warm afternoon sunlight streaming through window>",
   "mood": "<single English word — e.g. joy / warmth / longing / pride>",
   "selected_scene_reason": "<one sentence: why this scene beats the other two>"
 }
 
+[CRITICAL — Age and Era Rules]
+BEFORE describing any character, follow these three steps:
+
+STEP A — Determine WHEN the scene takes place:
+- PAST MEMORY signals: 어릴 때, 그 시절, 옛날, 어린 시절, 그때, 보릿고개, 젊었을 때, 학교 다닐 때, 6·25, 피난, 전쟁, 예전에, 고향에서, 신혼, 신혼여행, 결혼, 결혼식, 군대, 입대, 대학, 학창시절, 취직, 사회 초년생, 청년, 젊을 때, 그 무렵, 당시, ~살 때, ~년에
+- PRESENT signals: 요즘, 매일, 오늘, 지금, 요즈음, 가보려 한다
+- If no clear signal, default to PRESENT
+
+STEP B — For EVERY person in the scene, infer their age AT THAT POINT IN TIME and write it in "age_description":
+- Use explicit clues: "아들이 초등학교 다닐 때" → son ~8, narrator ~30s
+- Use life-event clues: "신혼여행" → narrator and spouse both ~20s–30s
+- Use relationship math: if narrator is in their 20s, their child cannot be a teenager
+- PAST MEMORY defaults (when no explicit clue): narrator = young adult (20s–40s), family members at proportionally younger ages
+- PRESENT defaults: narrator = ${ageLabel} ${genderLabel}, adult son = middle-aged, grandchild = child or teen
+- Elderly descriptions ("elderly", "old", "aged") are ONLY appropriate when the scene is in the present day or the character is genuinely old in that memory
+
+STEP C — Match background era to the time period:
+- Pre-1990 memories: thatched-roof or tile-roof houses, dirt roads, traditional Korean village, period clothing — NO modern buildings or devices
+- 1990s–2000s: modern but dated setting
+- Present: contemporary Korean setting
+
+STORYTELLING TO OTHERS — if the chapter describes telling a past story to grandchildren/family:
+→ Show the PAST SCENE being described (the memory itself), NOT the act of telling
+
 Rules for foreground_objects:
-- The protagonist is ONE ${ageLabel} ${genderLabel}.
-- If the chapter mentions another person (spouse, grandchild, friend, colleague), INCLUDE them as a second object.
-- Actions must be concrete and specific: "handing a letter", "lifting a child", "sharing kimbap", "shaking hands", "cooking together" — NOT "looking away" or "gazing nostalgically".
-- Position protagonist in the lower 60% of frame to leave upper 30% as open sky or soft background for title text.
-
-[CRITICAL — Era and Age Rules]
-Determine the TIME PERIOD of the scene BEFORE describing characters:
-
-PAST MEMORY (회상) — if the chapter contains keywords like: 어릴 때, 그 시절, 옛날, 어린 시절, 그때, 보릿고개, 젊었을 때, 학교 다닐 때, 6·25, 피난, 전쟁, 예전에, 고향에서 어렸을 때:
-  → The scene takes place in THAT ERA (1940s–1970s Korea)
-  → The protagonist must appear at the AGE they were in that memory (child, teenager, or young adult — NOT elderly)
-  → Background must reflect the era: thatched-roof houses, dirt roads, traditional Korean village, period-appropriate clothing
-  → Other characters (father, mother, friends) also appear at their age from that time
-  → This is a FLASHBACK scene — depict it as a vivid memory, not the present day
-
-PRESENT / NEAR FUTURE — if the chapter describes current daily life or near-future plans ("요즘", "매일", "오늘", "가보려 한다"):
-  → The protagonist appears as a ${ageLabel} ${genderLabel} in modern or contemporary setting
-
-STORYTELLING TO OTHERS — if the chapter describes the author telling a past story to grandchildren/family:
-  → Show the PAST SCENE being described (the memory itself), not the act of telling
-  → Characters in the memory appear at their historical age`,
+- The protagonist is a ${genderLabel}.
+- If the chapter mentions another person (spouse, child, grandchild, friend, colleague), INCLUDE them.
+- Actions must be concrete and specific: "handing a letter", "lifting a child", "sharing kimbap", "shaking hands", "cooking together" — NEVER "looking away" or "gazing nostalgically".
+- Position protagonist in the lower 60% of frame to leave upper 30% as open sky or soft background for title text.`,
         },
         {
           role: 'user',
@@ -158,9 +166,9 @@ function buildDallePrompt(
   layout: SceneLayout,
   palette: string,
 ): string {
-  // foreground_objects를 자연어로 조립
+  // foreground_objects를 자연어로 조립 — age_description을 앞에 붙여 나이가 이미지에 반영되도록 함
   const subjects = layout.foreground_objects
-    .map(o => `${o.object} (${o.position}): ${o.action}`)
+    .map(o => `${o.age_description} ${o.object} (${o.position}): ${o.action}`)
     .join('; ')
 
   return [
@@ -383,7 +391,7 @@ Deno.serve(async (req) => {
       } catch { /* 기본값으로 진행 */ }
 
       const openai = new OpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') })
-      const genderLabel = gender === 'male' ? 'male elderly' : 'female elderly'
+      const genderLabel = gender === 'male' ? 'male' : 'female'
       const ageLabel = age ? `${Math.floor(age / 10) * 10}s` : 'elderly'
       const palette = gender ? (GENDER_PALETTE[gender] ?? GENDER_PALETTE['female']) : GENDER_PALETTE['female']
 
@@ -533,7 +541,7 @@ Deno.serve(async (req) => {
 
       const openai = new OpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') })
 
-      const genderLabel = gender === 'male' ? 'male elderly' : 'female elderly'
+      const genderLabel = gender === 'male' ? 'male' : 'female'
       const ageLabel = age ? `${Math.floor(age / 10) * 10}s` : 'elderly'
       const palette = gender ? (GENDER_PALETTE[gender] ?? GENDER_PALETTE['female']) : GENDER_PALETTE['female']
 
@@ -634,7 +642,7 @@ Deno.serve(async (req) => {
 
     const openai = new OpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') })
 
-    const genderLabel = gender === 'male' ? 'male elderly' : 'female elderly'
+    const genderLabel = gender === 'male' ? 'male' : 'female'
     const ageLabel = age ? `${Math.floor(age / 10) * 10}s` : 'elderly'
     const palette = gender ? (GENDER_PALETTE[gender] ?? GENDER_PALETTE['female']) : GENDER_PALETTE['female']
 

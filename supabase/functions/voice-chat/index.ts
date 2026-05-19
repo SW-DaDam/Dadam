@@ -2,7 +2,6 @@
 // Vercel AI SDK streamText → toDataStreamResponse() 로 SSE 스트림 반환
 
 import { createClient } from 'npm:@supabase/supabase-js'
-import { createGoogleGenerativeAI } from 'npm:@ai-sdk/google'
 import { createOpenAI } from 'npm:@ai-sdk/openai'
 import { streamText } from 'npm:ai'
 
@@ -57,19 +56,10 @@ interface VoiceChatRequest {
   senior_id: string
 }
 
-// 환경변수 ACTIVE_MODEL에 따라 Gemini(기본) 또는 GPT 모델 선택
+// gpt-5.4-mini 고정 사용
 function getModel() {
-  const activeModel = Deno.env.get('ACTIVE_MODEL') ?? 'gemini'
-
-  if (activeModel === 'gpt') {
-    // GPT-4o-mini: 상용화 단계에서 사용
-    const openai = createOpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') ?? '' })
-    return openai('gpt-4o-mini')
-  }
-
-  // 기본: Gemini 2.5 Flash (개발·테스트 — 무료 티어 지원)
-  const google = createGoogleGenerativeAI({ apiKey: Deno.env.get('GOOGLE_GENERATIVE_AI_API_KEY') ?? '' })
-  return google('gemini-2.5-flash')
+  const openai = createOpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') ?? '' })
+  return openai('gpt-5.4-mini')
 }
 
 /**

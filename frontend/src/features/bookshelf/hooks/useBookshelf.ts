@@ -55,5 +55,20 @@ export function useBookshelf() {
     fetchBooks().finally(() => setLoading(false))
   }, [refreshKey])
 
-  return { books, loading, refresh }
+  // 책 삭제 — chapters/cover_images는 FK CASCADE로 자동 삭제
+  async function deleteBook(bookId: string) {
+    const { error } = await supabase.from('books').delete().eq('id', bookId)
+    if (error) throw new Error(error.message)
+    // 로컬 상태 즉시 반영
+    setBooks((prev) => prev.filter((b) => b.id !== bookId))
+  }
+
+  return {
+    books,
+    monthlyBooks: books.filter((b) => b.book_type === 'monthly'),
+    shortBooks: books.filter((b) => b.book_type === 'short'),
+    loading,
+    refresh,
+    deleteBook,
+  }
 }

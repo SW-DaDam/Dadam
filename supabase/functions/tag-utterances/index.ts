@@ -179,7 +179,7 @@ Reason: Situational complaint with low emotional intensity — does not meet emo
     try {
       // system role로 분리하여 지시 명확성 향상
       const { text } = await generateText({
-        model: openai('gpt-4o-mini'),
+        model: openai('gpt-5.4-mini'),
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },

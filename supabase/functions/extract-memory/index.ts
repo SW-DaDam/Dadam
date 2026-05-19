@@ -233,7 +233,7 @@ Return the complete final memory array:`
     let finalItems: MemoryItem[]
     try {
       const { text } = await generateText({
-        model: openai('gpt-4o-mini'),
+        model: openai('gpt-5.4-mini'),
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: 'Return the complete final memory array integrating the new utterances.' },

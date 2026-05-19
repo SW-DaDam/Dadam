@@ -536,7 +536,10 @@ export default function SeniorBookReadPage() {
     )
   }
 
-  const headerTitle = `${book.year}년 ${book.month}월 이야기`
+  // 단편: 책 제목 그대로, 월간: "년 월 이야기"
+  const headerTitle = book.book_type === 'short'
+    ? book.title
+    : `${book.year}년 ${book.month}월 이야기`
 
   // ─── 렌더 ─────────────────────────────────────────────────────────────────
 

@@ -1,4 +1,4 @@
-// prompts.ts — generate-book 챕터 구성 LLM 프롬프트
+// prompts.ts — generate-book 챕터 구성 LLM 프롬프트 (월간 + 단편)
 // 영문 작성: LLM의 지시 이해도·토큰 효율이 한국어보다 높음 (voice-chat 패턴 동일)
 
 // 선별된 발화 항목 타입
@@ -23,11 +23,18 @@ export interface ChapterOutput {
   source_utterance_ids: string[]
 }
 
-// LLM 전체 출력 타입 (JSON 파싱 후 사용)
+// LLM 전체 출력 타입 (JSON 파싱 후 사용) — 월간 책용
 export interface BookOutput {
   book_title: string
   book_subtitle: string
   chapters: ChapterOutput[]
+}
+
+// 단편 책 LLM 출력 타입 (1챕터 고정)
+export interface ShortBookOutput {
+  book_title: string
+  book_subtitle: string
+  chapters: [ChapterOutput]  // 튜플 — 반드시 1개
 }
 
 // 챕터 구성 시스템 프롬프트
@@ -127,7 +134,7 @@ Expected output (example only — do not copy verbatim):
 }`
 
 /**
- * 선별된 발화 목록 + 저자 프로필로 LLM user 메시지 구성
+ * 선별된 발화 목록 + 저자 프로필로 LLM user 메시지 구성 (월간 책용)
  * - authorProfile: memories items를 "[category] text emoji" 형식으로 변환한 줄 목록
  *   없을 경우 [Author profile] 섹션 자체를 생략 (BASE_PROMPT fallback과 동일 패턴)
  */
@@ -141,4 +148,89 @@ export function buildChapteringUserMessage(utterances: UtteranceItem[], authorPr
     : ''
 
   return `${profileSection}Create a chapter book from the following senior utterances:\n${lines}`
+}
+
+// 단편 책 챕터 구성 시스템 프롬프트
+// CHAPTERING_SYSTEM_PROMPT와 동일 기반, 변경점:
+//   - 1챕터 고정 (같은 주제 발화들이 입력이므로 분리 불필요)
+//   - content 600~900자 (주제 밀도가 높아 월간 챕터보다 길게)
+//   - book_title은 반복 주제명을 직접 반영 (예: "낚시터의 오후들")
+//   - topicTitle이 user 메시지에 포함되어 LLM의 주제 중심 서술 가이드
+export const SHORT_CHAPTERING_SYSTEM_PROMPT = `You are a memoir writer who transforms a Korean senior's spoken utterances about a single recurring theme into a focused one-chapter short story book.
+
+[Core rules]
+- Write all narrative content in KOREAN, from the senior's perspective using first-person ("내가 ~했다", "나는 ~이었다")
+- Preserve the senior's voice and emotion — do not beautify or distort the facts
+- The narrative must be grounded in the provided utterances; do not invent events not mentioned
+- The [Author profile] section below is background context only — use it to enrich language register, relationship expressions, and emotional nuance. Do NOT create new story content from it.
+- Return ONLY valid JSON — no markdown code blocks, no explanatory text
+
+[Chapter count rule]
+- Create EXACTLY 1 chapter — the utterances all belong to a single recurring theme provided in the input
+- Do not split into multiple chapters
+
+[Chapter content length]
+- content: 600 to 900 Korean characters (longer than a monthly chapter to fully develop the recurring theme)
+
+[Book title rule]
+- book_title should directly name the recurring theme (e.g., "낚시터의 오후들", "그 시절 전쟁 이야기", "할머니의 텃밭")
+- Avoid generic titles — make it specific to the topic
+
+[How to use the Author profile]
+- If an utterance mentions a person by name and the profile identifies their relationship, use the full relationship label naturally
+- If the profile reveals a recurring interest or value, use it to add one or two words of warmth — but only when an utterance already touches that topic
+- Never introduce profile facts into a chapter that has no utterance connecting to them
+
+[Spoken-to-written conversion — key principle]
+Convert colloquial speech into natural literary Korean while preserving the senior's original meaning.
+- Original: "우리 어머니가 밥 해놓고 기다리셨어. 지금도 엄마가 제일 생각나"
+- Converted: "학교에서 돌아오면 늘 따뜻한 밥이 기다리고 있었다. 그 냄새는 지금도 선명하다."
+Do NOT use formal essay style — keep it warm and close to how the senior would tell the story.
+
+[Opening sentence rule]
+- Start the chapter with a concrete sensory detail or a specific scene (a smell, a sound, a weather moment, a gesture)
+- Avoid abstract openings like "그 시절은 행복했다"
+
+[Tone consistency]
+- Use a consistent first-person informal register throughout (e.g., "~했어", "~이더라고")
+- Do NOT mix formal essay tone ("~하였다") with conversational tone
+- The voice should sound like the senior is telling the story to a close family member
+
+[Narrative writing style]
+- Use warm, natural Korean prose
+- Weave all related utterances into a single flowing narrative centered on the recurring theme
+- End with a quiet reflection or emotional resonance tied to the theme
+
+[Output format — strict JSON, no other text]
+{
+  "book_title": "string (specific to the recurring theme, 10-20 Korean characters)",
+  "book_subtitle": "string (gentle subtitle, 10-20 Korean characters)",
+  "chapters": [
+    {
+      "title": "string (chapter title, 8-15 Korean characters)",
+      "theme": "가족 | 추억 | 일상 | 가치관",
+      "content": "string (narrative, 600-900 Korean characters)",
+      "source_utterance_ids": ["uuid", "..."]
+    }
+  ]
+}`
+
+/**
+ * 단편 책용 LLM user 메시지 구성
+ * topicTitle이 포함되어 LLM이 주제를 명확히 인식하고 서술 방향을 잡음
+ */
+export function buildShortBookUserMessage(
+  utterances: UtteranceItem[],
+  topicTitle: string,
+  authorProfile?: string,
+): string {
+  const lines = utterances
+    .map((u) => `{"id": "${u.id}", "content": "${u.content.replace(/"/g, '\\"')}"}`)
+    .join('\n')
+
+  const profileSection = authorProfile
+    ? `[Author profile]\n${authorProfile}\n\n`
+    : ''
+
+  return `${profileSection}Recurring theme (topic of this short book): "${topicTitle}"\n\nCreate a single-chapter short book from the following senior utterances about this theme:\n${lines}`
 }

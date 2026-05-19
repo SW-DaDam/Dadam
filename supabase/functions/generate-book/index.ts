@@ -8,8 +8,11 @@ import { createOpenAI } from 'npm:@ai-sdk/openai'
 import { generateText } from 'npm:ai'
 import {
   CHAPTERING_SYSTEM_PROMPT,
+  SHORT_CHAPTERING_SYSTEM_PROMPT,
   buildChapteringUserMessage,
+  buildShortBookUserMessage,
   type BookOutput,
+  type ShortBookOutput,
   type UtteranceItem,
   type MemoryItem,
 } from './prompts.ts'
@@ -101,11 +104,14 @@ async function aggregateUtterances(
   if (conversationIds.length === 0) return []
 
   // 해당 conversation들의 어르신 발화 조회
+  // used_in_short_book_id IS NULL — 단편에 이미 사용된 발화는 월간 책 풀에서 제외
   const { data: utterances, error } = await supabase
     .from('utterances')
     .select('id, content, tags')
     .eq('speaker', 'senior')
     .in('conversation_id', conversationIds)
+    .is('used_in_short_book_id', null)      // 단편에 사용된 발화 제외
+    .is('used_in_monthly_book_id', null)    // 월간 책에 사용된 발화 제외
     .order('created_at', { ascending: true })
 
   if (error) throw new Error(`utterances 조회 실패: ${error.message}`)
@@ -183,6 +189,8 @@ async function aggregateUtterancesFallback(
     .eq('speaker', 'senior')
     .in('conversation_id', conversationIds)
     .contains('tags', ['emotional_peak'])   // emotional_peak 태그 보유 발화만
+    .is('used_in_short_book_id', null)      // 단편에 사용된 발화 제외
+    .is('used_in_monthly_book_id', null)    // 월간 책에 사용된 발화 제외
     .order('created_at', { ascending: true })
 
   if (error) throw new Error(`fallback utterances 조회 실패: ${error.message}`)
@@ -335,7 +343,7 @@ async function runPipelineForSenior(
     const openai = createOpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') ?? '' })
 
     const callLLM = () => generateText({
-      model: openai('gpt-4o'),
+      model: openai('gpt-5.4-mini'),
       messages: [
         { role: 'system', content: CHAPTERING_SYSTEM_PROMPT },
         { role: 'user', content: buildChapteringUserMessage(selectedUtterances, authorProfile) },
@@ -449,7 +457,18 @@ async function runPipelineForSenior(
     stage_payload: { aggregated_ids: aggregatedIds, book_id: bookId },
   })
 
-  console.log(`[generate-book] job ${jobId} — book ${bookId} 생성 완료 (챕터 ${chaptersToInsert.length}개)`)
+  // 월간 책에 사용된 발화 잠금 — 이후 단편 후보 풀에서 제외됨 (handleShortBook 패턴 동일)
+  const { error: lockErr } = await supabase
+    .from('utterances')
+    .update({ used_in_monthly_book_id: bookId })
+    .in('id', aggregatedIds)
+
+  if (lockErr) {
+    // 발화 잠금 실패는 치명적이지 않음 — 로그 남기고 진행 (책은 이미 생성됨)
+    console.warn(`[generate-book] job ${jobId} — used_in_monthly_book_id 업데이트 실패:`, lockErr)
+  }
+
+  console.log(`[generate-book] job ${jobId} — book ${bookId} 생성 완료 (챕터 ${chaptersToInsert.length}개, 발화 잠금: ${aggregatedIds.length}건)`)
 
   // ── cover_requested: 챕터별 generate-cover 개별 호출 ────────────────────
   // 이전: Webhook으로 1번 호출 → 전체 챕터 병렬 처리 → 150s 타임아웃 초과 (챕터 3개 이상 시)
@@ -484,6 +503,256 @@ async function runPipelineForSenior(
   }
 
   console.log(`[generate-book] job ${jobId} — cover_requested 완료, ${insertedChapters?.length ?? 0}개 챕터 개별 호출 예약`)
+
+  return { outcome: 'success' }
+}
+
+/**
+ * 단편 책 생성 파이프라인
+ * stage_payload에 utterance_ids + topic_title이 이미 포함된 pending job을 이어서 실행
+ * aggregating → chaptering → cover_requested
+ * runPipelineForSenior와 구조 동일, 차이점:
+ *   - utterances를 ID 목록으로 직접 조회 (월 집계 없음)
+ *   - SHORT_CHAPTERING_SYSTEM_PROMPT 사용 (1챕터, 600~900자)
+ *   - books INSERT: book_type='short', year/month=현재 날짜
+ *   - 생성 후 used_in_short_book_id 업데이트로 발화 잠금
+ */
+async function handleShortBook(
+  supabase: ReturnType<typeof createClient>,
+  job: { id: string; senior_id: string; stage_payload: Record<string, unknown> },
+): Promise<PipelineResult> {
+  const { id: jobId, senior_id: seniorId, stage_payload } = job
+  const payload = stage_payload as {
+    book_type: 'short'
+    utterance_ids: string[]
+    topic_title: string
+  }
+
+  if (!payload.utterance_ids || payload.utterance_ids.length === 0) {
+    await updateJobStatus(supabase, jobId, 'failed', {
+      error_log: '[aggregating] stage_payload.utterance_ids가 비어있습니다',
+    })
+    return { outcome: 'failed' }
+  }
+
+  // ── aggregating: utterance_ids로 발화 직접 조회 ───────────────────────
+  await updateJobStatus(supabase, jobId, 'aggregating')
+
+  // used_in_short_book_id IS NULL 필터: 이미 다른 단편에 사용된 발화 제외
+  // 동일 utterance_ids로 중복 요청 시 두 번째 요청이 빈 발화로 실패하도록 보장
+  const { data: utterancesData, error: uttErr } = await supabase
+    .from('utterances')
+    .select('id, content')
+    .in('id', payload.utterance_ids)
+    .eq('speaker', 'senior')
+    .is('used_in_short_book_id', null)
+
+  if (uttErr) {
+    await updateJobStatus(supabase, jobId, 'failed', {
+      error_log: `[aggregating] utterances 조회 실패: ${uttErr.message}`,
+    })
+    return { outcome: 'failed' }
+  }
+
+  const selectedUtterances: UtteranceItem[] = (utterancesData ?? []).map(
+    (u: { id: string; content: string }) => ({ id: u.id, content: u.content }),
+  )
+
+  if (selectedUtterances.length === 0) {
+    await updateJobStatus(supabase, jobId, 'failed', {
+      error_log: '[aggregating] utterances not found',
+    })
+    return { outcome: 'failed' }
+  }
+
+  await updateJobStatus(supabase, jobId, 'aggregating', {
+    stage_payload: { ...stage_payload, aggregated_ids: selectedUtterances.map((u) => u.id) },
+  })
+
+  console.log(`[generate-book:short] job ${jobId} — ${selectedUtterances.length}건 발화 조회 완료`)
+
+  // ── 저자 프로필 조회 (runPipelineForSenior와 동일 패턴) ──────────────────
+  let authorProfile: string | undefined
+  try {
+    const [{ data: memoryRow }, { data: profileRow }] = await Promise.all([
+      supabase.from('memories').select('data').eq('senior_id', seniorId).single(),
+      supabase.from('senior_profiles').select('gender, birth_date').eq('id', seniorId).single(),
+    ])
+
+    const profileLines: string[] = []
+    if (profileRow) {
+      if (profileRow.gender) profileLines.push(`- gender: ${profileRow.gender}`)
+      if (profileRow.birth_date) {
+        const age = new Date().getFullYear() - new Date(profileRow.birth_date).getFullYear()
+        profileLines.push(`- age: approx. ${age}`)
+      }
+    }
+
+    const allItems: MemoryItem[] = (memoryRow?.data as { items?: MemoryItem[] })?.items ?? []
+    const today = new Date().toISOString().slice(0, 10)
+    const items = allItems.filter((item) => !item.expires_at || item.expires_at > today)
+    for (const item of items) {
+      profileLines.push(`- [${item.category}] ${item.text} ${item.emoji}`)
+    }
+
+    if (profileLines.length > 0) authorProfile = profileLines.join('\n')
+  } catch (memErr) {
+    console.warn(`[generate-book:short] job ${jobId} — 저자 프로필 조회 실패, 프로필 없이 진행:`, memErr)
+  }
+
+  // ── chaptering: SHORT_CHAPTERING_SYSTEM_PROMPT로 1챕터 생성 ───────────
+  await updateJobStatus(supabase, jobId, 'chaptering')
+
+  let bookOutput: ShortBookOutput
+  try {
+    const openai = createOpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') ?? '' })
+
+    const callLLM = () => generateText({
+      model: openai('gpt-5.4-mini'),
+      messages: [
+        { role: 'system', content: SHORT_CHAPTERING_SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: buildShortBookUserMessage(selectedUtterances, payload.topic_title, authorProfile),
+        },
+      ],
+      temperature: 0.7,
+    })
+
+    const extractJson = (raw: string): ShortBookOutput | null => {
+      const stripped = raw
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/\s*```\s*$/, '')
+        .trim()
+      try {
+        return JSON.parse(stripped) as ShortBookOutput
+      } catch {
+        return null
+      }
+    }
+
+    const result = await callLLM()
+    let parsed = extractJson(result.text)
+
+    if (!parsed) {
+      console.warn(`[generate-book:short] job ${jobId} — JSON 파싱 실패, 1회 재시도`)
+      const retry = await callLLM()
+      parsed = extractJson(retry.text)
+      if (!parsed) throw new Error('JSON 파싱 재시도 실패')
+    }
+
+    bookOutput = parsed
+
+    if (!bookOutput.book_title || !Array.isArray(bookOutput.chapters) || bookOutput.chapters.length === 0) {
+      throw new Error('LLM 출력 형식 오류: book_title 또는 chapters 누락')
+    }
+  } catch (err) {
+    await updateJobStatus(supabase, jobId, 'failed', {
+      error_log: `[chaptering] ${String(err)}`,
+    })
+    return { outcome: 'failed' }
+  }
+
+  // books INSERT (book_type='short', year/month=현재 날짜 기준)
+  const now = new Date()
+  const { data: book, error: bookErr } = await supabase
+    .from('books')
+    .insert({
+      senior_id: seniorId,
+      title: bookOutput.book_title,
+      subtitle: bookOutput.book_subtitle ?? null,
+      book_type: 'short',
+      status: 'draft',
+      year: now.getFullYear(),
+      month: now.getMonth() + 1,
+    })
+    .select('id')
+    .single()
+
+  if (bookErr || !book) {
+    await updateJobStatus(supabase, jobId, 'failed', {
+      error_log: `[chaptering] books INSERT 실패: ${bookErr?.message}`,
+    })
+    return { outcome: 'failed' }
+  }
+
+  const bookId = book.id
+
+  // chapters INSERT (단편은 1챕터 고정)
+  const chaptersToInsert = bookOutput.chapters.map((ch, idx) => ({
+    book_id: bookId,
+    title: ch.title,
+    theme: ch.theme,
+    content: ch.content,
+    sort_order: idx + 1,
+    source_utterance_ids: ch.source_utterance_ids ?? [],
+  }))
+
+  const { error: chaptersErr } = await supabase
+    .from('chapters')
+    .insert(chaptersToInsert)
+
+  if (chaptersErr) {
+    // chapters INSERT 실패 시 고아 books 행 삭제 (runPipelineForSenior와 동일 패턴)
+    await supabase.from('books').delete().eq('id', bookId)
+    await updateJobStatus(supabase, jobId, 'failed', {
+      error_log: `[chaptering] chapters INSERT 실패: ${chaptersErr.message}`,
+    })
+    return { outcome: 'failed' }
+  }
+
+  await supabase
+    .from('books')
+    .update({ chapter_count: chaptersToInsert.length })
+    .eq('id', bookId)
+
+  await updateJobStatus(supabase, jobId, 'chaptering', {
+    book_id: bookId,
+    stage_payload: { ...stage_payload, book_id: bookId },
+  })
+
+  // 단편에 사용된 발화 잠금 — 이후 월간 책 풀에서 제외됨
+  // chapters INSERT 성공 후에만 실행하여 실패 시 발화가 잠기지 않도록 보장
+  const { error: lockErr } = await supabase
+    .from('utterances')
+    .update({ used_in_short_book_id: bookId })
+    .in('id', payload.utterance_ids)
+
+  if (lockErr) {
+    // 발화 잠금 실패는 치명적이지 않음 — 로그 남기고 진행 (책은 이미 생성됨)
+    console.warn(`[generate-book:short] job ${jobId} — used_in_short_book_id 업데이트 실패:`, lockErr)
+  }
+
+  console.log(`[generate-book:short] job ${jobId} — book ${bookId} 생성 완료 (발화 잠금: ${payload.utterance_ids.length}건)`)
+
+  // ── cover_requested: generate-cover 호출 ─────────────────────────────
+  await updateJobStatus(supabase, jobId, 'cover_requested', { book_id: bookId })
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+  const internalSecret = Deno.env.get('INTERNAL_COVER_SECRET')!
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
+
+  const { data: insertedChapters } = await supabase
+    .from('chapters')
+    .select('id, sort_order')
+    .eq('book_id', bookId)
+    .eq('is_deleted', false)
+    .order('sort_order')
+
+  if (insertedChapters && insertedChapters.length > 0) {
+    for (const ch of insertedChapters) {
+      await supabase.rpc('net_http_post_cover', {
+        p_url: `${supabaseUrl}/functions/v1/generate-cover`,
+        p_book_id: bookId,
+        p_senior_id: seniorId,
+        p_chapter_id: ch.id,
+        p_secret: internalSecret,
+        p_anon_key: anonKey,
+      })
+      console.log(`[generate-book:short] job ${jobId} — chapter ${ch.id} cover 호출 예약`)
+    }
+  }
 
   return { outcome: 'success' }
 }
@@ -576,11 +845,27 @@ Deno.serve(async (req) => {
         )
       }
 
-      // stage_payload에서 요청된 연/월 복원 (없으면 현재 달 fallback)
-      const payload = (pendingJob.stage_payload ?? {}) as { target_year?: number; target_month?: number }
+      // book_type에 따라 단편/월간 파이프라인 분기
+      const stagePayload = (pendingJob.stage_payload ?? {}) as Record<string, unknown>
+      const bookType = stagePayload.book_type ?? 'monthly'
+
+      if (bookType === 'short') {
+        // 단편 책 파이프라인 — utterance_ids + topic_title 기반
+        const { outcome } = await handleShortBook(supabase, {
+          id: pendingJob.id,
+          senior_id: pendingJob.senior_id,
+          stage_payload: stagePayload,
+        })
+        return new Response(
+          JSON.stringify({ message: '단편 파이프라인 완료', job_id: body.job_id, result: outcome }),
+          { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+        )
+      }
+
+      // 월간 책 파이프라인 — stage_payload에서 연/월 복원 (없으면 현재 달 fallback)
       const now = new Date()
-      const jobYear = payload.target_year ?? now.getFullYear()
-      const jobMonth = payload.target_month ?? (now.getMonth() + 1)
+      const jobYear = (stagePayload.target_year as number | undefined) ?? now.getFullYear()
+      const jobMonth = (stagePayload.target_month as number | undefined) ?? (now.getMonth() + 1)
 
       const { outcome } = await runPipelineForSenior(supabase, pendingJob.senior_id, jobYear, jobMonth, pendingJob.id)
       return new Response(
