@@ -173,6 +173,7 @@ export type Database = {
       }
       comments: {
         Row: {
+          audio_url: string | null
           author_id: string
           book_id: string
           content: string
@@ -181,6 +182,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          audio_url?: string | null
           author_id: string
           book_id: string
           content: string
@@ -189,6 +191,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          audio_url?: string | null
           author_id?: string
           book_id?: string
           content?: string
@@ -491,7 +494,7 @@ export type Database = {
           {
             foreignKeyName: "replies_comment_id_fkey"
             columns: ["comment_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "comments"
             referencedColumns: ["id"]
           },

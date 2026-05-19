@@ -6,6 +6,7 @@ import { useAuthStore } from '@/shared/stores/authStore'
 import { useThemeStore } from '@/shared/stores/themeStore'
 import { useFontSizeStore, type FontSize } from '@/shared/stores/fontSizeStore'
 import { useMemory } from '@/features/memory/hooks/useMemory'
+import { useInvite } from '@/features/family/hooks/useInvite'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 
@@ -41,6 +42,7 @@ export default function SeniorSettingsPage() {
   }, [user, profile, setProfile])
 
   const { items: memoryItems } = useMemory(user?.id ?? '')
+  const { familyMembers } = useInvite()
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -148,9 +150,16 @@ export default function SeniorSettingsPage() {
               </div>
               <div className="flex-1 flex flex-col gap-0.5 min-w-0">
                 <p className="text-[1.125rem] text-[#1F2937]">연결된 가족</p>
-                <p className="text-base text-[#6B7280]">김민준, 이수빈 외 1명</p>
+                <p className="text-base text-[#6B7280]">
+                  {familyMembers.length === 0
+                    ? '아직 연결된 가족이 없어요'
+                    : familyMembers.slice(0, 2).map(m => m.profile?.display_name ?? '가족').join(', ')
+                      + (familyMembers.length > 2 ? ` 외 ${familyMembers.length - 2}명` : '')}
+                </p>
               </div>
-              <span className="bg-[#FFF0DC] rounded-lg px-2 py-1 text-sm text-[#E8820C] shrink-0">3명</span>
+              {familyMembers.length > 0 && (
+                <span className="bg-[#FFF0DC] rounded-lg px-2 py-1 text-sm text-[#E8820C] shrink-0">{familyMembers.length}명</span>
+              )}
               <ChevronRight size={20} className="text-[#D1D5DB] shrink-0" />
             </button>
           </div>
@@ -203,8 +212,7 @@ export default function SeniorSettingsPage() {
         {/* 기타 섹션 */}
         <div className="flex flex-col gap-1">
           <p className="text-base text-[#6B7280] px-1">기타</p>
-          <div className="bg-white border border-[#E5E7EB] rounded-2xl divide-y divide-[#E5E7EB]">
-            {/* 알림 설정 */}
+          <div className="bg-white border border-[#E5E7EB] rounded-2xl">
             <button
               type="button"
               onClick={() => navigate('/s/settings/notifications')}
@@ -219,20 +227,6 @@ export default function SeniorSettingsPage() {
               </div>
               <ChevronRight size={20} className="text-[#D1D5DB] shrink-0" />
             </button>
-            {/* 이용약관 */}
-            <button
-              type="button"
-              className="w-full flex items-center gap-3 px-5 py-4 text-left"
-            >
-              <div className="w-10 h-10 rounded-xl bg-[#F3F4F6] flex items-center justify-center shrink-0 text-lg text-[#6B7280]">
-                □
-              </div>
-              <div className="flex-1 flex flex-col gap-0.5">
-                <p className="text-[1.125rem] text-[#1F2937]">이용약관 · 개인정보 처리방침</p>
-                <p className="text-base text-[#6B7280]">오브젠</p>
-              </div>
-              <ChevronRight size={20} className="text-[#D1D5DB] shrink-0" />
-            </button>
           </div>
         </div>
 
@@ -240,16 +234,18 @@ export default function SeniorSettingsPage() {
         <div className="bg-white border border-[#E5E7EB] rounded-2xl">
           <button
             type="button"
-            onClick={() => navigate('/login')}
-            className="w-full py-4 text-center"
+            onClick={async () => {
+              await supabase.auth.signOut()
+              useAuthStore.getState().clear()
+              navigate('/login', { replace: true })
+            }}
+            className="w-full py-4 text-center min-h-11"
           >
             <span className="text-[1.125rem] text-[#6B7280]">로그아웃</span>
           </button>
         </div>
 
         {/* 앱 버전 */}
-        <p className="text-sm text-[#D1D5DB] text-center pb-2">AI 말동무 v1.0.0 · 오브젠</p>
-
       </main>
     </div>
   )

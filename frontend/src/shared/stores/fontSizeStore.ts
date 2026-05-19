@@ -4,9 +4,9 @@ import { persist } from 'zustand/middleware'
 export type FontSize = 'small' | 'medium' | 'large'
 
 const FONT_SIZE_MAP: Record<FontSize, string> = {
-  small: '16px',
-  medium: '18px',
-  large: '22px',
+  small: '15px',
+  medium: '16px',
+  large: '18px',
 }
 
 interface FontSizeState {
@@ -17,7 +17,7 @@ interface FontSizeState {
 export const useFontSizeStore = create<FontSizeState>()(
   persist(
     (set) => ({
-      fontSize: 'large',
+      fontSize: 'medium',
       setFontSize: (size) => {
         set({ fontSize: size })
         document.documentElement.style.fontSize = FONT_SIZE_MAP[size]
@@ -35,6 +35,6 @@ export function initFontSize() {
       document.documentElement.style.fontSize = FONT_SIZE_MAP[state.fontSize]
     }
   } else {
-    document.documentElement.style.fontSize = FONT_SIZE_MAP['large']
+    document.documentElement.style.fontSize = FONT_SIZE_MAP['medium']
   }
 }

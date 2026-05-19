@@ -3,6 +3,9 @@
 
 @layer base {
   :root {
+    /* 콘텐츠 영역 글씨 크기 — 책 본문, 채팅 말풍선에만 적용 (UI 크롬은 고정) */
+    --content-font-size: 18px;
+
     /* shadcn/ui 색상 변수 (Tailwind v4 CSS-first) */
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
@@ -64,11 +67,18 @@
 .dark .bg-\[\#FFF8F0\] { background-color: #111827 !important; }
 .dark .bg-\[\#FFFBF5\] { background-color: #111827 !important; }
 .dark .bg-\[\#FFF0DC\] { background-color: #292524 !important; }
+.dark .bg-\[\#F5E6D0\] { background-color: #292524 !important; }
+.dark .bg-\[\#FEF2F2\] { background-color: #450a0a !important; }
+.dark .bg-\[\#FEE2E2\] { background-color: #450a0a !important; }
+.dark .bg-\[\#DCFCE7\] { background-color: #052e16 !important; }
+.dark .bg-\[\#F0FDF4\] { background-color: #052e16 !important; }
+.dark .bg-\[\#EFF6FF\] { background-color: #0c1a2e !important; }
 
 .dark .text-\[\#1F2937\] { color: #F9FAFB !important; }
 .dark .text-\[\#374151\] { color: #E5E7EB !important; }
 .dark .text-\[\#6B7280\] { color: #9CA3AF !important; }
-.dark .text-\[\#9CA3AF\] { color: #6B7280 !important; }
+.dark .text-\[\#9CA3AF\] { color: #D1D5DB !important; }
+.dark .text-\[\#2D2D2D\] { color: #F9FAFB !important; }
 
 .dark .border-\[\#E5E7EB\] { border-color: #374151 !important; }
 .dark .border-b { border-color: #374151 !important; }
@@ -116,7 +126,7 @@
   input,
   select,
   textarea {
-    min-height: 2.75rem; /* 44px / 16px = 2.75rem */
+    min-height: 44px;
   }
 
   /* 포커스 링 강화 — 접근성 */
@@ -124,4 +134,9 @@
     outline: 3px solid var(--ring);
     outline-offset: 2px;
   }
+}
+
+/* 콘텐츠 전용 글씨 크기 — 책 본문·채팅 말풍선만 스케일, UI 크롬은 고정 */
+.text-content {
+  font-size: var(--content-font-size);
 }

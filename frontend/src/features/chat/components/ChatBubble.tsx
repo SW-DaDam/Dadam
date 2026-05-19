@@ -19,7 +19,7 @@ export default function ChatBubble({ role, lines, time, onReplay }: ChatBubblePr
           <div className="flex items-end gap-1">
             <div className="bg-[#FFF0DC] rounded-2xl rounded-bl-sm px-4 py-3">
               {lines.map((line) => (
-                <p key={line} className="text-[1.0625rem] text-[#1F2937]">{line}</p>
+                <p key={line} className="text-content text-[#1F2937]">{line}</p>
               ))}
             </div>
             {onReplay && (
@@ -43,7 +43,7 @@ export default function ChatBubble({ role, lines, time, onReplay }: ChatBubblePr
     <div className="flex flex-col items-end gap-1 max-w-[80%] self-end">
       <div className="bg-white border border-[#E8820C] rounded-2xl rounded-br-sm px-4 py-3">
         {lines.map((line) => (
-          <p key={line} className={cn('text-[1.0625rem] text-[#1F2937] text-right')}>{line}</p>
+          <p key={line} className={cn('text-content text-[#1F2937] text-right')}>{line}</p>
         ))}
       </div>
       <span className="text-xs text-[#6B7280] pr-1">{time}</span>

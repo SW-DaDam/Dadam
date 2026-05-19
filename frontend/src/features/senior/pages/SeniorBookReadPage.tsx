@@ -1,15 +1,30 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router'
-import { ChevronLeft, Share2, Mic } from 'lucide-react'
+import { ChevronLeft, Mic, Square, Play, Pause } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/shared/stores/authStore'
+import { josa } from '@/lib/utils'
+import { useVoiceReply, formatDuration } from '@/features/senior/hooks/useVoiceReply'
+import { useContentFontSizeStore, type ContentFontSize } from '@/shared/stores/contentFontSizeStore'
 import type { Book, Chapter, Comment, Reply, Profile } from '@/types/domain'
+
+const CONTENT_SIZE_OPTIONS: { value: ContentFontSize; label: string }[] = [
+  { value: 'small', label: '작게' },
+  { value: 'medium', label: '보통' },
+  { value: 'large', label: '크게' },
+]
 
 // ─── 타입 ─────────────────────────────────────────────────────────────────────
 
+interface ReplyWithAuthor extends Reply {
+  author: Pick<Profile, 'id' | 'display_name' | 'avatar_url'> | null
+  relationship: string | null
+}
+
 interface CommentWithData extends Comment {
   author: Pick<Profile, 'id' | 'display_name' | 'avatar_url'> | null
-  replies: Reply[]
+  relationship: string | null
+  replies: ReplyWithAuthor[]
 }
 
 // ─── 훅: 책 읽기 데이터 조회 ─────────────────────────────────────────────────
@@ -36,25 +51,30 @@ function useBookRead(bookId: string | undefined) {
     if (!bookData) return
     setBook(bookData)
 
-    // 선택된 표지 이미지 조회 (selected 우선, 없으면 candidate 첫 번째)
-    const { data: selectedCover } = await supabase
-      .from('cover_images')
-      .select('image_url')
-      .eq('book_id', bookId)
-      .eq('status', 'selected')
-      .single()
-
-    if (selectedCover) {
-      setCoverImageUrl(selectedCover.image_url)
+    // 표지 이미지: books.cover_image_url 우선 사용 (독자 RLS 호환)
+    // cover_image_url이 없을 경우에만 cover_images 테이블 조회 (저자 편집 중 fallback)
+    if (bookData.cover_image_url) {
+      setCoverImageUrl(bookData.cover_image_url)
     } else {
-      const { data: candidateCover } = await supabase
+      const { data: selectedCover } = await supabase
         .from('cover_images')
         .select('image_url')
         .eq('book_id', bookId)
-        .eq('status', 'candidate')
-        .limit(1)
+        .eq('status', 'selected')
         .single()
-      setCoverImageUrl(candidateCover?.image_url ?? null)
+
+      if (selectedCover) {
+        setCoverImageUrl(selectedCover.image_url)
+      } else {
+        const { data: candidateCover } = await supabase
+          .from('cover_images')
+          .select('image_url')
+          .eq('book_id', bookId)
+          .eq('status', 'candidate')
+          .limit(1)
+          .single()
+        setCoverImageUrl(candidateCover?.image_url ?? null)
+      }
     }
 
     // 시니어 프로필(이름) 조회
@@ -82,19 +102,50 @@ function useBookRead(bookId: string | undefined) {
       .eq('book_id', bookId)
       .order('created_at')
 
-    const authorIds = [...new Set((commentsData ?? []).map((c) => c.author_id))]
-    const { data: authorsData } = authorIds.length > 0
-      ? await supabase.from('profiles').select('id, display_name, avatar_url').in('id', authorIds)
-      : { data: [] }
+    const commentAuthorIds = (commentsData ?? []).map((c) => c.author_id)
+    const replyAuthorIds = (commentsData ?? []).flatMap((c) => {
+      if (!c.replies) return []
+      const arr: Reply[] = Array.isArray(c.replies)
+        ? (c.replies as unknown as Reply[])
+        : [c.replies as unknown as Reply]
+      return arr.map((r) => r.senior_id)
+    })
+    const allAuthorIds = [...new Set([...commentAuthorIds, ...replyAuthorIds])]
+
+    const [{ data: authorsData }, { data: familyLinksData }] = await Promise.all([
+      allAuthorIds.length > 0
+        ? supabase.from('profiles').select('id, display_name, avatar_url').in('id', allAuthorIds)
+        : Promise.resolve({ data: [] }),
+      allAuthorIds.length > 0
+        ? supabase.from('family_links')
+            .select('family_id, relationship')
+            .eq('senior_id', bookData.senior_id)
+            .in('family_id', allAuthorIds)
+            .eq('invite_status', 'accepted')
+        : Promise.resolve({ data: [] }),
+    ])
 
     const authorMap = new Map((authorsData ?? []).map((p) => [p.id, p]))
+    const relationshipMap = new Map((familyLinksData ?? []).map((fl) => [fl.family_id, fl.relationship as string | null]))
 
     setBookComments(
-      (commentsData ?? []).map((comment) => ({
-        ...comment,
-        author: authorMap.get(comment.author_id) ?? null,
-        replies: (comment.replies as unknown as Reply[]) ?? [],
-      }))
+      (commentsData ?? []).map((comment) => {
+        const rawReplies: Reply[] = comment.replies == null
+          ? []
+          : Array.isArray(comment.replies)
+            ? (comment.replies as unknown as Reply[])
+            : [comment.replies as unknown as Reply]
+        return {
+          ...comment,
+          author: authorMap.get(comment.author_id) ?? null,
+          relationship: relationshipMap.get(comment.author_id) ?? null,
+          replies: rawReplies.map((reply) => ({
+            ...reply,
+            author: authorMap.get(reply.senior_id) ?? null,
+            relationship: relationshipMap.get(reply.senior_id) ?? null,
+          })),
+        }
+      })
     )
   }, [bookId])
 
@@ -154,7 +205,33 @@ export default function SeniorBookReadPage() {
   const [commentText, setCommentText] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
+  const [editingCommentText, setEditingCommentText] = useState('')
+  const [replyingToId, setReplyingToId] = useState<string | null>(null)
+  const [replyText, setReplyText] = useState('')
+  const [editingReplyId, setEditingReplyId] = useState<string | null>(null)
+  const [editingReplyText, setEditingReplyText] = useState('')
+  // 음성 댓글 (독자용)
+  const [commentVoiceBlob, setCommentVoiceBlob] = useState<Blob | null>(null)
+  const [commentPreviewUrl, setCommentPreviewUrl] = useState<string | null>(null)
+  const [playingCommentId, setPlayingCommentId] = useState<string | null>(null)
+  // F-16 음성 답장
+  const [voiceBlob, setVoiceBlob] = useState<Blob | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [playingReplyId, setPlayingReplyId] = useState<string | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const { contentFontSize, setContentFontSize } = useContentFontSizeStore()
+
+  const voiceReply = useVoiceReply({
+    seniorId: profile?.id ?? '',
+    onTranscript: (text) => setReplyText(text),
+  })
+  const voiceComment = useVoiceReply({
+    seniorId: profile?.id ?? '',
+    onTranscript: (text) => setCommentText(text),
+  })
 
   // 챕터 로드 완료 시 첫 번째 챕터 선택
   // dedication이 있으면 0장(작가의 말)이 기본이므로 자동 설정 생략
@@ -190,6 +267,20 @@ export default function SeniorBookReadPage() {
     return () => { stopPolling(); supabase.removeChannel(channel) }
   }, [bookId, reload])
 
+  // Realtime 답장 구독 — senior_id 기반 (F-16)
+  // 저자가 새 답장을 등록하면 독자도 즉시 반영
+  useEffect(() => {
+    if (!book?.senior_id) return
+    const channel = supabase
+      .channel(`replies:senior:${book.senior_id}`)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'replies',
+        filter: `senior_id=eq.${book.senior_id}`,
+      }, async () => { await reload() })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [book?.senior_id, reload])
+
   useEffect(() => { return () => { if (pollingRef.current) clearInterval(pollingRef.current) } }, [])
 
   function showToast(msg: string) {
@@ -197,29 +288,97 @@ export default function SeniorBookReadPage() {
     setTimeout(() => setToastMsg(null), 2500)
   }
 
+  async function handleStartCommentRecording() {
+    const ok = await voiceComment.startRecording()
+    if (!ok) showToast('마이크 권한이 필요해요')
+  }
+
+  async function handleStopCommentRecording() {
+    const blob = await voiceComment.stopRecording()
+    if (!blob) return
+    setCommentVoiceBlob(blob)
+    setCommentPreviewUrl(URL.createObjectURL(blob))
+  }
+
+  function handleDiscardCommentVoice() {
+    if (commentPreviewUrl) URL.revokeObjectURL(commentPreviewUrl)
+    setCommentVoiceBlob(null)
+    setCommentPreviewUrl(null)
+    setCommentText('')
+  }
+
+  async function handlePlayComment(comment: CommentWithData) {
+    if (playingCommentId === comment.id) {
+      audioRef.current?.pause()
+      setPlayingCommentId(null)
+      return
+    }
+    if (!comment.audio_url) return
+    const url = await voiceReply.getSignedUrl(comment.audio_url)
+    if (!url) { showToast('재생 링크를 가져오지 못했어요'); return }
+    if (audioRef.current) { audioRef.current.pause() }
+    setPlayingReplyId(null)
+    const audio = new Audio(url)
+    audioRef.current = audio
+    audio.onended = () => setPlayingCommentId(null)
+    audio.play()
+    setPlayingCommentId(comment.id)
+  }
+
   // 댓글 전송 — 댓글은 책 단위로 저장, 어르신에게 알림 발송 (F-15)
   async function handleSubmitComment() {
     if (!commentText.trim() || !bookId || !profile || !book) return
     setSubmitting(true)
     try {
-      const { error } = await supabase.from('comments').insert({
+      const { data: commentData, error } = await supabase.from('comments').insert({
         book_id: bookId,
         author_id: profile.id,
         content: commentText.trim(),
-      })
-      if (error) throw error
+      }).select('id').single()
+      if (error || !commentData) throw error ?? new Error('INSERT 실패')
 
-      // 어르신에게 새 댓글 알림 발송
-      await supabase.from('notifications').insert({
-        recipient_id: book.senior_id,
-        type: 'new_comment',
-        title: `${kakaoName}이 댓글을 남겼어요`,
+      if (commentVoiceBlob) {
+        const path = `comments/${profile.id}/${commentData.id}.webm`
+        const { error: uploadError } = await supabase.storage
+          .from('reply-audio')
+          .upload(path, commentVoiceBlob, { contentType: 'audio/webm', upsert: false })
+        if (!uploadError) {
+          await supabase.from('comments').update({ audio_url: path }).eq('id', commentData.id)
+        }
+      }
+
+      const commenterName = profile.display_name ?? '가족'
+      const notifPayload = {
+        type: 'new_comment' as const,
+        title: `${commenterName}${josa(commenterName, '이', '가')} 댓글을 남겼어요`,
         body: commentText.trim(),
         reference_id: bookId,
         reference_type: 'book',
-      })
+      }
+
+      if (profile.id !== book.senior_id) {
+        // 가족 → 저자에게 알림
+        const { error: ne } = await supabase.from('notifications').insert({ recipient_id: book.senior_id, ...notifPayload })
+        if (ne) console.error('[알림 INSERT 실패]', ne)
+      } else {
+        // 저자 → 연결된 가족 전체에게 알림
+        const { data: links, error: le } = await supabase
+          .from('family_links')
+          .select('family_id')
+          .eq('senior_id', book.senior_id)
+          .eq('invite_status', 'accepted')
+        if (le) console.error('[family_links 조회 실패]', le)
+        console.log('[저자 댓글 알림 대상]', links)
+        if (links && links.length > 0) {
+          const { error: ne2 } = await supabase.from('notifications').insert(
+            links.flatMap((l) => l.family_id ? [{ recipient_id: l.family_id, ...notifPayload }] : [])
+          )
+          if (ne2) console.error('[알림 INSERT 실패]', ne2)
+        }
+      }
 
       setCommentText('')
+      handleDiscardCommentVoice()
       showToast('댓글을 전달했어요')
       await reload()
     } catch {
@@ -227,6 +386,133 @@ export default function SeniorBookReadPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  async function handleDeleteComment(commentId: string) {
+    const { error } = await supabase.from('comments').delete().eq('id', commentId)
+    if (error) { showToast('삭제에 실패했어요'); return }
+    showToast('댓글을 삭제했어요')
+    await reload()
+  }
+
+  async function handleSaveEditComment(commentId: string) {
+    if (!editingCommentText.trim()) return
+    const { error } = await supabase.from('comments')
+      .update({ content: editingCommentText.trim() }).eq('id', commentId)
+    if (error) { showToast('수정에 실패했어요'); return }
+    setEditingCommentId(null)
+    showToast('댓글을 수정했어요')
+    await reload()
+  }
+
+  async function handleStartVoiceRecording() {
+    const ok = await voiceReply.startRecording()
+    if (!ok) showToast('마이크 권한이 필요해요')
+  }
+
+  async function handleStopVoiceRecording() {
+    const blob = await voiceReply.stopRecording()
+    if (!blob) return
+    setVoiceBlob(blob)
+    const url = URL.createObjectURL(blob)
+    setPreviewUrl(url)
+  }
+
+  function handleDiscardVoice() {
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setVoiceBlob(null)
+    setPreviewUrl(null)
+    setReplyText('')
+  }
+
+  async function handleSubmitVoiceReply(commentId: string) {
+    if (!voiceBlob || !profile || !book) return
+    const textContent = replyText.trim() || '(음성 답장)'
+    const { error } = await voiceReply.uploadReply(commentId, voiceBlob, textContent)
+    if (error) { showToast('답장 전달에 실패했어요'); return }
+
+    // 독자에게 알림
+    const targetComment = bookComments.find((c) => c.id === commentId)
+    if (targetComment && targetComment.author_id !== profile.id) {
+      const replierName = profile.display_name || (isAuthor ? '저자' : '가족')
+      await supabase.from('notifications').insert({
+        recipient_id: targetComment.author_id,
+        type: 'new_reply',
+        title: `${replierName}${josa(replierName, '이', '가')} 음성 답장을 남겼어요`,
+        body: textContent,
+        reference_id: book.id,
+        reference_type: 'book',
+      })
+    }
+
+    handleDiscardVoice()
+    setReplyingToId(null)
+    showToast('음성 답장을 전달했어요')
+    await reload()
+  }
+
+  async function handlePlayReply(reply: Reply) {
+    if (playingReplyId === reply.id) {
+      audioRef.current?.pause()
+      setPlayingReplyId(null)
+      return
+    }
+    if (!reply.audio_url) return
+    const url = await voiceReply.getSignedUrl(reply.audio_url)
+    if (!url) { showToast('재생 링크를 가져오지 못했어요'); return }
+    if (audioRef.current) { audioRef.current.pause() }
+    const audio = new Audio(url)
+    audioRef.current = audio
+    audio.onended = () => setPlayingReplyId(null)
+    audio.play()
+    setPlayingReplyId(reply.id)
+  }
+
+  async function handleSubmitReply(commentId: string) {
+    if (!replyText.trim() || !profile || !book) return
+    const { error } = await supabase.from('replies').insert({
+      comment_id: commentId,
+      senior_id: profile.id,
+      content: replyText.trim(),
+    })
+    if (error) { showToast('답장 전달에 실패했어요'); return }
+
+    // 댓글 작성자(가족)에게 답장 알림 발송 (본인 제외)
+    const targetComment = bookComments.find((c) => c.id === commentId)
+    if (targetComment && targetComment.author_id !== profile.id) {
+      const replierName = profile.display_name || (isAuthor ? '저자' : '가족')
+      const { error: ne } = await supabase.from('notifications').insert({
+        recipient_id: targetComment.author_id,
+        type: 'new_reply',
+        title: `${replierName}${josa(replierName, '이', '가')} 답장을 남겼어요`,
+        body: replyText.trim(),
+        reference_id: book.id,
+        reference_type: 'book',
+      })
+      if (ne) console.error('[대댓글 알림 INSERT 실패]', ne)
+    }
+
+    setReplyingToId(null)
+    setReplyText('')
+    showToast('답장을 전달했어요')
+    await reload()
+  }
+
+  async function handleDeleteReply(replyId: string) {
+    const { error } = await supabase.from('replies').delete().eq('id', replyId)
+    if (error) { showToast('삭제에 실패했어요'); return }
+    showToast('답장을 삭제했어요')
+    await reload()
+  }
+
+  async function handleSaveEditReply(replyId: string) {
+    if (!editingReplyText.trim()) return
+    const { error } = await supabase.from('replies')
+      .update({ content: editingReplyText.trim() }).eq('id', replyId)
+    if (error) { showToast('수정에 실패했어요'); return }
+    setEditingReplyId(null)
+    showToast('답장을 수정했어요')
+    await reload()
   }
 
   const activeChapter = chapters.find((c) => c.id === activeChapterId) ?? null
@@ -267,11 +553,7 @@ export default function SeniorBookReadPage() {
         <h1 className="absolute left-1/2 -translate-x-1/2 text-lg sm:text-xl font-bold text-[#1F2937] whitespace-nowrap">
           {headerTitle}
         </h1>
-        <button type="button"
-          className="ml-auto bg-[#FFF0DC] rounded-xl px-3 py-2 flex flex-col items-center min-h-11 justify-center">
-          <Share2 size={15} className="text-[#E8820C]" />
-          <span className="text-xs text-[#E8820C]">공유</span>
-        </button>
+        <div className="ml-auto w-11" />
       </header>
 
       <main className="flex-1 overflow-y-auto w-full max-w-2xl mx-auto">
@@ -339,40 +621,248 @@ export default function SeniorBookReadPage() {
                 </p>
               ) : (
                 bookComments.map((comment) => {
+                  const isCommentByAuthor = book ? comment.author_id === book.senior_id : false
                   const style = avatarStyle(comment.author_id)
+                  const isOwnComment = profile?.id === comment.author_id
                   return (
-                    <div key={comment.id} className="flex flex-col gap-3">
+                    <div key={comment.id} className="flex flex-col gap-2">
+                      {/* 댓글 */}
                       <div className="flex items-start gap-3">
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-                          style={{ backgroundColor: style.bg }}>
-                          <span className="text-sm font-bold" style={{ color: style.color }}>
-                            {initial(comment.author?.display_name)}
-                          </span>
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <p className="text-base font-bold text-[#1F2937]">
-                            {comment.author?.display_name ?? '가족'}
-                          </p>
-                          <p className="text-[1.125rem] text-[#1F2937]">{comment.content}</p>
-                          <p className="text-sm text-[#6B7280]">
-                            {new Date(comment.created_at).toLocaleDateString('ko-KR', {
-                              month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
-                            })}
-                          </p>
-                        </div>
-                      </div>
-                      {comment.replies.map((reply) => (
-                        <div key={reply.id} className="ml-6 flex items-start gap-3">
-                          <div className="w-9 h-9 rounded-full bg-[#E8820C] flex items-center justify-center shrink-0">
-                            <span className="text-xs font-bold text-white">
-                              {initial(seniorName)}
+                        {isCommentByAuthor ? (
+                          <div className="w-9 h-9 rounded-full bg-[#E8820C] flex items-center justify-center shrink-0 mt-0.5">
+                            <span className="text-xs font-bold text-white">{initial(seniorName)}</span>
+                          </div>
+                        ) : (
+                          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+                            style={{ backgroundColor: style.bg }}>
+                            <span className="text-sm font-bold" style={{ color: style.color }}>
+                              {initial(comment.author?.display_name)}
                             </span>
                           </div>
-                          <div className="flex flex-col gap-0.5">
-                            <p className="text-[0.9375rem] font-bold text-[#E8820C]">
-                              {seniorName || '저자'}의 답장
+                        )}
+                        <div className="flex-1 flex flex-col gap-0.5 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <p className={`text-base font-bold ${isCommentByAuthor ? 'text-[#E8820C]' : 'text-[#1F2937]'}`}>
+                                {comment.author?.display_name ?? '가족'}
+                              </p>
+                              {isCommentByAuthor ? (
+                                <span className="text-xs text-[#E8820C] bg-[#FFF0DC] rounded-full px-2 py-0.5 leading-none">
+                                  저자
+                                </span>
+                              ) : comment.relationship && (
+                                <span className="text-xs text-[#6B7280] bg-[#F3F4F6] rounded-full px-2 py-0.5 leading-none">
+                                  {comment.relationship}
+                                </span>
+                              )}
+                            </div>
+                            {isOwnComment && editingCommentId !== comment.id && (
+                              <div className="flex gap-3 shrink-0">
+                                <button type="button"
+                                  onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.content) }}
+                                  className="text-sm text-[#6B7280]">수정</button>
+                                <button type="button"
+                                  onClick={() => handleDeleteComment(comment.id)}
+                                  className="text-sm text-[#DC2626]">삭제</button>
+                              </div>
+                            )}
+                          </div>
+                          {editingCommentId === comment.id ? (
+                            <>
+                              <textarea
+                                value={editingCommentText}
+                                onChange={(e) => setEditingCommentText(e.target.value)}
+                                rows={2}
+                                className="w-full bg-[#FFF8F0] border border-[#E8820C] rounded-xl px-3 py-2 text-[1.0625rem] text-[#1F2937] outline-none resize-none"
+                              />
+                              <div className="flex gap-2 justify-end mt-1">
+                                <button type="button" onClick={() => setEditingCommentId(null)}
+                                  className="text-sm text-[#6B7280] px-3 py-1.5 rounded-lg bg-[#F3F4F6] min-h-9">취소</button>
+                                <button type="button" onClick={() => handleSaveEditComment(comment.id)}
+                                  className="text-sm text-white px-3 py-1.5 rounded-lg bg-[#E8820C] min-h-9">저장</button>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-[1.125rem] text-[#1F2937]">{comment.content}</p>
+                              {comment.audio_url && (
+                                <button type="button"
+                                  onClick={() => handlePlayComment(comment)}
+                                  className="self-start flex items-center gap-1.5 bg-[#FFF0DC] border border-[#E8820C] rounded-lg px-3 py-1.5 mt-1 min-h-9">
+                                  {playingCommentId === comment.id
+                                    ? <Pause size={14} className="text-[#E8820C]" />
+                                    : <Play size={14} className="text-[#E8820C] fill-[#E8820C]" />}
+                                  <span className="text-sm text-[#E8820C]">
+                                    {playingCommentId === comment.id ? '일시 정지' : '음성 듣기'}
+                                  </span>
+                                </button>
+                              )}
+                            </>
+                          )}
+                          <div className="flex items-center gap-3 mt-0.5">
+                            <p className="text-sm text-[#6B7280]">
+                              {new Date(comment.created_at).toLocaleDateString('ko-KR', {
+                                month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                              })}
                             </p>
-                            <p className="text-[1.125rem] text-[#1F2937]">{reply.content}</p>
+                            {replyingToId !== comment.id && (
+                              <button type="button"
+                                onClick={() => { setReplyingToId(comment.id); setReplyText('') }}
+                                className="text-sm text-[#E8820C]">답장 쓰기</button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 답장 입력 폼 */}
+                      {replyingToId === comment.id && (
+                        <div className="ml-12 flex flex-col gap-2">
+                          {/* 녹음 중 */}
+                          {voiceReply.state === 'recording' ? (
+                            <div className="bg-[#FFF8F0] border border-[#E8820C] rounded-xl px-4 py-3 flex items-center gap-3">
+                              <span className="w-2.5 h-2.5 rounded-full bg-[#DC2626] animate-pulse" />
+                              <span className="text-[1.0625rem] text-[#1F2937] font-medium tabular-nums">
+                                {formatDuration(voiceReply.duration)}
+                              </span>
+                              <span className="flex-1 text-base text-[#6B7280]">녹음 중…</span>
+                              <button type="button" onClick={handleStopVoiceRecording}
+                                className="w-9 h-9 rounded-full bg-[#DC2626] flex items-center justify-center shrink-0">
+                                <Square size={14} className="text-white fill-white" />
+                              </button>
+                            </div>
+                          ) : voiceBlob && previewUrl ? (
+                            /* 녹음 완료 — 미리듣기 + 텍스트 확인 */
+                            <>
+                              <audio src={previewUrl} controls className="w-full h-10 rounded-xl" />
+                              <textarea
+                                value={replyText}
+                                onChange={(e) => setReplyText(e.target.value)}
+                                rows={2}
+                                placeholder="내용을 확인하거나 직접 입력하세요"
+                                className="w-full bg-[#FFF8F0] border border-[#E8820C] rounded-xl px-3 py-2 text-[1.0625rem] text-[#1F2937] placeholder-[#D1D5DB] outline-none resize-none"
+                              />
+                              <div className="flex gap-2 justify-end">
+                                <button type="button" onClick={handleDiscardVoice}
+                                  className="text-sm text-[#6B7280] px-3 py-1.5 rounded-lg bg-[#F3F4F6] min-h-9">다시 녹음</button>
+                                <button type="button"
+                                  onClick={() => handleSubmitVoiceReply(comment.id)}
+                                  disabled={voiceReply.state === 'uploading'}
+                                  className="text-sm text-white px-3 py-1.5 rounded-lg bg-[#E8820C] min-h-9 disabled:opacity-50">
+                                  {voiceReply.state === 'uploading' ? '전달 중…' : '전달'}
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            /* 기본 입력 — 마이크 또는 텍스트 */
+                            <>
+                              <button type="button" onClick={handleStartVoiceRecording}
+                                className="w-full bg-[#FFF0DC] border border-[#E8820C] rounded-xl py-3 flex items-center justify-center gap-2 min-h-11">
+                                <Mic size={18} className="text-[#E8820C]" />
+                                <span className="text-[1.0625rem] text-[#E8820C]">음성으로 답장하기</span>
+                              </button>
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-px bg-[#E5E7EB]" />
+                                <span className="text-sm text-[#9CA3AF]">또는</span>
+                                <div className="flex-1 h-px bg-[#E5E7EB]" />
+                              </div>
+                              <textarea
+                                value={replyText}
+                                onChange={(e) => setReplyText(e.target.value)}
+                                rows={2}
+                                placeholder="텍스트로 답장하기"
+                                autoFocus
+                                className="w-full bg-[#FFF8F0] border border-[#E8820C] rounded-xl px-3 py-2 text-[1.0625rem] text-[#1F2937] placeholder-[#D1D5DB] outline-none resize-none"
+                              />
+                              <div className="flex gap-2 justify-end">
+                                <button type="button"
+                                  onClick={() => { setReplyingToId(null); handleDiscardVoice() }}
+                                  className="text-sm text-[#6B7280] px-3 py-1.5 rounded-lg bg-[#F3F4F6] min-h-9">취소</button>
+                                <button type="button" onClick={() => handleSubmitReply(comment.id)}
+                                  disabled={!replyText.trim()}
+                                  className="text-sm text-white px-3 py-1.5 rounded-lg bg-[#E8820C] min-h-9 disabled:opacity-50">전달</button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 답장(대댓글) */}
+                      {comment.replies.map((reply) => {
+                        const isReplyByAuthor = book ? reply.senior_id === book.senior_id : false
+                        const replyStyle = avatarStyle(reply.senior_id)
+                        const replyAuthorName = reply.author?.display_name ?? (isReplyByAuthor ? seniorName : '가족')
+                        const isOwnReply = profile?.id === reply.senior_id
+                        return (
+                        <div key={reply.id} className="ml-12 flex items-start gap-3">
+                          {isReplyByAuthor ? (
+                            <div className="w-9 h-9 rounded-full bg-[#E8820C] flex items-center justify-center shrink-0 mt-0.5">
+                              <span className="text-xs font-bold text-white">{initial(seniorName)}</span>
+                            </div>
+                          ) : (
+                            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+                              style={{ backgroundColor: replyStyle.bg }}>
+                              <span className="text-sm font-bold" style={{ color: replyStyle.color }}>
+                                {initial(replyAuthorName)}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex-1 flex flex-col gap-0.5 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5">
+                                <p className={`text-[0.9375rem] font-bold ${isReplyByAuthor ? 'text-[#E8820C]' : 'text-[#1F2937]'}`}>
+                                  {replyAuthorName}
+                                </p>
+                                {isReplyByAuthor ? (
+                                  <span className="text-xs text-[#E8820C] bg-[#FFF0DC] rounded-full px-2 py-0.5 leading-none">저자</span>
+                                ) : reply.relationship && (
+                                  <span className="text-xs text-[#6B7280] bg-[#F3F4F6] rounded-full px-2 py-0.5 leading-none">
+                                    {reply.relationship}
+                                  </span>
+                                )}
+                              </div>
+                              {isOwnReply && editingReplyId !== reply.id && (
+                                <div className="flex gap-3 shrink-0">
+                                  <button type="button"
+                                    onClick={() => { setEditingReplyId(reply.id); setEditingReplyText(reply.content) }}
+                                    className="text-sm text-[#6B7280]">수정</button>
+                                  <button type="button"
+                                    onClick={() => handleDeleteReply(reply.id)}
+                                    className="text-sm text-[#DC2626]">삭제</button>
+                                </div>
+                              )}
+                            </div>
+                            {editingReplyId === reply.id ? (
+                              <>
+                                <textarea
+                                  value={editingReplyText}
+                                  onChange={(e) => setEditingReplyText(e.target.value)}
+                                  rows={2}
+                                  className="w-full bg-[#FFF8F0] border border-[#E8820C] rounded-xl px-3 py-2 text-[1.0625rem] text-[#1F2937] outline-none resize-none"
+                                />
+                                <div className="flex gap-2 justify-end mt-1">
+                                  <button type="button" onClick={() => setEditingReplyId(null)}
+                                    className="text-sm text-[#6B7280] px-3 py-1.5 rounded-lg bg-[#F3F4F6] min-h-9">취소</button>
+                                  <button type="button" onClick={() => handleSaveEditReply(reply.id)}
+                                    className="text-sm text-white px-3 py-1.5 rounded-lg bg-[#E8820C] min-h-9">저장</button>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <p className="text-[1.125rem] text-[#1F2937]">{reply.content}</p>
+                                {reply.audio_url && (
+                                  <button type="button"
+                                    onClick={() => handlePlayReply(reply)}
+                                    className="self-start flex items-center gap-1.5 bg-[#FFF0DC] border border-[#E8820C] rounded-lg px-3 py-1.5 mt-1 min-h-9">
+                                    {playingReplyId === reply.id
+                                      ? <Pause size={14} className="text-[#E8820C]" />
+                                      : <Play size={14} className="text-[#E8820C] fill-[#E8820C]" />}
+                                    <span className="text-sm text-[#E8820C]">
+                                      {playingReplyId === reply.id ? '일시 정지' : '음성 듣기'}
+                                    </span>
+                                  </button>
+                                )}
+                              </>
+                            )}
                             <p className="text-sm text-[#6B7280]">
                               {new Date(reply.created_at).toLocaleDateString('ko-KR', {
                                 month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -380,7 +870,8 @@ export default function SeniorBookReadPage() {
                             </p>
                           </div>
                         </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )
                 })
@@ -408,16 +899,49 @@ export default function SeniorBookReadPage() {
                 </button>
               </div>
 
-              {/* 음성 댓글 안내 */}
-              <div className="bg-[#FFF8F0] rounded-2xl px-4 py-4 flex flex-col items-center gap-3">
-                <p className="text-base text-[#6B7280] text-center">
-                  음성으로 댓글을 남기려면 마이크 버튼을 눌러주세요
-                </p>
-                <button type="button"
-                  className="w-12 h-12 rounded-full bg-[#FFF0DC] flex items-center justify-center">
-                  <Mic size={22} className="text-[#E8820C]" />
-                </button>
-                <span className="text-base text-[#E8820C]">음성 댓글</span>
+              {/* 음성 댓글 */}
+              <div className="flex flex-col gap-2">
+                <p className="text-base text-[#6B7280]">음성 댓글</p>
+                {voiceComment.state === 'recording' ? (
+                  <div className="bg-[#FFF8F0] border border-[#E8820C] rounded-xl px-4 py-3 flex items-center gap-3">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#DC2626] animate-pulse" />
+                    <span className="text-[1.0625rem] text-[#1F2937] font-medium tabular-nums">
+                      {formatDuration(voiceComment.duration)}
+                    </span>
+                    <span className="flex-1 text-base text-[#6B7280]">녹음 중…</span>
+                    <button type="button" onClick={handleStopCommentRecording}
+                      className="w-9 h-9 rounded-full bg-[#DC2626] flex items-center justify-center shrink-0">
+                      <Square size={14} className="text-white fill-white" />
+                    </button>
+                  </div>
+                ) : commentVoiceBlob && commentPreviewUrl ? (
+                  <>
+                    <audio src={commentPreviewUrl} controls className="w-full h-10 rounded-xl" />
+                    <textarea
+                      value={commentText}
+                      onChange={(e) => setCommentText(e.target.value)}
+                      rows={2}
+                      placeholder="내용을 확인하거나 직접 입력하세요"
+                      className="w-full bg-[#FFF8F0] border border-[#E8820C] rounded-xl px-3 py-2 text-[1.0625rem] text-[#1F2937] placeholder-[#D1D5DB] outline-none resize-none"
+                    />
+                    <div className="flex gap-2 justify-end">
+                      <button type="button" onClick={handleDiscardCommentVoice}
+                        className="text-sm text-[#6B7280] px-3 py-1.5 rounded-lg bg-[#F3F4F6] min-h-9">다시 녹음</button>
+                      <button type="button"
+                        onClick={handleSubmitComment}
+                        disabled={submitting}
+                        className="text-sm text-white px-3 py-1.5 rounded-lg bg-[#E8820C] min-h-9 disabled:opacity-50">
+                        {submitting ? '전달 중…' : '전달'}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <button type="button" onClick={handleStartCommentRecording}
+                    className="w-full bg-[#FFF0DC] border border-[#E8820C] rounded-xl py-3 flex items-center justify-center gap-2 min-h-11">
+                    <Mic size={18} className="text-[#E8820C]" />
+                    <span className="text-[1.0625rem] text-[#E8820C]">음성으로 댓글 남기기</span>
+                  </button>
+                )}
               </div>
             </div>
           </>
@@ -441,7 +965,7 @@ export default function SeniorBookReadPage() {
         const hasNext = chapterIdx < chapters.length - 1
 
         return (
-          <div className="absolute inset-0 z-50 flex flex-col" style={{ backgroundColor: '#FFFBF5' }}>
+          <div className="absolute inset-0 z-50 flex flex-col bg-[#FFFBF5]">
 
             {/* 상단 바 */}
             <div className="flex items-center justify-between px-4 h-[56px] shrink-0 border-b border-[#EDE0CC]">
@@ -457,6 +981,25 @@ export default function SeniorBookReadPage() {
               <span className="text-sm text-[#9CA3AF] min-w-11 text-right">
                 {currentPageIdx + 1} / {totalPages}
               </span>
+            </div>
+
+            {/* 본문 글씨 크기 조절 바 */}
+            <div className="flex items-center gap-2 px-4 py-2 border-b border-[#EDE0CC] bg-[#FFFBF5] shrink-0">
+              <span className="text-sm text-[#9CA3AF] mr-1">글씨</span>
+              {CONTENT_SIZE_OPTIONS.map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setContentFontSize(value)}
+                  className={`flex-1 py-1.5 rounded-lg text-sm transition-colors ${
+                    contentFontSize === value
+                      ? 'bg-[#E8820C] text-white'
+                      : 'bg-[#F3F4F6] text-[#6B7280]'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
 
             {/* 본문 영역 */}
@@ -481,14 +1024,14 @@ export default function SeniorBookReadPage() {
                 </div>
 
                 {/* 본문 */}
-                <p className="text-[1.125rem] text-[#2D2D2D] leading-[2.1] whitespace-pre-wrap tracking-wide">
+                <p className="text-content text-[#2D2D2D] leading-[2.1] whitespace-pre-wrap tracking-wide">
                   {activeChapter.content}
                 </p>
               </div>
             </div>
 
             {/* 하단 챕터 이동 */}
-            <div className="shrink-0 border-t border-[#EDE0CC] flex items-center" style={{ backgroundColor: '#FFFBF5' }}>
+            <div className="shrink-0 border-t border-[#EDE0CC] flex items-center bg-[#FFFBF5]">
               <button
                 type="button"
                 onClick={() => {
@@ -534,7 +1077,7 @@ export default function SeniorBookReadPage() {
 
       {/* 풀스크린 작가의 말 오버레이 — 표지 카드 탭 시 0장으로 진입 */}
       {readingOpen && !activeChapter && book.dedication && book.dedication.trim() && (
-        <div className="absolute inset-0 z-50 flex flex-col" style={{ backgroundColor: '#FFFBF5' }}>
+        <div className="absolute inset-0 z-50 flex flex-col bg-[#FFFBF5]">
           <div className="flex items-center justify-between px-4 h-[56px] shrink-0 border-b border-[#EDE0CC]">
             <button type="button" onClick={() => setReadingOpen(false)}
               className="flex items-center gap-1 min-h-11 min-w-11">
@@ -544,6 +1087,25 @@ export default function SeniorBookReadPage() {
             <p className="text-sm text-[#9CA3AF]">{book.title}</p>
             <span className="text-sm text-[#9CA3AF] min-w-11 text-right">0 / {chapters.length}</span>
           </div>
+
+          {/* 본문 글씨 크기 조절 바 */}
+          <div className="flex items-center gap-2 px-4 py-2 border-b border-[#EDE0CC] bg-[#FFFBF5] shrink-0">
+            <span className="text-sm text-[#9CA3AF] mr-1">글씨</span>
+            {CONTENT_SIZE_OPTIONS.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setContentFontSize(value)}
+                className={`flex-1 py-1.5 rounded-lg text-sm transition-colors ${
+                  contentFontSize === value
+                    ? 'bg-[#E8820C] text-white'
+                    : 'bg-[#F3F4F6] text-[#6B7280]'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <div className="flex-1 overflow-y-auto">
             <div className="w-full max-w-xl mx-auto px-6 pt-10 pb-12">
               <p className="text-[0.8125rem] font-semibold tracking-[0.15em] text-[#E8820C] mb-3">작가의 말</p>
@@ -552,12 +1114,12 @@ export default function SeniorBookReadPage() {
                 <div className="w-1.5 h-1.5 rounded-full bg-[#E8820C] opacity-50" />
                 <div className="h-px flex-1 bg-[#EDE0CC]" />
               </div>
-              <p className="text-[1.125rem] text-[#2D2D2D] leading-[2.1] whitespace-pre-wrap tracking-wide">
+              <p className="text-content text-[#2D2D2D] leading-[2.1] whitespace-pre-wrap tracking-wide">
                 {book.dedication}
               </p>
             </div>
           </div>
-          <div className="shrink-0 border-t border-[#EDE0CC] flex items-center" style={{ backgroundColor: '#FFFBF5' }}>
+          <div className="shrink-0 border-t border-[#EDE0CC] flex items-center bg-[#FFFBF5]">
             <button type="button" disabled className="flex-1 flex items-center justify-center gap-1.5 py-4 opacity-30">
               <ChevronLeft size={18} className="text-[#6B7280]" />
               <span className="text-base text-[#6B7280]">이전 장</span>
