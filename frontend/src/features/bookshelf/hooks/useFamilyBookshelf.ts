@@ -7,6 +7,7 @@ export function useFamilyBookshelf() {
   const [books, setBooks] = useState<BookWithStats[]>([])
   const [seniorId, setSeniorId] = useState<string | null>(null)
   const [seniorName, setSeniorName] = useState<string>('')
+  const [relationship, setRelationship] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const user = useAuthStore((s) => s.user)
 
@@ -14,10 +15,10 @@ export function useFamilyBookshelf() {
     if (!user?.id) { setLoading(false); return }
 
     async function fetch() {
-      // 1. accepted 상태 family_link에서 연결된 senior_id 조회
+      // 1. accepted 상태 family_link에서 연결된 senior_id + relationship 조회
       const { data: link } = await supabase
         .from('family_links')
-        .select('senior_id')
+        .select('senior_id, relationship')
         .eq('family_id', user!.id)
         .eq('invite_status', 'accepted')
         .limit(1)
@@ -27,6 +28,7 @@ export function useFamilyBookshelf() {
 
       const linkedSeniorId = link.senior_id
       setSeniorId(linkedSeniorId)
+      setRelationship(link.relationship ?? '')
 
       // 2. 어르신 이름 조회
       const { data: profile } = await supabase
@@ -68,5 +70,5 @@ export function useFamilyBookshelf() {
     fetch()
   }, [user?.id])
 
-  return { books, seniorId, seniorName, loading }
+  return { books, seniorId, seniorName, relationship, loading }
 }
