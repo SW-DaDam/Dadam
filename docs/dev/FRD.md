@@ -20,17 +20,17 @@
 | 팀원 | 권오인 (AI/음성/백엔드) + 이지형 (UI/UX/가족 커뮤니티) |
 | 개발 기간 | 2026.04.10 ~ 2026.06.16 (9주) |
 | 기준 문서 | PRD v2.3 / ERD v1.1 / 역할분담서 v2.0 |
-| 총 기능 수 | 17개 (MVP 핵심 기능) |
-| 기술 스택 | React 19 + Vite + TypeScript + Supabase + Vercel AI SDK + Web Speech API + DALL-E 3 |
+| 총 기능 수 | 18개 (MVP 핵심 기능) |
+| 기술 스택 | React 19 + Vite + TypeScript + Supabase + Vercel AI SDK + Whisper large-v3-turbo + Naver Clova TTS + DALL-E 3 (Web Speech API fallback) |
 
 ### 1-1. 기능 트랙 구성
 
-본 프로젝트의 17개 기능은 두 개의 병렬 트랙으로 분리 개발됩니다.
+본 프로젝트의 18개 기능은 두 개의 병렬 트랙으로 분리 개발됩니다.
 
 | 구분 | 권오인 트랙 (A + B-AI) | 이지형 트랙 (B-UI + C) |
 | --- | --- | --- |
 | 주 도메인 | AI · 음성 · 백엔드 인프라 · LLM 파이프라인 | 시니어 UI · 책장 메타포 · 가족 커뮤니티 · Realtime 구독 |
-| 담당 기능 | F-01 ~ F-09 (9개) | F-10 ~ F-17 (8개) |
+| 담당 기능 | F-01 ~ F-09, F-18 (10개) | F-10 ~ F-17 (8개) |
 | 핵심 역량 | AI 튜닝 · Supabase 백엔드 · Edge Function | 프론트엔드 · UI/UX · 시니어 친화 디자인 |
 
 ---
@@ -43,13 +43,14 @@
 | --- | --- | --- | --- | --- | --- |
 | F-01 | 백엔드 기반 세팅 | 인프라 | 13개 테이블, RLS, Storage 버킷, pg_cron, Realtime publication 초기 구성 | 권오인 | `feature/backend-foundation` |
 | F-02 | 카카오 OAuth 인증 | 인증/계정 | 카카오 OAuth 2.0 로그인 및 사용자 프로필 자동 생성 트리거 | 권오인 | `feature/auth` |
-| F-03 | AI 말동무 실시간 음성 대화 | AI/음성 | Web Speech API STT/TTS + LLM Edge Function 스트리밍 실시간 대화 | 권오인 | `feature/voice-chat` |
+| F-03 | AI 말동무 실시간 음성 대화 | AI/음성 | Whisper(large-v3-turbo) STT + Naver Clova TTS + LLM Edge Function 스트리밍 실시간 대화 (Web Speech API fallback) | 권오인 | `feature/voice-chat` |
 | F-04 | 관심사 메모리 추출 & 누적 | AI | 세션 종료 시 LLM이 memories.data JSONB 자동 갱신 및 누적 저장 | 권오인 | `feature/memory-system` |
 | F-05 | AI 선제 대화 & 발화 태그 분류 | AI | 기억 기반 선제 질문 생성 + utterances.tags 자동 분류 | 권오인 | `feature/proactive-chat` |
 | F-06 | 월말 책 초안 자동 생성 | 책 생성 | 3단계 파이프라인(aggregating → chaptering → cover)으로 월간 책 초안 생성 | 권오인 | `feature/book-generation` |
 | F-07 | AI 표지 이미지 생성 | 책 생성 | DALL-E 3 호출로 표지 후보 3~5장 생성 후 book-covers 버킷 저장 | 권오인 | `feature/cover-generation` |
 | F-08 | 책 생성 실패 복구 | 안정성 | retry_count 자동 3회 재시도 + 수동 재시도 RPC | 권오인 | `feature/book-retry` |
-| F-09 | Whisper 파인튜닝 & 배포 | AI/음성 | 한국어 시니어 음성 데이터 파인튜닝 및 Runpod Serverless 배포 | 권오인 | `feature/whisper-finetune` |
+| F-09 | Whisper 파인튜닝 검증 (포트폴리오용) | AI/음성 | 시니어 음성 데이터 LoRA 파인튜닝 결과 평가(CER 비교) — 실서비스는 순정 모델 사용 결정 | 권오인 | `feature/whisper-finetune` |
+| F-18 | 외전(단편) 책 자동 생성 | 책 생성 | 누적 대화 중 단일 주제 2쪽 분량이 쌓이면 자동 태깅 후 단편 책 1챕터 생성 (월말 책과 별개 풀) | 권오인 | `feature/short-book` |
 
 ### 2-2. 이지형 담당 기능 (F-10 ~ F-17)
 
@@ -157,26 +158,31 @@
 | **브랜치** | `feature/voice-chat` |
 
 **기능 설명**
-- Web Speech API(`lang=ko-KR`) 기반 실시간 STT 구현 — 어르신 발화 속도 대응(긴 침묵 허용)
+- **STT**: OpenAI Whisper API(`whisper-large-v3-turbo`) 서버 호출 방식 — 어르신 발화 속도 대응(긴 침묵 허용)
+  - 클라이언트가 MediaRecorder로 녹음한 음성 청크를 Edge Function에 전송하여 텍스트로 변환
+  - F-09 파인튜닝 결과 검증 후 순정 모델 사용으로 결정 (CER 6% vs 파인튜닝 9%)
+- **TTS**: Naver Clova Voice API로 AI 응답 음성 재생 — 한국어 자연스러운 시니어 친화 보이스 톤
 - Vercel AI SDK를 통한 LLM Edge Function 스트리밍 응답 처리
-- TTS Web Speech API로 AI 응답 음성 재생
 - 대화 내용을 `conversations` / `utterances` 테이블에 실시간 저장
 - 마이크 애니메이션으로 대화 중/대기 중 상태 시각 피드백 제공
 - MVP: Gemini 1.5 Flash / 상용: GPT-4o (`ACTIVE_MODEL` 환경변수로 전환)
 
 **입력 조건**
-- 어르신 음성 입력 (마이크)
+- 어르신 음성 입력 (마이크 → MediaRecorder Blob)
 - 이전 대화 컨텍스트
 - `memories` 테이블의 관심사 프로필
+- 환경변수: `OPENAI_API_KEY`(Whisper), `NAVER_CLOVA_CLIENT_ID` / `NAVER_CLOVA_CLIENT_SECRET`
 
 **출력 / 결과**
+- STT 변환 텍스트
 - AI 텍스트 응답 (스트리밍)
-- TTS 음성 재생
+- TTS 음성 재생 (Naver Clova MP3 응답)
 - `utterances` 레코드 저장
 
 **예외 처리**
 - 마이크 권한 거부 시 권한 요청 안내
-- STT 인식 실패 시 재시도 버튼 표시
+- Whisper API 호출 실패 시 Web Speech API STT로 fallback
+- Naver TTS 호출 실패 시 Web Speech API TTS로 fallback
 - 네트워크 오류 시 로컬 임시 저장 후 동기화
 
 **관련 테이블**: `conversations`, `utterances`
@@ -351,35 +357,37 @@
 
 ---
 
-### F-09. Whisper 파인튜닝 & 배포
+### F-09. Whisper 파인튜닝 검증 (포트폴리오용)
 
 | 항목 | 내용 |
 | --- | --- |
 | **기능 ID** | F-09 |
-| **기능명** | Whisper 파인튜닝 & 배포 |
+| **기능명** | Whisper 파인튜닝 검증 (포트폴리오용) |
 | **PRD 참조** | tech-stack §Whisper 파인튜닝 / datasets.md |
 | **담당자** | 권오인 |
-| **기능 구분** | AI/음성 |
+| **기능 구분** | AI/음성 (검증·연구 트랙) |
 | **브랜치** | `feature/whisper-finetune` |
 
 **기능 설명**
 - 한국어 시니어 음성 데이터셋 수집 및 전처리 (`datasets.md` 참조)
-- OpenAI Whisper 모델 파인튜닝 (Colab 환경, 2~7주차 독립 트랙)
-- Runpod Serverless 배포 및 엔드포인트 테스트
-- MVP 후반 F-03의 STT 부분을 파인튜닝 모델로 교체 (인터페이스 동일 유지)
+- OpenAI Whisper LoRA 파인튜닝 (Colab Pro+ 환경, 2~6주차 독립 트랙)
+- 파인튜닝 결과 vs 순정 모델(`whisper-large-v3-turbo`) CER/WER 비교 평가
+- **검증 결과(2026-05-18)**: 파인튜닝 모델 CER 9% vs 순정 모델 CER 6%로 순정이 우수
+- **실서비스 연동 결정**: 파인튜닝 모델 미사용, F-03 STT는 순정 `whisper-large-v3-turbo` API 직접 호출로 진행
+- 파인튜닝 노트북·평가 그래프·CER 리포트는 `whisper/` 디렉터리에 포트폴리오 자료로 보존 (Runpod 배포는 폐기)
 
 **입력 조건**
-- 한국어 시니어 음성 WAV 파일
+- 한국어 시니어 음성 WAV 파일 (AI Hub 107·94·543·71703 등)
 - 전처리 스크립트 (`whisper/` 디렉터리)
 
 **출력 / 결과**
-- 파인튜닝된 Whisper 모델 가중치
-- Runpod Serverless 엔드포인트 URL
-- F-03 STT 모듈 교체
+- 파인튜닝된 Whisper 모델 가중치 (`whisper/checkpoints/`)
+- CER/WER 비교 평가 리포트 (포트폴리오용)
+- F-03 STT 모듈 결정: **순정 `whisper-large-v3-turbo` API 사용** (F-09 모델 미연동)
 
 **예외 처리**
-- 파인튜닝 미완성 시 Web Speech API로 MVP 운영 유지
-- 배포 실패 시 OpenAI Whisper API로 fallback
+- 본 기능은 검증·연구 트랙이므로 실서비스 장애 영향 없음
+- 향후 데이터셋 확장 시 재학습 가능하도록 노트북·전처리 스크립트는 재사용 가능 형태로 보존
 
 **관련 테이블**: 별도 `datasets.md` 관리 (DB 테이블 불필요)
 
@@ -500,24 +508,30 @@
 | **브랜치** | `feature/book-publish` |
 
 **기능 설명**
-- F-07이 생성한 표지 후보 3~5장을 큰 이미지로 표시하여 어르신이 선택
-- 헌사(`dedication`) 텍스트 음성 또는 버튼 입력
-- 출간 승인 버튼 클릭 시 `publish_book` RPC 호출
+- 4단계 step UI로 진행 (Step 1 표지 선택 → Step 2 제목 확인 → Step 3 작가의 말(헌사) → Step 4 최종 출간)
+- Step 1: F-07이 생성한 표지 후보 3~5장을 큰 이미지로 표시하여 어르신이 선택
+- Step 3 작가의 말(`dedication`) 입력:
+  - 텍스트 키보드 입력 + **마이크 버튼 음성 녹음** 두 가지 입력 방식 제공
+  - 마이크 녹음 시 F-03 STT 인프라(Whisper API) 재사용으로 텍스트 변환
+  - 녹음 중 시각 피드백(파형/타이머) + 변환 결과 미리보기 + 재녹음 가능
+- Step 4 출간 승인 버튼 클릭 시 `publish_book` RPC 호출
 - 출간 완료 시 가족 N명 전체에게 알림 자동 발송 (RPC 내부 처리)
 - 출간된 책은 가족 책장(F-14)에 즉시 반영
 
 **입력 조건**
 - `cover_images` 목록
-- 헌사 텍스트
+- 헌사: 텍스트(키보드) 또는 녹음 파일(마이크 → STT 변환 결과)
 - `book_id`
 
 **출력 / 결과**
 - `books.status = published` 업데이트
 - `books.cover_image_url` 업데이트
+- `books.dedication` 업데이트 (텍스트 또는 STT 변환 텍스트)
 - 가족 전체 `notifications` INSERT
 
 **예외 처리**
 - 표지 로딩 실패 시 기본 표지 fallback 표시
+- 마이크 권한 거부 또는 STT 인식 실패 시 텍스트 입력으로 자동 fallback
 - 출간 승인 후 취소 불가 안내 모달 표시
 
 **관련 테이블**: `books`, `cover_images`, `notifications`
@@ -665,6 +679,48 @@
 
 ---
 
+### F-18. 외전(단편) 책 자동 생성
+
+| 항목 | 내용 |
+| --- | --- |
+| **기능 ID** | F-18 |
+| **기능명** | 외전(단편) 책 자동 생성 |
+| **PRD 참조** | FR-3.4 조기 출간 |
+| **담당자** | 권오인 |
+| **기능 구분** | 책 생성 |
+| **브랜치** | `feature/short-book` |
+
+**기능 설명**
+- 매 발화 태깅(F-05) 직후 또는 별도 배치 사이클로, 누적된 `utterances` 중 단일 주제(예: 특정 사건·인물·시기)에 대해 단편 책 2쪽 분량을 채울 수 있는지 LLM이 판단
+- 조건 충족 시 해당 발화들에 `short_book_candidate` 태그 부여 + `book_generation_jobs` 신규 레코드 생성 (`book_type = 'short'`)
+- `generate-book` Edge Function 재사용 (분기 파라미터: `chapter_count = 1`, `target_pages = 2`)
+- `generate-cover` Edge Function · 프롬프트 그대로 재사용 (book 단위로 호출되므로 책 종류와 무관)
+- **월말 책(F-06, `book_type='monthly'`)과 별개 추출 풀**: 외전으로 사용된 발화는 월말 책 후보군에서 자동 제외하지 않으나(읽혀도 무방), 동일 주제 중복 생성은 방지
+- 생성 완료 시 어르신에게 알림(`notification_type = 'book_draft_ready'`)
+- 편집(F-12) · 표지 선택 · 출간(F-13) 플로우는 월말 책과 동일하게 적용
+
+**입력 조건**
+- 누적 `utterances` (현재 미사용/일부 사용된 발화 풀, 태그 무관)
+- `memories` 프로필 (주제 판단 컨텍스트)
+- 직전 생성 이력 (동일 주제 중복 방지용 비교 키)
+
+**출력 / 결과**
+- `books` 레코드 (`book_type='short'`, `status='draft'`) 1건 INSERT
+- `chapters` 레코드 1건 INSERT (`target_pages ≈ 2`)
+- `cover_images` 레코드 3~5건 INSERT
+- 어르신 알림(`notifications`) INSERT
+- 후보 발화에 `short_book_candidate` 태그 부여 (`utterances.tags` 배열)
+
+**예외 처리**
+- 주제 판단 실패 시 태그 미부여 + job 미생성 → 다음 사이클 재평가
+- 발화 수 부족(2쪽 분량 미달) 시 생성 보류
+- 동일/유사 주제 중복 생성 방지: 최근 N건 외전 책의 `topic_hash` 또는 `subtitle` 비교
+- F-08 실패 복구 로직 공통 적용 (`retry_count` 자동 3회 재시도)
+
+**관련 테이블**: `books`, `chapters`, `book_generation_jobs`, `cover_images`, `utterances`, `notifications`
+
+---
+
 ## 4. 인터페이스 약속 (교차 담당 연결 지점)
 
 두 담당자 간 간섭 없는 병렬 개발을 위해 사전 합의된 계약입니다.
@@ -731,16 +787,23 @@ F-10 프론트 기반  ─┘
 
 ```
 F-02 인증 ──┬─> F-03 음성 대화 ──┬─> F-04 메모리 추출 ──> F-05 선제 대화·태그
-            │                    │
-            │                    └─> (발화 데이터 축적 → F-06 입력)
-            │                              │
-            │                              ▼
-            └─> F-06 책 생성 파이프라인 ──> F-08 실패 복구
-                         │
-                         └─> F-07 표지 생성 (F-06의 cover 단계와 병렬)
+            │  (Whisper+Naver TTS) │                              │
+            │                      │                              ├─> F-06 월말 책 (book_type='monthly')
+            │                      │                              │       │
+            │                      │                              │       └─> F-07 표지 (cover 단계 병렬)
+            │                      │                              │       │
+            │                      │                              │       └─> F-08 실패 복구
+            │                      │                              │
+            │                      │                              └─> F-18 외전 책 (book_type='short')
+            │                      │                                      │
+            │                      │                                      └─> F-07 표지 재사용 + F-12/F-13 공통 플로우
+            │                      │
+            │                      └─> (발화 데이터 축적 → F-06/F-18 공통 입력)
+            │
+            └─> (Edge Function 인프라 공유)
 
-F-09 Whisper 파인튜닝 (2~7주차, 독립 트랙)
-     └─ 완료 후 F-03의 STT 부분만 교체 (인터페이스 동일)
+F-09 Whisper 파인튜닝 검증 (2~6주차, 포트폴리오용 독립 트랙)
+     └─ 결과: 순정 모델 우수 (CER 6% vs 9%) → 실서비스 미연동, F-03은 순정 API 사용
 ```
 
 ### 5-3. 이지형 트랙 내부 의존성

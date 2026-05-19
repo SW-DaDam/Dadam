@@ -139,8 +139,10 @@ AI 말동무와의 일상 대화를 어르신의 **월간 책**으로 자동 생
 ### 4.2 2단계: AI 말동무 (Layer 1)
 
 #### FR-2.1 실시간 음성 대화
-- **Web Speech API** 기반 STT/TTS (Chrome/Edge)
-- `lang='ko-KR'`, TTS `rate=0.9` (시니어 친화)
+- **STT**: OpenAI Whisper API (`whisper-large-v3-turbo` 순정 모델) — MediaRecorder Blob 서버 전송 방식
+- **TTS**: Naver Clova Voice API — 한국어 자연스러운 시니어 친화 보이스 톤
+- **Fallback**: Web Speech API (`lang='ko-KR'`, `rate=0.9`) — Whisper/Naver 호출 실패 시 자동 전환
+- F-09 파인튜닝 결과(CER 9%)가 순정 모델(CER 6%)보다 열등하여 순정 사용으로 결정 (2026-05-18)
 - 음성 실패 시 텍스트 입력 대체 제공
 - 대화 중 끊김·오인식 자동 복구 흐름
 
@@ -192,8 +194,10 @@ AI 말동무와의 일상 대화를 어르신의 **월간 책**으로 자동 생
 
 #### FR-3.4 조기 출간 (주제 분량 기준)
 - 기본: **월간 고정**
-- 예외: 특정 주제의 분량이 모바일 기준 **5~7페이지**에 도달하면 그 주제 단편으로 조기 출간
+- 예외: 특정 주제의 분량이 모바일 기준 **2쪽(약 5~7페이지)**에 도달하면 그 주제 단편으로 조기 출간
 - 예: "손주 민준이 방문" 이야기가 풍부해지면 월간 책과 별개로 단편 출간
+- **구현**: FRD F-18 "외전(단편) 책 자동 생성" — `book_type='short'`, 챕터 1개, `generate-book`·`generate-cover` 재사용
+- 월말 책(`book_type='monthly'`)과는 별개 추출 풀로 동작, 동일 주제 중복 생성 방지 로직 적용
 
 > **[설계결정 Q6]** 월간 리듬으로 "기다림"을 만들되, 풍성한 주제는 단편 즉시 출간해 "신선함"도 확보 — 두 가치의 균형.
 
@@ -300,9 +304,11 @@ AI 말동무와의 일상 대화를 어르신의 **월간 책**으로 자동 생
 | **DB** | PostgreSQL (Supabase 내장) |
 | **실시간 통신** | Supabase Realtime (신간·댓글 알림) |
 | **AI (LLM)** | Vercel AI SDK — 개발: Gemini 1.5 Flash / 상용: GPT-4o(mini), `ACTIVE_MODEL` 전환 |
-| **음성 STT (MVP 초반)** | Web Speech API (`lang='ko-KR'`) |
-| **음성 STT (MVP 후반)** | Whisper 파인튜닝 (AI Hub 노인 음성 데이터셋 기반) |
-| **음성 TTS** | Web Speech API (MVP) → ElevenLabs (Phase 2) |
+| **음성 STT** | OpenAI Whisper API (`whisper-large-v3-turbo` 순정 모델) — F-09 파인튜닝 검증 결과 순정 우수(CER 6% vs 9%)로 결정 |
+| **음성 STT (fallback)** | Web Speech API (`lang='ko-KR'`) — Whisper 호출 실패 시 |
+| **음성 TTS** | Naver Clova Voice API (시니어 친화 보이스) → ElevenLabs (Phase 2) |
+| **음성 TTS (fallback)** | Web Speech API (`rate=0.9`) — Naver TTS 호출 실패 시 |
+| **AI (검증/포트폴리오)** | Whisper LoRA 파인튜닝 (AI Hub 노인 음성 데이터셋 기반, `whisper/` 디렉터리에 산출물 보존) |
 | **이미지 생성** | DALL-E 3 (책 표지 후보) |
 | **소셜 로그인** | 카카오 OAuth2.0 |
 | **Infra (배포)** | Vercel (프론트엔드), Supabase (백엔드) |
@@ -398,11 +404,11 @@ AI 말동무와의 일상 대화를 어르신의 **월간 책**으로 자동 생
 | 2~3주차 | **AI 데이터 준비** | **AI Hub 6개 데이터셋(107·94·86·543·71703·046) 신청·다운로드·전처리** |
 | 3주차 | 개발 | 인증(카카오 OAuth2.0)·가족 초대·기본 UI (책장 메타포) |
 | 3~5주차 | 개발 | AI 말동무 (Web Speech API + Vercel AI SDK LLM 대화 + 관심사 메모리) |
-| 4~5주차 | **AI 파인튜닝** | **Whisper LoRA 파인튜닝 (Colab Pro+) + CER/WER 평가 (107·94 Validation 4개 도메인)** |
-| 5~7주차 | 개발 | 월간 책 생성·편집·표지·출간 |
+| 4~6주차 | **AI 파인튜닝 검증 (포트폴리오용)** | **Whisper LoRA 파인튜닝 (Colab Pro+) + CER/WER 평가 → 결과: 파인튜닝 CER 9% vs 순정 6%, 순정 사용 결정** |
+| 5~7주차 | 개발 | 월간 책(F-06)·외전 책(F-18)·편집·표지·출간 |
 | 6~7주차 | 개발 | 가족 책장·댓글·어르신 답글 |
-| 6~7주차 | **AI 서빙 교체** | **파인튜닝 Whisper → Runpod Serverless GPU 배포 → Supabase Edge Function 연동** |
-| 8주차 | 테스트 | End-to-End 시나리오 테스트, 시니어 사용성 테스트 (Web Speech API vs 파인튜닝 Whisper 인식률 비교) |
+| 7주차 | **AI 서빙 교체** | **F-03 STT/TTS 외부 연동: Whisper API(`large-v3-turbo` 순정) + Naver Clova TTS, Web Speech API fallback** |
+| 8주차 | 테스트 | End-to-End 시나리오 테스트, 시니어 사용성 테스트 |
 | 9주차 | 종료 | 최종 점검 / GPT-4o 전환 + 프롬프트 재검증 / 데모용 샘플 책 제작 |
 | 전 기간 | 스크럼 | 주간 스크럼 회의 |
 
@@ -410,10 +416,10 @@ AI 말동무와의 일상 대화를 어르신의 **월간 책**으로 자동 생
 
 | 항목 | 내용 |
 |------|------|
-| **Whisper 파인튜닝 데이터 (음성)** | AI Hub 107 자유대화 음성(노인남녀), 94 노인 명령어 음성 — 선별 ~165GB |
+| **Whisper 파인튜닝 데이터 (음성, 포트폴리오용)** | AI Hub 107 자유대화 음성(노인남녀), 94 노인 명령어 음성 — 선별 ~165GB |
 | **LLM 프롬프트 설계 데이터 (텍스트)** | AI Hub 86 감성대화, 543 주제별 일상대화, 71703 고령자 구술, 046 공감형 대화 — ~803MB |
-| **학습 인프라** | Colab Pro+ ($49.99/월, 백그라운드 24h) + Runpod Community 재학습 |
-| **서빙 인프라** | Runpod Serverless GPU (유휴 과금 0, Cold start 5~15초 용인) |
+| **학습 인프라 (포트폴리오용)** | Colab Pro+ ($49.99/월, 백그라운드 24h) — 4~6주차에 검증 완료 후 종료 |
+| **서빙 인프라** | OpenAI Whisper API + Naver Clova Voice API (외부 SaaS, Runpod 배포 폐기) |
 | **LLM 운영** | 개발: Gemini 1.5 Flash → 상용: GPT-4o(mini), `ACTIVE_MODEL` 환경변수 전환 |
 | **2개월 총예산 (4~5월)** | ~40만원 (~$267) — 파인튜닝 + 서빙 배포 + GPT-4o 전환까지 커버 |
 | **6월 이후 운영비** | ~4.5~6만원/월 (Colab Pro+ 해지 후) |
