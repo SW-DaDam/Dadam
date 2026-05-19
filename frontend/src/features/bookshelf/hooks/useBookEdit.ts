@@ -6,8 +6,10 @@ import type { Book, Chapter, CoverImage } from '@/types/domain'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const rpc = (fn: string, args: Record<string, unknown>) => (supabase as any).rpc(fn, args)
 
-const INITIAL_COVER_COUNT = 3   // 최초 생성되는 표지 수
 const EXTRA_COVER_LIMIT = 3     // 사용자가 추가로 만들 수 있는 최대 수
+
+// sessionStorage 키 — bookId별로 재생성 횟수 유지 (탭 내 세션 동안 유지, 페이지 닫으면 초기화)
+function regenCountKey(bookId: string) { return `regen-count:${bookId}` }
 // 표지 생성은 pg_net → Edge Function 비동기 (~85s). 표지가 없으면 3초마다 폴링
 const COVER_POLL_INTERVAL_MS = 3000
 const COVER_POLL_MAX_ATTEMPTS = 60  // 최대 3분 대기 후 중단
@@ -39,13 +41,29 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
   const [coverLoading, setCoverLoading] = useState(false)  // 폴링 중 = 표지 생성 대기 중
   const [coverError, setCoverError] = useState(false)      // fetch 실패 (에러 vs 생성 중 구분)
   const [regenerating, setRegenerating] = useState(false)
+  // 재생성 횟수: sessionStorage에서 복원 — 뒤로가기 후 재진입 시에도 유지
+  // lazy initializer는 최초 마운트 시에만 실행되므로, bookId 변경 시 useEffect로 재동기화
+  const [regenCount, setRegenCount] = useState<number>(() => {
+    if (!bookId) return 0
+    const stored = sessionStorage.getItem(regenCountKey(bookId))
+    return stored ? parseInt(stored, 10) : 0
+  })
 
-  // 추가 생성 횟수: 전체 표지 수에서 초기 3장을 뺀 값
-  const extraCoverCount = Math.max(0, coverImages.length - INITIAL_COVER_COUNT)
+  // bookId가 바뀌면 해당 책의 재생성 횟수를 sessionStorage에서 다시 읽어옴
+  useEffect(() => {
+    if (!bookId) { setRegenCount(0); return }
+    const stored = sessionStorage.getItem(regenCountKey(bookId))
+    setRegenCount(stored ? parseInt(stored, 10) : 0)
+  }, [bookId])
+
+  // extraCoverCount: upsert 방식이라 DB row count 기반 추적 불가 → 클라이언트 카운터 사용
+  const extraCoverCount = regenCount
 
   // 폴링 정리용 ref — cleanup 시 interval 제거
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pollAttemptsRef = useRef(0)
+  // coverImages의 최신 length를 stale 클로저 없이 참조하기 위한 ref
+  const coverImagesLengthRef = useRef(0)
 
   // 챕터 순서 기준으로 표지 정렬하는 헬퍼
   // selected 표지를 맨 앞에 두어 편집 재진입 시 선택된 표지가 첫 번째로 표시되도록 함
@@ -99,6 +117,7 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
 
       const chapterIds = chaptersRes.data?.map((c) => c.id) ?? []
       if (coversRes.data && coversRes.data.length > 0) {
+        coverImagesLengthRef.current = coversRes.data.length
         setCoverImages(sortCoversByChapterOrder(coversRes.data, chapterIds))
         setCoverLoading(false)
         stopPolling()
@@ -129,6 +148,7 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
             return
           }
           if (newCovers && newCovers.length > 0) {
+            coverImagesLengthRef.current = newCovers.length
             setCoverImages(sortCoversByChapterOrder(newCovers, chapterIds))
             setCoverLoading(false)
             stopPolling()
@@ -219,51 +239,71 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
           body: JSON.stringify({ book_id: bookId, senior_id: book.senior_id, mode: 'single', chapter_id: chapterId }),
         }
       )
+      const regenStartTime = Date.now()  // 캐시 버스팅용 타임스탬프
       const data = await res.json()
       // 202: 백그라운드 생성 시작 (EdgeRuntime.waitUntil) — 에러 아님
       if (!res.ok && res.status !== 202) throw new Error(data.error ?? '표지 생성 실패')
 
-      // single 모드는 동기 200(성공) / 500(실패) 반환
-      // 202는 향후 비동기 전환 시를 위해 count 기반 폴링으로 처리 (clock skew 무관)
-      if (res.status === 202) {
-        setCoverLoading(true)
-        const prevCount = coverImages.length  // 호출 전 표지 수
-        pollAttemptsRef.current = 0
-        if (pollTimerRef.current) clearInterval(pollTimerRef.current)
-        pollTimerRef.current = setInterval(async () => {
-          pollAttemptsRef.current += 1
-          if (pollAttemptsRef.current > COVER_POLL_MAX_ATTEMPTS) {
-            setCoverLoading(false)
-            setCoverError(true)
-            if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null }
-            return
-          }
-          const { data: newCovers } = await supabase
-            .from('cover_images')
-            .select('*')
-            .eq('book_id', bookId)
-            .in('status', ['candidate', 'selected'])
-          // row 수가 늘었으면 새 이미지 완성됨 (서버/클라이언트 시계 차이에 무관)
-          if (newCovers && newCovers.length > prevCount) {
-            const { data: currentChapters } = await supabase
-              .from('chapters').select('id').eq('book_id', bookId).order('sort_order')
-            const chapterIds = currentChapters?.map((c) => c.id) ?? []
-            setCoverImages(sortCoversByChapterOrder(newCovers, chapterIds))
-            setCoverLoading(false)
-            if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null }
-          }
-        }, COVER_POLL_INTERVAL_MS)
-      } else {
-        // 200: 동기 완료 — DB에서 바로 조회
-        const [{ data: newCovers }, { data: currentChapters }] = await Promise.all([
-          supabase.from('cover_images').select('*').eq('book_id', bookId).in('status', ['candidate', 'selected']),
-          supabase.from('chapters').select('id').eq('book_id', bookId).order('sort_order'),
-        ])
-        if (newCovers) {
+      if (res.status === 200) {
+        // 동기 완료(200): Edge Function이 저장까지 마치고 반환 → 즉시 재조회, 폴링 불필요
+        // cover_images는 upsert(onConflict book_id,chapter_id)로 row 수가 늘지 않으므로
+        // count 비교 불가 — 응답 보장된 200에서는 바로 fetch 후 캐시 버스팅으로 대체
+        const { data: newCovers } = await supabase
+          .from('cover_images')
+          .select('*')
+          .eq('book_id', bookId)
+          .in('status', ['candidate', 'selected'])
+        if (newCovers && newCovers.length > 0) {
+          const { data: currentChapters } = await supabase
+            .from('chapters').select('id').eq('book_id', bookId).order('sort_order')
           const chapterIds = currentChapters?.map((c) => c.id) ?? []
-          setCoverImages(sortCoversByChapterOrder(newCovers, chapterIds))
+          // 재생성된 챕터 표지 URL에 쿼리스트링 추가 — 브라우저 캐시 우회
+          const bustedCovers = newCovers.map(c =>
+            c.chapter_id === chapterId
+              ? { ...c, image_url: `${c.image_url}?t=${regenStartTime}` }
+              : c
+          )
+          coverImagesLengthRef.current = bustedCovers.length
+          setCoverImages(sortCoversByChapterOrder(bustedCovers, chapterIds))
+          // 성공 시 재생성 횟수 증가 + sessionStorage 저장 (뒤로가기 후 재진입 시 복원용)
+          setRegenCount(prev => {
+            const next = prev + 1
+            sessionStorage.setItem(regenCountKey(bookId), String(next))
+            return next
+          })
         }
+        return
       }
+
+      // 202: 백그라운드 처리 — count 기반 폴링 (신규 row 삽입 케이스)
+      setCoverLoading(true)
+      const prevCount = coverImagesLengthRef.current
+      pollAttemptsRef.current = 0
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current)
+      pollTimerRef.current = setInterval(async () => {
+        pollAttemptsRef.current += 1
+        if (pollAttemptsRef.current > COVER_POLL_MAX_ATTEMPTS) {
+          setCoverLoading(false)
+          setCoverError(true)
+          if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null }
+          return
+        }
+        const { data: newCovers } = await supabase
+          .from('cover_images')
+          .select('*')
+          .eq('book_id', bookId)
+          .in('status', ['candidate', 'selected'])
+        // row 수가 늘었으면 새 이미지 완성 — 202 신규 삽입 케이스
+        if (newCovers && newCovers.length > prevCount) {
+          const { data: currentChapters } = await supabase
+            .from('chapters').select('id').eq('book_id', bookId).order('sort_order')
+          const chapterIds = currentChapters?.map((c) => c.id) ?? []
+          coverImagesLengthRef.current = newCovers.length
+          setCoverImages(sortCoversByChapterOrder(newCovers, chapterIds))
+          setCoverLoading(false)
+          if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null }
+        }
+      }, COVER_POLL_INTERVAL_MS)
     } finally {
       setRegenerating(false)
     }

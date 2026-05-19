@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { UserPlus } from 'lucide-react'
+import { UserPlus, X } from 'lucide-react'
 import { useBookshelf } from '@/features/bookshelf/hooks/useBookshelf'
 import { ShelfRack } from '@/features/bookshelf/components/ShelfRack'
 import { useAuthStore } from '@/shared/stores/authStore'
@@ -11,9 +12,14 @@ export default function FamilyBookshelfPage() {
   const profile = useAuthStore((s) => s.profile)
   const shelfTitle = `${profile?.display_name ?? '나'}의 책장`
 
+  const monthlyBooks = books.filter((b) => b.book_type === 'monthly')
+  const shortBooks = books.filter((b) => b.book_type === 'short')
+
   const latestDraft = books.find((b) => b.status === 'draft' || b.status === 'editing')
   const publishedBooks = books.filter((b) => b.status === 'published')
   const latestPublished = publishedBooks[0]
+  // 최근 출간작 카드 — X 또는 확인 클릭 시 숨김
+  const [latestDismissed, setLatestDismissed] = useState(false)
 
   function seniorNavPath(book: BookWithStats) {
     return `/s/books/${book.id}`
@@ -59,33 +65,63 @@ export default function FamilyBookshelfPage() {
           </div>
         )}
 
-        {/* 최신 출간작 바로가기 */}
-        {!latestDraft && latestPublished && (
-          <div className="mx-4 sm:mx-6 bg-white border border-[#E5E7EB] rounded-2xl px-5 py-4 flex flex-col gap-3">
-            <p className="text-[1.25rem] font-bold text-[#1F2937]">최근 출간작</p>
-            <p className="text-base text-[#6B7280]">{latestPublished.title}</p>
+        {/* 최신 출간작 바로가기 — X 또는 확인 클릭 시 카드 숨김 */}
+        {!latestDraft && latestPublished && !latestDismissed && (
+          <div className="mx-4 sm:mx-6 bg-white border border-[#E5E7EB] rounded-2xl px-5 py-4 relative">
+            {/* X 닫기 버튼 — 카드 우측 최상단 */}
             <button
               type="button"
-              onClick={() => navigate(`/s/books/${latestPublished.id}`)}
-              className="w-full bg-[#FFF0DC] rounded-xl py-3 text-center"
+              onClick={() => setLatestDismissed(true)}
+              className="absolute -top-2 -right-2 p-1.5 rounded-full hover:bg-gray-100 bg-white shadow-sm text-[#9CA3AF]"
+              aria-label="닫기"
             >
-              <span className="text-[1.125rem] text-[#E8820C]">책 미리보기</span>
+              <X size={13} />
             </button>
+            <div className="flex items-center justify-between gap-3 pr-5">
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <p className="text-[1.125rem] font-bold text-[#1F2937]">최근 출간작</p>
+                <p className="text-base text-[#6B7280] truncate">{latestPublished.title}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setLatestDismissed(true); navigate(`/s/books/${latestPublished.id}`) }}
+                className="shrink-0 bg-[#FFF0DC] rounded-xl px-4 py-2 min-h-10 translate-x-[6px]"
+              >
+                <span className="text-base text-[#E8820C] font-medium">확인</span>
+              </button>
+            </div>
           </div>
         )}
 
-        {/* 책장 */}
-        <div className="mx-3 sm:mx-5">
-          <ShelfRack
-            books={books}
-            loading={loading}
-            getNavPath={seniorNavPath}
-            showInProgressPlaceholder={false}
-            rowSize={6}
-          />
-        </div>
+        {/* 월간 회고 책장 */}
+        {(loading || monthlyBooks.length > 0) && (
+          <div className="mx-3 sm:mx-5 flex flex-col gap-2">
+            <p className="text-[1.125rem] font-bold text-[#1F2937] px-1">월간 회고</p>
+            <ShelfRack
+              books={monthlyBooks}
+              loading={loading}
+              getNavPath={seniorNavPath}
+              showInProgressPlaceholder={false}
+              rowSize={4}
+            />
+          </div>
+        )}
 
-        {/* 출간된 책이 없을 때 */}
+        {/* 단편 이야기 책장 */}
+        {(loading || shortBooks.length > 0) && (
+          <div className="mx-3 sm:mx-5 flex flex-col gap-2">
+            <p className="text-[1.125rem] font-bold text-[#1F2937] px-1">단편 이야기</p>
+            <ShelfRack
+              books={shortBooks}
+              loading={loading}
+              getNavPath={seniorNavPath}
+              showInProgressPlaceholder={false}
+              rowSize={4}
+            />
+          </div>
+        )}
+
+        {/* 책이 하나도 없을 때 */}
         {!loading && books.length === 0 && (
           <div className="mx-4 sm:mx-6 flex flex-col items-center gap-2 py-10">
             <p className="text-[1.125rem] text-[#6B7280]">아직 책이 없어요</p>

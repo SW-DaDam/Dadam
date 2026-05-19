@@ -4,8 +4,8 @@ import { cn } from '@/lib/utils'
 
 const TABS = [
   { to: '/s', label: '대화하기', icon: MessageCircle, end: true },
-  { to: '/s/books', label: '내 책장', icon: BookOpen, end: false },
-  { to: '/s/family', label: '가족 책장', icon: Users, end: false },
+  { to: '/s/books', label: '집필실', icon: BookOpen, end: false },
+  { to: '/s/family', label: '책장', icon: Users, end: false },
   { to: '/s/settings', label: '설정', icon: Settings, end: false },
 ]
 
