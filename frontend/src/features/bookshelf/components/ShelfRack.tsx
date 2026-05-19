@@ -3,18 +3,27 @@ import { useNavigate } from 'react-router'
 import type { BookWithStats } from '@/types/domain'
 import type { BookStatus } from '@/types/domain'
 
+// 책 팔레트 — 월 % 6 순환
 const PALETTE = [
-  { bg: '#C4614A', border: '#A84F3A' },
-  { bg: '#7B5080', border: '#623E6A' },
-  { bg: '#B85470', border: '#9A3E5A' },
-  { bg: '#4A7A68', border: '#386050' },
-  { bg: '#5A7A9A', border: '#486280' },
-  { bg: '#9A7060', border: '#7A5848' },
+  { bg: '#C4614A', border: '#A84F3A', textColor: 'white', yearColor: 'rgba(255,255,255,0.6)' },
+  { bg: '#7B5080', border: '#623E6A', textColor: 'white', yearColor: 'rgba(255,255,255,0.6)' },
+  { bg: '#B85470', border: '#9A3E5A', textColor: 'white', yearColor: 'rgba(255,255,255,0.6)' },
+  { bg: '#4A7A68', border: '#386050', textColor: 'white', yearColor: 'rgba(255,255,255,0.6)' },
+  { bg: '#5A7A9A', border: '#486280', textColor: 'white', yearColor: 'rgba(255,255,255,0.6)' },
+  { bg: '#9A7060', border: '#7A5848', textColor: 'white', yearColor: 'rgba(255,255,255,0.6)' },
 ]
 
-function paletteFor(month: number) {
-  return PALETTE[(month - 1) % PALETTE.length]
+// 월간: 월 기반 팔레트 / 단편: id 기반 팔레트 — 같은 월 책끼리도 다른 색, 재렌더 시에도 동일
+function paletteFor(book: BookWithStats) {
+  if (book.book_type === 'short') {
+    const hash = book.id.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
+    return PALETTE[hash % PALETTE.length]
+  }
+  return PALETTE[(book.month - 1) % PALETTE.length]
 }
+
+// 세로 책등에 표시할 최대 글자 수 — 초과 시 말줄임 처리
+const SPINE_MAX_TITLE = 9
 
 function progressLabel(status: BookStatus): string | null {
   if (status === 'draft') return '집필 중'
@@ -35,9 +44,14 @@ type PullState = 'idle' | 'grip' | 'pulled'
 function BookSpine({ book, isNewest, navPath }: BookSpineProps) {
   const navigate = useNavigate()
   const [pullState, setPullState] = useState<PullState>('idle')
-  const c = paletteFor(book.month)
+  const c = paletteFor(book)
   const label = progressLabel(book.status)
   const isDraft = label !== null
+
+  // 9자 초과 시 JS로 말줄임 — whiteSpace:nowrap 과 함께 단일 세로 컬럼 보장
+  const spineTitle = book.title.length > SPINE_MAX_TITLE
+    ? `${book.title.slice(0, SPINE_MAX_TITLE)}…`
+    : book.title
 
   function handleTap() {
     if (isDraft) return
@@ -70,7 +84,7 @@ function BookSpine({ book, isNewest, navPath }: BookSpineProps) {
       type="button"
       onClick={handleTap}
       disabled={isDraft}
-      aria-label={isDraft ? `${book.month}월 ${label}` : `${book.title} 읽기`}
+      aria-label={isDraft ? `${book.title} ${label}` : `${book.title} 읽기`}
       className="relative flex-1 min-w-[36px] max-w-[80px] h-[186px] rounded flex flex-col items-center justify-between pt-3 pb-2.5 px-1"
       style={{
         backgroundColor: isDraft ? '#E5E7EB' : c.bg,
@@ -108,11 +122,11 @@ function BookSpine({ book, isNewest, navPath }: BookSpineProps) {
               maxHeight: '96px',
             }}
           >
-            {book.title}
+            {spineTitle}
           </p>
 
           {/* 연도 가로 표시 */}
-          <p className="text-[10px] font-medium text-white/60 tracking-wide">
+          <p className="text-[10px] font-medium tracking-wide" style={{ color: c.yearColor }}>
             {book.year}
           </p>
         </>
