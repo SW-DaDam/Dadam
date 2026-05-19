@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router'
+import { createBrowserRouter, Navigate } from 'react-router'
 
 // Lazy imports — 코드 스플리팅
 import { lazy, Suspense } from 'react'
@@ -103,7 +103,7 @@ export const router = createBrowserRouter([
             element: withSuspense(<ReaderLayout />),
             children: [
               { index: true, element: withSuspense(<ReaderHomePage />) },
-              { path: 'recent', element: withSuspense(<ReaderHomePage />) },
+              { path: 'recent', element: <Navigate to="/r" replace /> },
               { path: 'books/:bookId', element: withSuspense(<BookReadPage />) },
               { path: 'settings', element: withSuspense(<ReaderSettingsPage />) },
               { path: 'settings/profile', element: withSuspense(<ReaderProfileEditPage />) },
