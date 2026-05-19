@@ -6,21 +6,32 @@ import StepIndicator from '../components/StepIndicator'
 
 type Role = 'senior' | 'family'
 
-function AuthorAvatar() {
+function AuthorAvatar({ selected }: { selected: boolean }) {
   return (
-    <div className="relative flex items-center justify-center w-[96px] h-[96px] rounded-full bg-[#FFF0DC] shrink-0">
-      <div className="w-[68px] h-[68px] rounded-full bg-[#E8820C] flex items-center justify-center">
+    <div className={cn(
+      'relative flex items-center justify-center w-[96px] h-[96px] rounded-full shrink-0 transition-colors',
+      selected ? 'bg-[#FFF0DC]' : 'bg-[#E5E7EB]',
+    )}>
+      <div className={cn(
+        'w-[68px] h-[68px] rounded-full flex items-center justify-center transition-colors',
+        selected ? 'bg-[#E8820C]' : 'bg-[#9CA3AF]',
+      )}>
         <span className="text-[1.375rem] text-white leading-none">AI</span>
       </div>
     </div>
   )
 }
 
-function ReaderAvatar() {
+function ReaderAvatar({ selected }: { selected: boolean }) {
   return (
-    <div className="relative flex items-center justify-center w-[96px] h-[96px] rounded-full bg-[#F3F4F6] shrink-0">
-      <div className="w-[68px] h-[68px] rounded-full bg-[#9CA3AF] flex items-center justify-center">
-        {/* 사람 실루엣 */}
+    <div className={cn(
+      'relative flex items-center justify-center w-[96px] h-[96px] rounded-full shrink-0 transition-colors',
+      selected ? 'bg-[#FFF0DC]' : 'bg-[#E5E7EB]',
+    )}>
+      <div className={cn(
+        'w-[68px] h-[68px] rounded-full flex items-center justify-center transition-colors',
+        selected ? 'bg-[#E8820C]' : 'bg-[#9CA3AF]',
+      )}>
         <svg width="36" height="36" viewBox="0 0 48 48" fill="white" aria-hidden="true">
           <circle cx="24" cy="16" r="10" />
           <path d="M4 44c0-11.046 8.954-20 20-20s20 8.954 20 20" />
@@ -85,16 +96,16 @@ export default function RoleSelectPage() {
           type="button"
           onClick={() => handleSelect('senior')}
           className={cn(
-            'w-full flex-1 bg-white rounded-2xl p-8 flex flex-col items-center justify-center gap-5 text-left transition-all min-h-0',
+            'w-full flex-1 rounded-2xl p-8 flex flex-col items-center justify-center gap-5 text-left transition-all min-h-0',
             selected === 'senior'
-              ? 'border-[3px] border-[#E8820C]'
-              : 'border border-[#E5E7EB]',
+              ? 'bg-[#FFF8F0] border-[3px] border-[#E8820C]'
+              : 'bg-[#F3F4F6] border border-[#E5E7EB]',
           )}
         >
-          <AuthorAvatar />
+          <AuthorAvatar selected={selected === 'senior'} />
           <div className="flex flex-col items-center gap-1">
-            <p className="text-2xl text-[#1F2937] leading-snug">저자로 시작하기</p>
-            <p className="text-lg text-[#E8820C] leading-[22px]">AI 말동무와 대화하기</p>
+            <p className={cn('text-2xl leading-snug transition-colors', selected === 'senior' ? 'text-[#E8820C]' : 'text-[#6B7280]')}>저자로 시작하기</p>
+            <p className={cn('text-lg leading-[22px] transition-colors', selected === 'senior' ? 'text-[#E8820C]' : 'text-[#9CA3AF]')}>AI 말동무와 대화하기</p>
           </div>
           <ul className="flex flex-col gap-2 w-full">
             {[
@@ -103,8 +114,8 @@ export default function RoleSelectPage() {
               '가족에게 내 책 선물하기',
             ].map((text) => (
               <li key={text} className="flex items-center gap-3">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#E8820C] shrink-0" />
-                <span className="text-[1.0625rem] text-[#6B7280] leading-[21px]">{text}</span>
+                <span className={cn('w-2.5 h-2.5 rounded-full shrink-0 transition-colors', selected === 'senior' ? 'bg-[#E8820C]' : 'bg-[#9CA3AF]')} />
+                <span className={cn('text-[1.0625rem] leading-[21px] transition-colors', selected === 'senior' ? 'text-[#6B7280]' : 'text-[#9CA3AF]')}>{text}</span>
               </li>
             ))}
           </ul>
@@ -115,16 +126,16 @@ export default function RoleSelectPage() {
           type="button"
           onClick={() => handleSelect('family')}
           className={cn(
-            'w-full flex-1 bg-white rounded-2xl p-8 flex flex-col items-center justify-center gap-5 text-left transition-all min-h-0',
+            'w-full flex-1 rounded-2xl p-8 flex flex-col items-center justify-center gap-5 text-left transition-all min-h-0',
             selected === 'family'
-              ? 'border-[3px] border-[#E8820C]'
-              : 'border border-[#E5E7EB]',
+              ? 'bg-[#FFF8F0] border-[3px] border-[#E8820C]'
+              : 'bg-[#F3F4F6] border border-[#E5E7EB]',
           )}
         >
-          <ReaderAvatar />
+          <ReaderAvatar selected={selected === 'family'} />
           <div className="flex flex-col items-center gap-1">
-            <p className="text-2xl text-[#1F2937] leading-snug">독자로 시작하기</p>
-            <p className="text-lg text-[#6B7280] leading-[22px]">자녀 · 손주 · 가족</p>
+            <p className={cn('text-2xl leading-snug transition-colors', selected === 'family' ? 'text-[#E8820C]' : 'text-[#6B7280]')}>독자로 시작하기</p>
+            <p className={cn('text-lg leading-[22px] transition-colors', selected === 'family' ? 'text-[#E8820C]' : 'text-[#9CA3AF]')}>자녀 · 손주 · 가족</p>
           </div>
           <ul className="flex flex-col gap-2 w-full">
             {[
@@ -132,8 +143,8 @@ export default function RoleSelectPage() {
               '댓글·사진 남기고 함께 소통하기',
             ].map((text) => (
               <li key={text} className="flex items-center gap-3">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#9CA3AF] shrink-0" />
-                <span className="text-[1.0625rem] text-[#6B7280] leading-[21px]">{text}</span>
+                <span className={cn('w-2.5 h-2.5 rounded-full shrink-0 transition-colors', selected === 'family' ? 'bg-[#E8820C]' : 'bg-[#9CA3AF]')} />
+                <span className={cn('text-[1.0625rem] leading-[21px] transition-colors', selected === 'family' ? 'text-[#6B7280]' : 'text-[#9CA3AF]')}>{text}</span>
               </li>
             ))}
           </ul>

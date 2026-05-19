@@ -4,17 +4,89 @@ import { ChevronLeft } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/shared/stores/authStore'
+import { supabase } from '@/lib/supabase'
+
+function DeleteAccountModal({ onClose, onConfirm, deleting }: {
+  onClose: () => void
+  onConfirm: () => void
+  deleting: boolean
+}) {
+  const [check1, setCheck1] = useState(false)
+  const [check2, setCheck2] = useState(false)
+  const canDelete = check1 && check2
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-[#1F2937] opacity-50" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl w-full max-w-sm p-6 flex flex-col gap-5 z-10">
+        <h2 className="text-[1.375rem] font-bold text-[#1F2937] text-center">정말 탈퇴할까요?</h2>
+        <p className="text-base text-[#6B7280] text-center">아래 내용을 확인하고 모두 체크해야 탈퇴할 수 있어요</p>
+        <div className="flex flex-col gap-3">
+          {[
+            { id: 'c1', checked: check1, set: setCheck1, label: '남긴 댓글이 모두 삭제됩니다' },
+            { id: 'c2', checked: check2, set: setCheck2, label: '저자와의 연결이 해제되며 복구할 수 없어요' },
+          ].map(({ id, checked, set, label }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => set((v) => !v)}
+              className="flex items-center gap-3 bg-[#FEF2F2] rounded-xl px-4 py-3 text-left"
+            >
+              <div className={cn(
+                'w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors',
+                checked ? 'bg-[#DC2626] border-[#DC2626]' : 'border-[#D1D5DB] bg-white',
+              )}>
+                {checked && <span className="text-white text-xs font-bold">✓</span>}
+              </div>
+              <span className="text-base text-[#374151]">{label}</span>
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-3">
+          <button type="button" onClick={onClose}
+            className="flex-1 bg-[#F3F4F6] rounded-xl py-3 text-center min-h-11">
+            <span className="text-[1.0625rem] text-[#6B7280]">취소</span>
+          </button>
+          <button type="button" onClick={onConfirm}
+            disabled={!canDelete || deleting}
+            className="flex-1 bg-[#DC2626] rounded-xl py-3 text-center min-h-11 disabled:opacity-40">
+            <span className="text-[1.0625rem] text-white">{deleting ? '탈퇴 중…' : '탈퇴하기'}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 const RELATION_PRESETS = ['아들', '딸', '손자', '손녀', '사위', '직접 입력']
 
 export default function ReaderProfileEditPage() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
+  const clear = useAuthStore((s) => s.clear)
   const displayName: string = user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? '사용자'
   const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
   const [relation, setRelation] = useState('아들')
   const [notifBook, setNotifBook] = useState(true)
   const [notifReply, setNotifReply] = useState(true)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleDeleteAccount() {
+    setDeleting(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    const { error } = await supabase.functions.invoke('delete-account', {
+      headers: { Authorization: `Bearer ${session?.access_token ?? ''}` },
+    })
+    if (!error) {
+      clear()
+      navigate('/login', { replace: true })
+    } else {
+      setDeleting(false)
+      setShowDeleteModal(false)
+      alert('탈퇴에 실패했어요. 잠시 후 다시 시도해 주세요.')
+    }
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -171,6 +243,13 @@ export default function ReaderProfileEditPage() {
             </div>
           </div>
 
+          {/* 계정 탈퇴 */}
+          <div className="bg-[#FEF2F2] border border-[#FECACA] rounded-2xl py-4 text-center">
+            <button type="button" onClick={() => setShowDeleteModal(true)}>
+              <span className="text-[1.125rem] text-[#DC2626]">계정 탈퇴</span>
+            </button>
+          </div>
+
         </div>
       </main>
 
@@ -181,6 +260,14 @@ export default function ReaderProfileEditPage() {
           <span className="text-[1.375rem] text-white">저장하기</span>
         </button>
       </div>
+
+      {showDeleteModal && (
+        <DeleteAccountModal
+          onClose={() => setShowDeleteModal(false)}
+          onConfirm={handleDeleteAccount}
+          deleting={deleting}
+        />
+      )}
 
     </div>
   )

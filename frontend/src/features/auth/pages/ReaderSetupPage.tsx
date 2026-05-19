@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router'
 import { ChevronLeft, Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/shared/stores/authStore'
-import { setupFamilyProfile } from '../services/authService'
+import { setupFamilyProfile, acceptInviteCode } from '../services/authService'
 import { getDbErrorMessage } from '@/lib/errorMessages'
 import StepIndicator from '../components/StepIndicator'
 
@@ -16,8 +16,23 @@ export default function ReaderSetupPage() {
   const user = useAuthStore((s) => s.user)
   const [relation, setRelation] = useState('')
   const [inviteCode, setInviteCode] = useState('')
+  const [inviteStatus, setInviteStatus] = useState<'idle' | 'linked' | 'error'>('idle')
+  const [inviteMessage, setInviteMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  async function handleApplyCode(code: string) {
+    if (!user || !code.trim()) return
+    const rel = relation.trim() || '가족'
+    const result = await acceptInviteCode(code.trim(), user.id, rel)
+    if (result.ok) {
+      setInviteStatus('linked')
+      setInviteMessage(result.message)
+    } else {
+      setInviteStatus('error')
+      setInviteMessage(result.message)
+    }
+  }
 
   async function handleConfirm() {
     if (!user) return
@@ -30,6 +45,14 @@ export default function ReaderSetupPage() {
       setErrorMessage(getDbErrorMessage(error))
       setSubmitting(false)
       return
+    }
+
+    // sessionStorage에 저장된 초대 코드 처리 (카카오 링크 경유 시)
+    const pending = sessionStorage.getItem('pendingInviteCode')
+    if (pending && inviteStatus !== 'linked') {
+      const rel = relation.trim() || '가족'
+      await acceptInviteCode(pending, user.id, rel)
+      sessionStorage.removeItem('pendingInviteCode')
     }
 
     navigate('/r')
@@ -176,18 +199,33 @@ export default function ReaderSetupPage() {
               <input
                 type="text"
                 value={inviteCode}
-                onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                onChange={(e) => { setInviteCode(e.target.value.toUpperCase()); setInviteStatus('idle') }}
                 placeholder="초대 코드 입력"
                 maxLength={CODE_LENGTH}
-                className="flex-1 h-12 bg-[#F3F4F6] border border-[#E5E7EB] rounded-lg px-4 text-xl text-[#1F2937] outline-none focus:border-[#E8820C] focus:bg-white transition-colors tracking-widest"
+                className={cn(
+                  'flex-1 h-12 bg-[#F3F4F6] border rounded-lg px-4 text-xl text-[#1F2937] outline-none transition-colors tracking-widest',
+                  inviteStatus === 'linked' ? 'border-[#16A34A] bg-[#F0FDF4]' :
+                  inviteStatus === 'error' ? 'border-[#DC2626] bg-[#FEF2F2]' :
+                  'border-[#E5E7EB] focus:border-[#E8820C] focus:bg-white',
+                )}
               />
               <button
                 type="button"
-                className="w-16 shrink-0 h-12 bg-[#E8820C] rounded-lg text-base text-white"
+                onClick={() => handleApplyCode(inviteCode)}
+                disabled={inviteCode.length < CODE_LENGTH || inviteStatus === 'linked'}
+                className="w-16 shrink-0 h-12 bg-[#E8820C] rounded-lg text-base text-white disabled:opacity-40"
               >
                 확인
               </button>
             </div>
+            {inviteStatus !== 'idle' && (
+              <p className={cn(
+                'text-base',
+                inviteStatus === 'linked' ? 'text-[#16A34A]' : 'text-[#DC2626]',
+              )}>
+                {inviteMessage}
+              </p>
+            )}
           </div>
         </div>
 

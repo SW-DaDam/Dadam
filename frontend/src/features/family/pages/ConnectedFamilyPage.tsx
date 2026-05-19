@@ -37,7 +37,7 @@ export default function ConnectedFamilyPage() {
         <h1 className="absolute left-1/2 -translate-x-1/2 text-lg sm:text-xl text-[#1F2937] font-medium whitespace-nowrap">연결된 가족</h1>
         <button
           type="button"
-          onClick={() => navigate('invite')}
+          onClick={() => navigate('/s/family/invite')}
           className="ml-auto bg-[#E8820C] rounded-lg px-3 py-1.5 min-h-11"
         >
           <span className="text-base text-white">+ 초대</span>
@@ -136,7 +136,7 @@ export default function ConnectedFamilyPage() {
             {familyMembers.length === 0 && (
               <button
                 type="button"
-                onClick={() => navigate('invite')}
+                onClick={() => navigate('/s/family/invite')}
                 className="w-full bg-[#E8820C] rounded-2xl py-4 text-xl text-white font-medium min-h-14"
               >
                 가족 초대하기

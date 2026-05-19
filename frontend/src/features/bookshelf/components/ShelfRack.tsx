@@ -126,8 +126,7 @@ function BookSpine({ book, isNewest, navPath }: BookSpineProps) {
 function InProgressPlaceholder() {
   return (
     <div
-      className="relative flex-1 flex items-center justify-center min-w-[36px] max-w-[80px] h-[186px] rounded-sm"
-      style={{ backgroundColor: '#F3F4F6', border: '2px dashed #D1D5DB' }}
+      className="relative flex-1 flex items-center justify-center min-w-[36px] max-w-[80px] h-[186px] rounded-sm bg-[#F3F4F6] border-2 border-dashed border-[#D1D5DB]"
     >
       <div className="absolute left-0 top-0 bottom-0 w-[5px] rounded-l-sm bg-[#D1D5DB] opacity-40" />
       <p
@@ -199,7 +198,7 @@ export function ShelfRack({
 
   if (loading) {
     return (
-      <div className="flex flex-col rounded-xl overflow-hidden" style={{ backgroundColor: '#F5E6D0' }}>
+      <div className="flex flex-col rounded-xl overflow-hidden bg-[#F5E6D0]">
         <div className="flex gap-3 px-4 pt-14 pb-1">
           {Array.from({ length: rowSize }).map((_, i) => (
             <div key={i} className="flex-1 h-[186px] rounded-sm bg-[#E5E7EB] animate-pulse" />
@@ -212,7 +211,7 @@ export function ShelfRack({
   }
 
   return (
-    <div className="flex flex-col rounded-xl overflow-hidden" style={{ backgroundColor: '#F5E6D0' }}>
+    <div className="flex flex-col rounded-xl overflow-hidden bg-[#F5E6D0]">
       {rows.map((row, rowIdx) => {
         const slotsFilled = row.length + (rowIdx === 0 && needsPlaceholder ? 1 : 0)
         const emptySlots = Math.max(0, rowSize - slotsFilled)

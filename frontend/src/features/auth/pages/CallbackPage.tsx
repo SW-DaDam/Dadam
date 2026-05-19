@@ -81,8 +81,16 @@ export function CallbackPage() {
     }
 
     // [P1 Fix] display_name이 기본값이면 온보딩 미완료 — role과 무관하게 역할 선택으로
+    // (pendingInviteCode는 ReaderSetupPage에서 처리)
     if (profileData.display_name === DEFAULT_DISPLAY_NAME) {
       navigate('/role-select', { replace: true })
+      return
+    }
+
+    // 기존 사용자가 초대 링크를 통해 로그인한 경우 — /join으로 돌려보내 연결 처리
+    const pendingCode = sessionStorage.getItem('pendingInviteCode')
+    if (pendingCode) {
+      navigate(`/join?code=${pendingCode}`, { replace: true })
       return
     }
 

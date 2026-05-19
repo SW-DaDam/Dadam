@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { ChevronLeft, Check, Mic, Pencil, X, RotateCcw, RefreshCw, BookOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -423,7 +423,7 @@ export default function BookEditPage() {
       {/* ── Step 2: 표지 선택 (F-13) ── */}
       {currentStep === 2 && (
         <>
-          <main className="flex-1 overflow-hidden w-full max-w-2xl mx-auto px-4 sm:px-6 py-3 flex flex-col gap-3">
+          <main className="flex-1 overflow-y-auto w-full max-w-2xl mx-auto px-4 sm:px-6 py-3 flex flex-col gap-3">
             <div className="flex items-start justify-between gap-2">
               <div className="flex flex-col gap-1">
                 <p className="text-[1.25rem] font-bold text-[#1F2937] whitespace-nowrap">이번 달 책 표지를 골라주세요</p>
@@ -598,6 +598,50 @@ function Step3AuthorNote({
   onSkip: () => void
 }) {
   const MAX = 500
+  const [sttOn, setSttOn] = useState(false)
+  const [sttDuration, setSttDuration] = useState(0)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const recognitionRef = useRef<SpeechRecognition | null>(null)
+
+  const startSTT = useCallback(async () => {
+    const SpeechRecognition =
+      (window as unknown as { SpeechRecognition?: typeof window.SpeechRecognition; webkitSpeechRecognition?: typeof window.SpeechRecognition })
+        .SpeechRecognition ??
+      (window as unknown as { webkitSpeechRecognition?: typeof window.SpeechRecognition })
+        .webkitSpeechRecognition
+
+    if (!SpeechRecognition) {
+      alert('이 브라우저는 음성 입력을 지원하지 않아요. 직접 입력해주세요.')
+      return
+    }
+    const recognition = new SpeechRecognition()
+    recognition.lang = 'ko-KR'
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.onresult = (e: SpeechRecognitionEvent) => {
+      const transcript = Array.from(e.results).map((r) => r[0].transcript).join('')
+      onChangeAuthorNote(transcript.slice(0, MAX))
+    }
+    recognition.onerror = () => stopSTT()
+    recognition.start()
+    recognitionRef.current = recognition
+    setSttDuration(0)
+    timerRef.current = setInterval(() => setSttDuration((d) => d + 1), 1000)
+    setSttOn(true)
+  }, [onChangeAuthorNote])
+
+  const stopSTT = useCallback(() => {
+    recognitionRef.current?.stop()
+    recognitionRef.current = null
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+    setSttOn(false)
+  }, [])
+
+  useEffect(() => () => stopSTT(), [stopSTT])
+
+  const mm = String(Math.floor(sttDuration / 60)).padStart(2, '0')
+  const ss = String(sttDuration % 60).padStart(2, '0')
+
   return (
     <>
       <main className="flex-1 overflow-y-auto w-full max-w-2xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-4">
@@ -619,10 +663,29 @@ function Step3AuthorNote({
           <div className="absolute -top-3 left-4 bg-[#E8820C] rounded-lg px-2.5 py-0.5">
             <span className="text-sm text-white">추천</span>
           </div>
-          <button type="button" className="w-14 h-14 rounded-full bg-[#E8820C] flex items-center justify-center">
-            <Mic size={26} className="text-white" />
-          </button>
-          <p className="text-[1.125rem] text-[#E8820C]">마이크를 누르고 말씀해 주세요</p>
+
+          {sttOn ? (
+            <>
+              <button type="button" onClick={stopSTT}
+                className="w-14 h-14 rounded-full bg-[#DC2626] flex items-center justify-center shadow-lg">
+                <span className="w-5 h-5 rounded bg-white" />
+              </button>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#DC2626] animate-pulse" />
+                <span className="text-[1.125rem] text-[#DC2626] font-medium tabular-nums">{mm}:{ss}</span>
+                <span className="text-base text-[#6B7280]">말씀이 텍스트로 변환되고 있어요</span>
+              </div>
+              <p className="text-sm text-[#9CA3AF]">버튼을 누르면 녹음이 멈춰요</p>
+            </>
+          ) : (
+            <>
+              <button type="button" onClick={startSTT}
+                className="w-14 h-14 rounded-full bg-[#E8820C] flex items-center justify-center">
+                <Mic size={26} className="text-white" />
+              </button>
+              <p className="text-[1.125rem] text-[#E8820C]">마이크를 누르고 말씀해 주세요</p>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-3">

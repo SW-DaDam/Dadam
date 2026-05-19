@@ -58,8 +58,8 @@ function ReadAvatar({ noti }: { noti: Notification }) {
 }
 
 function actionLabelFor(type: NotificationType): string {
-  if (type === 'new_comment') return '음성 답장하기'
-  if (type === 'new_reply') return '답장 듣기'
+  if (type === 'new_comment') return '댓글 보러 가기'
+  if (type === 'new_reply') return '확인하기'
   if (type === 'book_draft_ready') return '책 편집하러 가기'
   if (type === 'new_book') return '보러가기'
   if (type === 'invite_accepted') return '가족 보기'
@@ -70,7 +70,8 @@ function navPathFor(noti: Notification): string {
   if (noti.type === 'book_draft_ready' && noti.reference_id) return `/s/books/${noti.reference_id}/edit`
   if (noti.type === 'new_book' && noti.reference_id) return `/s/books/${noti.reference_id}`
   if (noti.type === 'invite_accepted') return '/s/family/members'
-  if (noti.type === 'new_comment' || noti.type === 'new_reply') return '/s/books'
+  if (noti.type === 'new_comment' && noti.reference_id) return `/s/books/${noti.reference_id}`
+  if (noti.type === 'new_reply' && noti.reference_id) return `/s/books/${noti.reference_id}`
   return '/s'
 }
 
