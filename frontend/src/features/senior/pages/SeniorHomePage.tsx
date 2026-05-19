@@ -2,7 +2,9 @@ import { useNavigate } from 'react-router'
 import { Settings, ChevronRight } from 'lucide-react'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { NotificationBell } from '@/features/notifications/components/NotificationBell'
+import { useNotifications } from '@/features/notifications/hooks/useNotifications'
 import { useMonthlyConversationDays } from '@/features/senior/hooks/useMonthlyConversationDays'
+import { timeAgo } from '@/lib/utils'
 
 function todayLabel() {
   return new Date().toLocaleDateString('ko-KR', {
@@ -12,8 +14,6 @@ function todayLabel() {
   })
 }
 
-const FAMILY_ACTIVITY = { name: '김민준', action: '댓글을 달았어요', time: '1시간 전' }
-
 export default function SeniorHomePage() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
@@ -21,6 +21,9 @@ export default function SeniorHomePage() {
 
   // 이번 달 대화 일수 DB에서 조회
   const { days, remaining, total } = useMonthlyConversationDays(user?.id ?? '')
+  // 최신 알림
+  const { notifications } = useNotifications()
+  const latestNotif = notifications[0] ?? null
 
   return (
     <div className="flex flex-col min-h-full overflow-y-auto">
@@ -95,24 +98,25 @@ export default function SeniorHomePage() {
           </div>
         </div>
 
-        {/* 가족 활동 카드 */}
-        <button
-          type="button"
-          onClick={() => navigate('/s/books')}
-          className="w-full bg-white border border-[#E5E7EB] rounded-2xl px-5 py-4 flex items-center gap-4"
-        >
-          {/* 카카오 아바타 */}
-          <div className="w-12 h-12 rounded-full bg-[#FEE500] flex items-center justify-center shrink-0">
-            <svg width="18" height="16" viewBox="0 0 40 36" fill="#3C1E1E8C" aria-hidden="true">
-              <path d="M20 0C8.954 0 0 6.716 0 15c0 5.073 3.027 9.558 7.627 12.29L5.41 34.97a.75.75 0 0 0 1.082.8l9.196-5.832C16.54 30.3 18.25 30.5 20 30.5c11.046 0 20-6.716 20-15S31.046 0 20 0Z" />
-            </svg>
-          </div>
-          <div className="flex-1 flex flex-col gap-0.5 text-left">
-            <p className="text-[1.0625rem] text-[#1F2937]">{FAMILY_ACTIVITY.name}이 {FAMILY_ACTIVITY.action}</p>
-            <p className="text-sm text-[#6B7280]">{FAMILY_ACTIVITY.time}</p>
-          </div>
-          <ChevronRight size={20} className="text-[#D1D5DB] shrink-0" />
-        </button>
+        {/* 가족 활동 카드 — 알림 없으면 숨김 */}
+        {latestNotif && (
+          <button
+            type="button"
+            onClick={() => navigate('/s/notifications')}
+            className="w-full bg-white border border-[#E5E7EB] rounded-2xl px-5 py-4 flex items-center gap-4"
+          >
+            <div className="w-12 h-12 rounded-full bg-[#FEE500] flex items-center justify-center shrink-0">
+              <svg width="18" height="16" viewBox="0 0 40 36" fill="#3C1E1E8C" aria-hidden="true">
+                <path d="M20 0C8.954 0 0 6.716 0 15c0 5.073 3.027 9.558 7.627 12.29L5.41 34.97a.75.75 0 0 0 1.082.8l9.196-5.832C16.54 30.3 18.25 30.5 20 30.5c11.046 0 20-6.716 20-15S31.046 0 20 0Z" />
+              </svg>
+            </div>
+            <div className="flex-1 flex flex-col gap-0.5 text-left min-w-0">
+              <p className="text-[1.0625rem] text-[#1F2937] truncate">{latestNotif.title}</p>
+              <p className="text-sm text-[#6B7280]">{timeAgo(latestNotif.created_at)}</p>
+            </div>
+            <ChevronRight size={20} className="text-[#D1D5DB] shrink-0" />
+          </button>
+        )}
 
       </main>
     </div>
