@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router'
-import { ChevronLeft, Play } from 'lucide-react'
+import { ChevronLeft } from 'lucide-react'
 import { useNotifications } from '@/features/notifications/hooks/useNotifications'
 import type { Notification, NotificationType } from '@/types/domain'
 
@@ -47,9 +47,9 @@ function Avatar({ type }: { type: NotificationType }) {
 }
 
 function actionLabelFor(type: NotificationType): string {
-  if (type === 'new_reply') return '답장 듣기'
+  if (type === 'new_reply') return '답장 보러 가기'
   if (type === 'new_book') return '지금 읽기'
-  if (type === 'new_comment') return '보러가기'
+  if (type === 'new_comment') return '댓글 보러 가기'
   if (type === 'invite_accepted') return '가족 보기'
   return '확인하기'
 }
@@ -57,6 +57,7 @@ function actionLabelFor(type: NotificationType): string {
 function getNavPath(noti: Notification): string {
   if (noti.type === 'new_book' && noti.reference_id) return `/r/books/${noti.reference_id}`
   if (noti.type === 'new_reply' && noti.reference_id) return `/r/books/${noti.reference_id}`
+  if (noti.type === 'new_comment' && noti.reference_id) return `/r/books/${noti.reference_id}`
   if (noti.type === 'invite_accepted') return '/r/settings'
   return '/r'
 }
@@ -124,9 +125,8 @@ export default function ReaderNotificationPage() {
                     <button
                       type="button"
                       onClick={() => handleAction(n)}
-                      className="bg-[#E8820C] rounded-xl px-4 py-2 flex items-center gap-1.5 min-h-11"
+                      className="bg-[#E8820C] rounded-xl px-4 py-2 min-h-11"
                     >
-                      {n.type === 'new_reply' && <Play size={13} className="text-white fill-white" />}
                       <span className="text-sm text-white">{actionLabelFor(n.type)}</span>
                     </button>
                   </div>

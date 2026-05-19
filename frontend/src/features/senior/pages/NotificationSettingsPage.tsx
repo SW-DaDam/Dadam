@@ -14,8 +14,6 @@ interface NotifItem {
 const FAMILY_NOTIFS: NotifItem[] = [
   { id: 'comment', emoji: '💬', title: '가족이 댓글을 달았을 때', desc: '자녀·손주가 내 책에 댓글을 남기면', defaultOn: true },
   { id: 'reply', emoji: '↩', title: '내 댓글에 답장이 왔을 때', desc: '저자가 내 댓글에 음성 답장을 남기면', defaultOn: true },
-  { id: 'photo', emoji: '🖼', title: '가족이 사진을 추가했을 때', desc: '책에 가족 사진이 새로 올라오면', defaultOn: true },
-  { id: 'highlight', emoji: '✏️', title: '가족이 하이라이트를 표시했을 때', desc: '책 본문에 밑줄·형광펜이 추가되면', defaultOn: false },
 ]
 
 const BOOK_NOTIFS: NotifItem[] = [
