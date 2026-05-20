@@ -20,8 +20,8 @@ import { createClient } from '@supabase/supabase-js'
 import * as dotenv from 'dotenv'
 import * as path from 'path'
 
-// 이 스크립트는 frontend/scripts/ 에 위치 → __dirname 기준 두 단계 올라가면 Dadam/ 루트
-const ROOT = path.resolve(__dirname, '../..')
+// ESM에서는 __dirname 대신 import.meta.dirname 사용 (Node.js v20.11+)
+const ROOT = path.resolve(import.meta.dirname, '../..')
 dotenv.config({ path: path.join(ROOT, 'frontend/.env.local') })
 dotenv.config({ path: path.join(ROOT, 'supabase/functions/.env.local') })
 
