@@ -4,13 +4,13 @@
  * 6개 voice × 3개 speed = 18개 MP3를 OpenAI gpt-4o-mini-tts로 생성해
  * Supabase Storage tts-samples 버킷에 업로드합니다.
  *
- * 실행 방법:
+ * 실행 방법 (frontend/ 디렉터리에서):
  *   npx tsx scripts/generate-tts-samples.ts
  *
- * 필요 환경변수 (.env.local 또는 실행 환경에 설정):
- *   OPENAI_API_KEY        — OpenAI API 키
- *   VITE_SUPABASE_URL     — Supabase 프로젝트 URL
- *   SUPABASE_SERVICE_ROLE_KEY — Supabase service_role 키 (업로드 권한)
+ * 필요 환경변수:
+ *   OPENAI_API_KEY              — frontend/.env.local 또는 supabase/functions/.env.local
+ *   VITE_SUPABASE_URL           — frontend/.env.local
+ *   SUPABASE_SERVICE_ROLE_KEY   — supabase/functions/.env.local
  *
  * 예상 비용: 18회 × ~$0.015 ≈ $0.27 (1회성)
  */
@@ -18,18 +18,17 @@
 import OpenAI from 'openai'
 import { createClient } from '@supabase/supabase-js'
 import * as dotenv from 'dotenv'
-import * as fs from 'fs'
 import * as path from 'path'
 
-// 루트 및 frontend/.env.local 모두 로드 시도
-dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
-dotenv.config({ path: path.resolve(process.cwd(), 'frontend/.env.local') })
+// 이 스크립트는 frontend/scripts/ 에 위치 → __dirname 기준 두 단계 올라가면 Dadam/ 루트
+const ROOT = path.resolve(__dirname, '../..')
+dotenv.config({ path: path.join(ROOT, 'frontend/.env.local') })
+dotenv.config({ path: path.join(ROOT, 'supabase/functions/.env.local') })
 
 // ── 상수 ──────────────────────────────────────────────────────
 const VOICES = ['shimmer', 'nova', 'coral', 'onyx', 'echo', 'sage'] as const
 const SPEEDS = ['slow', 'normal', 'fast'] as const
 
-// 어르신 친화 베이스 instruction
 const BASE_INSTRUCTION = `You are a warm AI companion for a Korean senior. Use a respectful, familiar, empathetic tone (like a granddaughter or grandson). Speak in Korean with natural prosody.`
 
 const SPEED_INSTRUCTIONS = {
@@ -38,7 +37,6 @@ const SPEED_INSTRUCTIONS = {
   fast: 'Speak at a normal conversational pace.',
 } as const
 
-// 미리듣기 고정 샘플 텍스트 (C3 확정)
 const SAMPLE_TEXT = '안녕하세요! 저는 어르신과 매일 이야기 나누는 AI 친구예요.'
 
 const BUCKET_NAME = 'tts-samples'
@@ -85,7 +83,7 @@ async function generateAndUpload(voice: Voice, speed: Speed): Promise<void> {
     .from(BUCKET_NAME)
     .upload(fileName, buffer, {
       contentType: 'audio/mpeg',
-      upsert: true,  // 재실행 시 덮어쓰기 허용
+      upsert: true,
     })
 
   if (error) {
@@ -125,7 +123,6 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
-  // 업로드된 파일 public URL 확인
   console.log('\n📌 샘플 public URL 예시:')
   const { data } = supabase.storage.from(BUCKET_NAME).getPublicUrl('shimmer_slow.mp3')
   console.log(`  shimmer_slow.mp3 → ${data.publicUrl}`)
