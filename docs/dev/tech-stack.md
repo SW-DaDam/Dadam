@@ -24,9 +24,8 @@
 | **AI 프록시** | Supabase Edge Functions (Vercel AI SDK를 통한 LLM 호출) |
 | **AI SDK** | Vercel AI SDK (모델 추상화 레이어 — Gemini / GPT / Claude 통합 인터페이스) |
 | **AI LLM** | GPT-4o / GPT-4o-mini (상용화), Gemini 1.5 Flash (개발·테스트) |
-| **음성 STT (MVP 초반)** | Web Speech API (Chrome/Edge, `lang='ko-KR'`) |
-| **음성 STT (MVP 후반)** | **Whisper (시니어 음성 파인튜닝)** — AI Hub 노인 음성 데이터셋 기반 |
-| **음성 TTS** | Web Speech API (MVP) → ElevenLabs (Phase 2 고도화) |
+| **음성 STT** | **OpenAI `gpt-realtime-whisper`** — `stt-whisper` Edge Function, MediaRecorder Blob → REST batch, Web Speech API fallback |
+| **음성 TTS** | **OpenAI `gpt-4o-mini-tts`** — `tts-openai` Edge Function, voice 6종 + 속도 3단계 + `instructions` 시니어 톤, Web Speech API SpeechSynthesis fallback |
 | **LLM 품질 개선 전략** | 프롬프트 엔지니어링 + 관심사 메모리 RAG 우선 / 문제 발생 시 파인튜닝 검토 |
 | **이미지 생성** | DALL-E 3 (책 표지 후보 이미지) |
 | **실시간** | Supabase Realtime (신간 알림 + 댓글 알림) |

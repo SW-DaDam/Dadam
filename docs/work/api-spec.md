@@ -493,7 +493,21 @@ const { data: signedUrl } = await supabase.rpc('create_signed_reply_audio_url', 
 
 ---
 
-### 4.4 Storage 공통 규칙
+### 4.4 `tts-samples` 버킷 (public read, service_role 업로드 전용)
+
+| 항목 | 내용 |
+|------|------|
+| 공개 여부 | public (read) |
+| 경로 패턴 | `{voice}_{speed}.mp3` (예: `shimmer_slow.mp3`) |
+| 업로드 주체 | 권오인 1회성 스크립트 (`scripts/generate-tts-samples.ts`, service_role) |
+| 파일 수 | 18개 고정 (6 voice × 3 speed) |
+| 용도 | 설정 페이지 "들어보기" 미리듣기 — API 비용 0원 |
+| 재생 URL | `${VITE_SUPABASE_URL}/storage/v1/object/public/tts-samples/{voice}_{speed}.mp3` |
+| 클라이언트 헬퍼 | `ttsOpenaiClient.getSampleUrl(voice, speed)` |
+
+---
+
+### 4.5 Storage 공통 규칙
 
 - 파일명에 **한글·공백·특수문자 금지**. UUID나 timestamp 기반으로 생성.
 - `upsert: true`는 덮어쓰기 의도가 명확할 때만. 기본 `false`.
@@ -592,15 +606,15 @@ while (reader) {
 
 | 이름 | 담당 | 상태 | 비고 |
 |------|------|------|------|
-| `voice-chat` (LLM 스트리밍) | 권오인 | DONE | F-04 / F-05 memories 주입 + 선제 질문. **7주차 STT/TTS 외부 연동 교체 진행** (Whisper API + Naver Clova TTS) |
+| `voice-chat` (LLM 스트리밍) | 권오인 | DONE | F-04 / F-05 memories 주입 + 선제 질문 |
 | `extract-memory` (세션 종료 후) | 권오인 | DONE | F-04 |
 | `tag-utterances` (발화 태그) | 권오인 | DONE | F-05 |
 | `discover-short-book-topics` (단편 주제 발견) | 권오인 | DONE | F-18. 어르신의 미사용 PRIORITY_TAG 발화를 on-demand LLM 클러스터링 → 최대 5개 주제 후보 반환 |
 | `generate-book` (월말 pg_cron + 단편 트리거) | 권오인 | DONE | F-06 / F-18. `stage_payload.book_type` 기반 분기: `monthly` → `runPipelineForSenior`, `short` → `handleShortBook` (1챕터, `used_in_short_book_id` 잠금) |
 | `generate-cover` (DALL-E 3) | 권오인 | DONE | F-07 표지 후보 생성 + `book-covers` 업로드. F-18에서도 그대로 재사용 |
 | `retry-book-job` (수동 재시도) | 권오인 | TBD | F-08, RPC `retry_book_generation`과 연계 |
-| `stt-whisper` *(또는 voice-chat 내부 통합)* | 권오인 | TBD | F-03 STT — `whisper-large-v3-turbo` 호출, MediaRecorder Blob → 텍스트 변환. 구현 형태(별도 Function vs voice-chat 통합)는 구현 시 결정 |
-| `tts-naver` *(또는 voice-chat 내부 통합)* | 권오인 | TBD | F-03 TTS — Naver Clova Voice 호출, 텍스트 → MP3 응답. 구현 형태는 구현 시 결정 |
+| `stt-whisper` | 권오인 | **DONE** | F-03 / F-13 공용 STT — `gpt-realtime-whisper` REST batch, MediaRecorder Blob → `{ text }`. 상세 명세 §7.6 |
+| `tts-openai` | 권오인 | **DONE** | F-03 TTS — `gpt-4o-mini-tts`, voice/speed 클라이언트 전달, MP3 스트림 응답. 상세 명세 §7.7 |
 
 > 상태: `TBD` (미구현) / `WIP` (구현 중) / `DONE` (완료). 각 Function 상세 스펙은 구현 PR에서 본 절에 추가.
 
@@ -841,6 +855,72 @@ fetch(`${VITE_SUPABASE_URL}/functions/v1/tag-utterances`, {
 **에러 처리**
 - LLM 실패 / JSON 파싱 오류 → utterances 원본 보존, `{ success: false, error }` 반환
 - 개별 utterance UPDATE 실패 → 해당 항목만 console.error, 나머지 계속 진행
+
+---
+
+### 7.6 `stt-whisper` — 음성 STT (F-03 / F-13 공용)
+
+| 항목 | 내용 |
+|------|------|
+| 경로 | `POST /functions/v1/stt-whisper` |
+| 인증 | `Authorization: Bearer <access_token>` 필수 |
+| Content-Type | `multipart/form-data` |
+| 담당 | 권오인 |
+| 상태 | **DONE** (2026-05-22) |
+
+**입력 (multipart fields)**
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| `audio` | File | ✓ | `audio/webm` 또는 `audio/mp4`, 최대 25 MB |
+| `senior_id` | string | ✓ | 어르신 UUID (본인 확인용) |
+
+**응답**
+
+| 상황 | HTTP | body |
+|------|------|------|
+| 정상 | 200 | `{ text: string }` |
+| 인증 실패 | 401 | `{ error: string }` |
+| senior_id 불일치 | 403 | `{ error: string }` |
+| 파일 누락·25MB 초과 | 422 | `{ error: string }` |
+| OpenAI 호출 실패 | 502 | `{ error: string }` |
+
+**클라이언트 래퍼**: `frontend/src/lib/ai/sttWhisperClient.ts` — `uploadAudio(blob, seniorId, accessToken)`
+
+---
+
+### 7.7 `tts-openai` — 음성 TTS (F-03)
+
+| 항목 | 내용 |
+|------|------|
+| 경로 | `POST /functions/v1/tts-openai` |
+| 인증 | `Authorization: Bearer <access_token>` 필수 |
+| Content-Type | `application/json` |
+| 담당 | 권오인 |
+| 상태 | **DONE** (2026-05-22) |
+
+**입력 (JSON body)**
+
+```ts
+{
+  text: string,     // TTS 변환 텍스트 (1~4000자)
+  voice: TtsVoice,  // 'shimmer'|'nova'|'coral'|'onyx'|'echo'|'sage'
+  speed: TtsSpeed   // 'slow'|'normal'|'fast'
+}
+```
+
+**응답**
+
+| 상황 | HTTP | body |
+|------|------|------|
+| 정상 | 200 | `audio/mpeg` 바이너리 (MP3) |
+| 인증 실패 | 401 | `{ error: string }` |
+| voice/speed enum 위반·길이 초과 | 422 | `{ error: string }` |
+| OpenAI 호출 실패 | 502 | `{ error: string }` |
+
+**클라이언트 래퍼**: `frontend/src/lib/ai/ttsOpenaiClient.ts` — `fetchTts(text, voice, speed, accessToken)`
+
+**설계 결정**: 클라이언트가 voice·speed 직접 전달 (서버 DB 조회 X) — 매 TTS 호출마다 `senior_profiles` SELECT를 피해 지연 1.5~3초 제거. `useVoiceChat` 마운트 시 1회만 캐시.
 
 ---
 

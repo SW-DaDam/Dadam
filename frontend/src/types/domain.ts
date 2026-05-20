@@ -59,6 +59,20 @@ export type ChapterWithComments = Chapter & {
   comments: CommentWithReplies[]
 }
 
+// ─── TTS 설정 (F-03) ─────────────────────────────────────────
+
+/** gpt-4o-mini-tts voice ID — 한국어 시니어 친화 6종 */
+export type TtsVoice = 'shimmer' | 'nova' | 'coral' | 'onyx' | 'echo' | 'sage'
+
+/** TTS 말하기 속도 — gpt-4o-mini-tts instructions 매핑 */
+export type TtsSpeed = 'slow' | 'normal' | 'fast'
+
+/** 어르신 TTS 설정 (senior_profiles.tts_voice / tts_speed) */
+export interface TtsSettings {
+  voice: TtsVoice
+  speed: TtsSpeed
+}
+
 // ─── 음성 대화 ────────────────────────────────────────────────
 
 export type VoiceChatState = 'idle' | 'listening' | 'processing' | 'speaking'

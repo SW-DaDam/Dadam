@@ -240,6 +240,8 @@ CREATE TYPE speaker_role AS ENUM ('senior', 'ai');
 | `region` | TEXT | NULL | 거주 지역 (예: '경상남도 진주시') |
 | `dialect` | TEXT | NULL | 사투리 (예: '경상도') — Whisper/AI 대화 스타일 참고용 |
 | `interests_summary` | TEXT | NULL | 사람이 읽을 수 있는 관심사 요약 (UI 표시용) |
+| `tts_voice` | TEXT | NOT NULL, DEFAULT 'shimmer', CHECK IN ('shimmer','nova','coral','onyx','echo','sage') | AI TTS voice ID (gpt-4o-mini-tts 6종, F-03) |
+| `tts_speed` | TEXT | NOT NULL, DEFAULT 'slow', CHECK IN ('slow','normal','fast') | TTS 말하기 속도 (instruction 매핑, F-03) |
 | `onboarding_completed` | BOOLEAN | NOT NULL, DEFAULT false | 초기 설정 완료 여부 |
 | `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT now() | 생성일 |
 | `updated_at` | TIMESTAMPTZ | NOT NULL, DEFAULT now() | 수정일 |
