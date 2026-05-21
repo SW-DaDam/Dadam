@@ -17,15 +17,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | 단계 | 담당 | 역할 |
 |------|------|------|
-| 코드 작성 | **Claude Code** | 기능 구현, 리팩터, 문서 작성 |
-| 코드 검증 | **Codex** | 작성된 코드의 로직 검증, 엣지 케이스 점검, 리뷰 의견 |
+| 구현 플랜 작성 | **Claude Code** | 기능 분석, 작업 계획 수립 |
+| 코드 작성 | **Claude Code** | 플랜 기반으로 기능 구현, 리팩터, 문서 작성 |
+| 코드 검증 (커밋 전) | **Codex** | 구현 코드의 로직·엣지 케이스·리스크 점검, 수정 의견 |
+| 수정 반영 후 커밋 | **Claude Code** | Codex 의견 반영 여부 판단 후 커밋 |
 
 - **운영 규약**
-  - Claude가 작성한 변경분은 PR 생성 전/직후 Codex 검증을 거칩니다.
-  - Codex 의견은 PR 코멘트 또는 별도 리뷰 채널로 전달되며, 반영 여부는 작성자가 판단합니다.
+  - Claude가 코드를 작성한 뒤, **커밋 전에** Codex가 구현 코드를 검증합니다.
+  - Codex 의견은 사용자를 통해 전달되며, 반영 여부는 작성자가 판단합니다.
   - Claude는 Codex 검증 결과를 추측하지 말고, 사용자 또는 실제 검증 로그가 전달된 뒤에만 반영합니다.
-- **⚠️ 현재 상태**: **Codex 연결 미완료**. 연결될 때까지 검증 단계는 사용자가 수동으로 진행하거나 건너뜁니다. Claude는 검증 담당자를 임의로 호출·가정하지 않습니다.
-- 연결 완료 시 본 섹션의 상태 표기와 [git-workflow.md](./docs/work/git-workflow.md) §3의 리뷰 흐름을 갱신합니다.
+- **✅ 현재 상태**: **Codex 연결 완료** (2026-04-22). ChatGPT 계정 로그인 방식으로 연결됨.
 
 ## 3. 문서 맵 (정본 참조)
 
@@ -96,7 +97,7 @@ Dadam/
 | 경계 | 실체 | 정본 문서 |
 |------|------|-----------|
 | 타입 | `src/types/database.ts` (자동 생성) · `src/types/domain.ts` (join/도메인 복합 타입) | [code-convention.md §4](./docs/work/code-convention.md) |
-| RPC | 7개 함수 (soft_delete_chapter, restore_chapter, update_chapter_title, select_cover, publish_book, retry_book_generation, create_signed_reply_audio_url) | [api-spec.md §2](./docs/work/api-spec.md) |
+| RPC | 10개 함수 (soft_delete_chapter, restore_chapter, update_chapter_title, select_cover, publish_book, retry_book_generation, create_signed_reply_audio_url, trigger_book_generation, remove_memory_item, clear_all_memories) | [api-spec.md §2](./docs/work/api-spec.md) |
 | Realtime | 3채널 (`notifications:user:*`, `comments:chapter:*`, `replies:comment:*`) | [api-spec.md §3](./docs/work/api-spec.md) |
 | Storage | 3버킷 (`avatars` public, `book-covers` public/service_role, `reply-audio` private/signed URL) | [api-spec.md §4](./docs/work/api-spec.md) |
 
@@ -107,8 +108,14 @@ Dadam/
 - 수직 슬라이싱: 담당자가 해당 기능의 프론트 + Edge Function + RLS + 마이그레이션을 모두 작성합니다.
 - 담당·브랜치 목록은 [role-assignment.md §2](./docs/work/role-assignment.md).
 
-### 6.4 Edge Function (6개, 권오인 전담)
-voice-chat · extract-memory · tag-utterances · generate-book · generate-cover · retry-book-job — 호출 규약은 [api-spec.md §7](./docs/work/api-spec.md).
+### 6.4 Edge Function (7개, 권오인 전담)
+voice-chat · extract-memory · tag-utterances · generate-book · generate-cover · retry-book-job · delete-account — 호출 규약은 [api-spec.md §7](./docs/work/api-spec.md).
+
+### 6.5 주요 DB 스키마 변경 이력 (최신)
+- `memories.data`: 카테고리별 중첩 JSONB → `{ items: [{ text, category, emoji }] }` 플랫 배열 (마이그레이션 20260428)
+- `book_generation_jobs.status`: TEXT → `job_status` Enum (`pending|aggregating|chaptering|cover_requested|done|failed`)
+- `book_generation_jobs`: `senior_id`, `stage_payload` 컬럼 추가, `book_id` NULL 허용
+- pg_cron 스케줄: 매월 1일 → 매월 28~31일 + Edge Function 내부 말일 체크 방식
 
 ## 7. 작업 시 체크리스트 (Claude 전용)
 
@@ -119,7 +126,25 @@ voice-chat · extract-memory · tag-utterances · generate-book · generate-cove
 3. **인터페이스 변경 여부**: §6.2 네 가지 경계(타입 · RPC · Realtime · Storage)에 영향이 있으면 api-spec.md와 함께 업데이트하고 PR 본문 체크리스트에 표시한다.
 4. **컨벤션 준수**: [code-convention.md](./docs/work/code-convention.md) — any 금지, 매직넘버 금지, 시니어 UX(`text-lg`↑ · 터치 타깃 `min-h-11`↑) 유지.
 5. **커밋 · PR**: [git-workflow.md §2-§3](./docs/work/git-workflow.md) — 한글 타입 접두사, 셀프 머지 금지, Breaking Change는 `[api!]`.
-6. **Codex 검증 단계 체크**: §2 기준. 연결 전이면 검증 단계를 임의로 "완료"로 표시하지 않는다.
+6. **Codex 검증 단계 체크**: §2 기준. 커밋 전 Codex 검증을 거쳐야 한다. 검증 결과를 추측하거나 임의로 "완료"로 표시하지 않는다.
+7. **완료 증명**: 태스크를 완료로 표시하기 전, 실제로 동작함을 확인한다 — 테스트 실행, 로그 확인, 또는 동작 시연. "코드를 작성했다"는 완료가 아니다.
+8. **우아함 점검**: 비자명한 변경이라면 "더 우아한 방법이 있는가?" 스스로 묻는다. 해키하게 느껴지면 근본 원인을 해결한다. 단순·명백한 수정은 생략해도 된다.
+
+## 9. 태스크 추적 · 자기개선
+
+### 플랜 파일
+- 비자명한 작업(3단계 이상 또는 아키텍처 결정)은 `tasks/todo.md`에 체크리스트로 플랜을 먼저 작성한다.
+- 플랜 확인 후 바로 구현 진행 — 커밋 전 Codex 검증(§2)만 지키면 된다.
+- 각 항목은 완료 즉시 체크한다. 완료 후 결과 리뷰 섹션을 추가한다.
+
+### 자율 버그 수정
+- 버그 리포트를 받으면 바로 수정한다. 사용자에게 방법을 물어보지 않는다.
+- 로그·에러·실패 테스트를 직접 확인하고 근본 원인을 해결한다.
+- 수정 후 커밋 전에 Codex 검증(§2)을 거친다.
+
+### 자기개선 루프
+- 사용자의 수정 지적을 받은 뒤: `tasks/lessons.md`에 패턴과 재발 방지 규칙을 기록한다.
+- 세션 시작 시 `tasks/lessons.md`를 검토하여 과거 실수를 반복하지 않는다.
 
 ## 8. 절대 금지
 

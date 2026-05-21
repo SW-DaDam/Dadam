@@ -67,7 +67,7 @@ if (error) {
 
 ## 2. RPC 함수 명세
 
-> 전체 7개. [role-assignment.md §4.2](./role-assignment.md#42-권오인이-제공하는-rpc--함수) 확장판.
+> 전체 8개. [role-assignment.md §4.2](./role-assignment.md#42-권오인이-제공하는-rpc--함수) 확장판.
 > 시그니처 변경 시 `src/types/database.ts` 재생성 필수, PR 제목에 `[api!]` 접두사.
 
 ### 2.1 `soft_delete_chapter`
@@ -223,7 +223,34 @@ audio.play()
 
 ---
 
-### 2.8 RPC 공통 에러 처리 패턴
+### 2.8 `trigger_short_book_generation`
+
+| 항목 | 내용 |
+|------|------|
+| 시그니처 | `trigger_short_book_generation(p_senior_id uuid, p_utterance_ids uuid[], p_topic_title text) → uuid` |
+| 반환 | 생성된 `book_generation_jobs.id` |
+| 권한 | `authenticated` (본인 또는 service_role만 허용, 내부 `auth.uid()` 검증) |
+| 역할 | `book_generation_jobs`에 `pending` 상태 단편 job 생성. `stage_payload = {book_type:'short', utterance_ids:[...], topic_title:"..."}` |
+
+#### 호출 예시
+
+```ts
+const { data: jobId, error } = await supabase.rpc('trigger_short_book_generation', {
+  p_senior_id: userId,
+  p_utterance_ids: topic.utterance_ids,
+  p_topic_title: topic.title,
+})
+// jobId → generate-book Edge Function { job_id } 로 전달
+```
+
+#### 에러 케이스
+
+- `42501`: 본인이 아닌 senior_id 지정 시
+- `22023`: `p_utterance_ids` 빈 배열 전달 시
+
+---
+
+### 2.9 RPC 공통 에러 처리 패턴
 
 ```ts
 import type { PostgrestError } from '@supabase/supabase-js'
@@ -296,26 +323,28 @@ export function useNotificationChannel(userId: string, onInsert: (n: Notificatio
 }
 ```
 
-### 3.2 `comments:chapter:{chapter_id}` — 챕터 댓글 스트림
+### 3.2 `comments:book:{book_id}` — 책 댓글 스트림
+
+> 댓글은 챕터 단위가 아닌 **책 단위**로 달린다. 필터 기준이 `chapter_id` → `book_id`로 변경됨.
 
 | 항목 | 내용 |
 |------|------|
 | 대상 테이블 | `comments` |
 | 이벤트 | `INSERT`, `UPDATE` |
-| 필터 | `chapter_id=eq.{chapterId}` |
+| 필터 | `book_id=eq.{bookId}` |
 | 용도 | F-15 댓글 실시간 표시/수정 반영 |
 
 ```ts
 const channel = supabase
-  .channel(`comments:chapter:${chapterId}`)
+  .channel(`comments:book:${bookId}`)
   .on(
     'postgres_changes',
-    { event: 'INSERT', schema: 'public', table: 'comments', filter: `chapter_id=eq.${chapterId}` },
+    { event: 'INSERT', schema: 'public', table: 'comments', filter: `book_id=eq.${bookId}` },
     (payload) => handleInsert(payload.new)
   )
   .on(
     'postgres_changes',
-    { event: 'UPDATE', schema: 'public', table: 'comments', filter: `chapter_id=eq.${chapterId}` },
+    { event: 'UPDATE', schema: 'public', table: 'comments', filter: `book_id=eq.${bookId}` },
     (payload) => handleUpdate(payload.new)
   )
   .subscribe()
@@ -417,9 +446,9 @@ async function uploadAvatar(userId: string, file: File) {
 | 항목 | 내용 |
 |------|------|
 | 공개 여부 | public (조회만) |
-| 경로 패턴 | `{senior_id}/{book_id}/{cover_id}.webp` |
+| 경로 패턴 | `{senior_id}/{book_id}/{cover_id}.png` |
 | 업로드 주체 | 권오인 Edge Function(`generate-cover`) |
-| 허용 형식 | `image/webp` |
+| 허용 형식 | `image/png` (Deno 환경 WebP 변환 불가로 PNG 저장, D-05) |
 | 클라이언트 업로드 | **금지** (RLS로 차단) |
 
 ```ts
@@ -464,7 +493,21 @@ const { data: signedUrl } = await supabase.rpc('create_signed_reply_audio_url', 
 
 ---
 
-### 4.4 Storage 공통 규칙
+### 4.4 `tts-samples` 버킷 (public read, service_role 업로드 전용)
+
+| 항목 | 내용 |
+|------|------|
+| 공개 여부 | public (read) |
+| 경로 패턴 | `{voice}_{speed}.mp3` (예: `ngoeun_slow.mp3`) |
+| 업로드 주체 | 권오인 1회성 스크립트 (`scripts/generate-tts-samples.ts`, service_role) |
+| 파일 수 | Phase 1: 3개(1 voice × 3 speed) — Phase 2 확장 시 18개(6 voice × 3 speed) 재생성 |
+| 용도 | 설정 페이지 "들어보기" 미리듣기 — API 비용 0원 |
+| 재생 URL | `${VITE_SUPABASE_URL}/storage/v1/object/public/tts-samples/{voice}_{speed}.mp3` |
+| 클라이언트 헬퍼 | `ttsClovaClient.getSampleUrl(voice, speed)` |
+
+---
+
+### 4.5 Storage 공통 규칙
 
 - 파일명에 **한글·공백·특수문자 금지**. UUID나 timestamp 기반으로 생성.
 - `upsert: true`는 덮어쓰기 의도가 명확할 때만. 기본 `false`.
@@ -563,14 +606,328 @@ while (reader) {
 
 | 이름 | 담당 | 상태 | 비고 |
 |------|------|------|------|
-| `voice-chat` (LLM 스트리밍) | 권오인 | TBD | F-04 / 스트리밍 응답 |
-| `extract-memory` (세션 종료 후) | 권오인 | TBD | F-05 |
-| `tag-utterances` (발화 태그) | 권오인 | TBD | F-05 |
-| `generate-book` (월말 pg_cron) | 권오인 | TBD | F-07 |
-| `generate-cover` (DALL-E 3) | 권오인 | TBD | F-13 `book-covers` 업로드 |
+| `voice-chat` (LLM 스트리밍) | 권오인 | DONE | F-04 / F-05 memories 주입 + 선제 질문 |
+| `extract-memory` (세션 종료 후) | 권오인 | DONE | F-04 |
+| `tag-utterances` (발화 태그) | 권오인 | DONE | F-05 |
+| `discover-short-book-topics` (단편 주제 발견) | 권오인 | DONE | F-18. 어르신의 미사용 PRIORITY_TAG 발화를 on-demand LLM 클러스터링 → 최대 5개 주제 후보 반환 |
+| `generate-book` (월말 pg_cron + 단편 트리거) | 권오인 | DONE | F-06 / F-18. `stage_payload.book_type` 기반 분기: `monthly` → `runPipelineForSenior`, `short` → `handleShortBook` (1챕터, `used_in_short_book_id` 잠금) |
+| `generate-cover` (DALL-E 3) | 권오인 | DONE | F-07 표지 후보 생성 + `book-covers` 업로드. F-18에서도 그대로 재사용 |
 | `retry-book-job` (수동 재시도) | 권오인 | TBD | F-08, RPC `retry_book_generation`과 연계 |
+| `stt-whisper` | 권오인 | **DONE** | F-03 / F-13 공용 STT — `gpt-realtime-whisper` REST batch, MediaRecorder Blob → `{ text }`. 상세 명세 §7.6 |
+| `tts-clova` | 권오인 | **DONE** | F-03 TTS — Naver Clova Voice Premium, voice/speed 클라이언트 전달, MP3 스트림 응답. JWT ES256 JWKS 검증 + AbortController 타임아웃. 상세 명세 §7.7 |
 
 > 상태: `TBD` (미구현) / `WIP` (구현 중) / `DONE` (완료). 각 Function 상세 스펙은 구현 PR에서 본 절에 추가.
+
+#### F-18 단편 책 트리거 흐름 (실제 구현)
+
+```
+어르신이 "단편 책 생성" 버튼 클릭
+  → TopicSelectionModal 열림
+  → discover-short-book-topics 호출
+      POST { senior_id }
+      → 미사용(used_in_short_book_id IS NULL) PRIORITY_TAG 발화 수집 (최대 120건)
+      → gpt-4o로 크로스-월 클러스터링 → 최대 5개 주제 후보 반환
+  → 후보 목록 표시 → 어르신 주제 선택
+  → trigger_short_book_generation RPC 호출
+      → book_generation_jobs INSERT (status='pending', book_type='short', utterance_ids, topic_title)
+      → job_id 반환
+  → generate-book Edge Function 호출 (job_id 전달)
+      → handleShortBook() — utterances 직접 조회 → 1챕터 서사 생성
+      → books INSERT (book_type='short') + chapters INSERT
+      → used_in_short_book_id 업데이트 (발화 잠금 — 월간 책 풀에서 제외)
+      → generate-cover 재사용 (변경 없음)
+  → BookEditPage로 이동 (편집·표지 선택·출간 — 기존 흐름 그대로)
+```
+
+> 단편 책은 같은 달에 여러 권 생성 가능 (`books_monthly_unique` partial index — `WHERE book_type='monthly'`).
+> 단편에 사용된 발화는 `used_in_short_book_id` 컬럼으로 잠금, 이후 월간 책 집계에서 자동 제외.
+
+---
+
+### 7.X `generate-cover` — DALL-E 3 표지 후보 생성 (F-07)
+
+**경로**: `POST /functions/v1/generate-cover`  
+**인증**: `service_role` JWT (generate-book 내부 호출 전용, 클라이언트 직접 호출 금지)
+
+#### 요청
+
+```ts
+interface GenerateCoverRequest {
+  book_id: string    // 대상 책 UUID
+  senior_id: string  // 어르신 UUID (Storage 경로용)
+}
+```
+
+#### 처리 흐름
+
+```
+idempotent 체크 (cover_images 존재 OR job done 상태 → 200 early return)
+  → cover_requested 상태 job 조회 (book_id 기준)
+  → chapters 조회 (is_deleted=false, sort_order 순)
+  → gpt-4o-mini로 핵심 키워드 3~5개 추출 (한/영 동시)
+  → DALL-E 3 병렬 3회 호출 (n=1 고정, 3회 별도 호출 필수)
+  → 각 이미지: book-covers 버킷 PNG 업로드 → cover_images INSERT
+  → job → done / books → editing / notifications INSERT
+```
+
+#### 응답
+
+| 상황 | HTTP | body |
+|------|------|------|
+| 정상 완료 | 200 | `{ message: '표지 생성 완료', success_count: number }` |
+| 이미 생성됨 | 200 | `{ message: 'already generated' }` |
+| 파라미터 오류 | 400 | `{ error: string }` |
+| 인증 실패 | 401/403 | `{ error: string }` |
+| job 없음 | 404 | `{ error: string }` |
+| 전체 실패 | 500 | `{ error: string, details: string }` |
+
+#### 에러 처리
+
+- **개별 이미지 실패**: `Promise.allSettled`로 격리, 나머지 계속 생성
+- **성공 0개**: `job.status → 'failed'`, `error_log`에 상세 기록
+- **부분 성공 (1~2개)**: 생성된 것만으로 완료 처리
+
+#### Storage 결과
+
+- 경로: `{senior_id}/{book_id}/{cover_id}.png`
+- `cover_images.image_url`: `getPublicUrl()` 반환값 (signed URL 아님)
+- `cover_images.status`: `'candidate'` 고정 (F-13 useBookEdit 필터 조건)
+
+---
+
+### 7.5 `voice-chat` — LLM 스트리밍 응답 + memories 주입 (F-04 / F-05)
+
+| 항목 | 내용 |
+|------|------|
+| 경로 | `POST /functions/v1/voice-chat` |
+| 인증 | `Authorization: Bearer <access_token>` 필수 |
+| 응답 형식 | SSE 스트림 (Vercel AI SDK UIMessage 형식) |
+| 담당 | 권오인 |
+
+**입력**
+```ts
+{
+  messages: { role: 'user' | 'assistant'; content: string }[]  // 대화 히스토리
+  senior_id: string  // 어르신 profile UUID (memories 조회용)
+}
+```
+
+**동작 — memories 주입 (F-05)**
+1. `senior_id` 기준으로 `memories` 테이블 `data.items` 조회 (service_role, RLS 우회)
+2. `items`가 있으면 시스템 프롬프트에 `[어르신 관심사 정보]` 섹션 추가
+3. `messages.length === 0` (첫 메시지)이면 `[첫 대화 시작 지시]` 섹션 추가 → AI가 관심사 기반 선제 질문 생성
+4. `messages.length > 0` (이후 메시지)이면 선제 질문 지시 없음 — 일반 대화 흐름 유지
+
+**폴백 (에러 처리)**
+- memories 조회 실패 (DB 에러, PGRST116 등) → 조용히 기본 프롬프트로 폴백 (어르신 UX 방해 없음)
+- `items`가 없거나 빈 배열 → 기본 프롬프트 사용
+
+**환경변수 `ACTIVE_MODEL`**
+- `'gpt'` → `gpt-4o-mini` 사용
+- 기본값(`'gemini'`) → `gemini-2.5-flash` 사용 (개발·테스트 무료 티어)
+
+---
+
+### 7.6 `extract-memory` — 메모리 추출 (F-04)
+
+| 항목 | 내용 |
+|------|------|
+| 경로 | `POST /functions/v1/extract-memory` |
+| 인증 | `Authorization: Bearer <access_token>` 필수 |
+| 호출 시점 | 세션 종료 시 fire-and-forget (`keepalive: true` fetch) |
+| 담당 | 권오인 |
+
+**입력**
+```ts
+{
+  conversation_id: string  // 종료된 대화 세션 UUID
+  senior_id: string        // 어르신 profile UUID
+}
+```
+
+**출력**
+```ts
+// 성공 (메모리 갱신)
+{ success: true, updated_categories: string[] }
+
+// 성공 (발화 없음 — 건너뜀)
+{ success: true, skipped: true }
+
+// 실패 (기존 memories 항상 보존)
+{ success: false, error: string }
+```
+
+**호출 예시** (useVoiceChat.ts cleanup 내부)
+```ts
+// keepalive: true — 페이지 이탈 후에도 요청 완료 보장
+fetch(`${VITE_SUPABASE_URL}/functions/v1/extract-memory`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${accessToken}`,
+    'apikey': VITE_SUPABASE_ANON_KEY,
+  },
+  body: JSON.stringify({ conversation_id, senior_id }),
+  keepalive: true,
+})
+```
+
+**내부 동작**
+1. `utterances` 테이블에서 `speaker = 'senior'` 발화만 조회
+2. `memories` 테이블에서 기존 `data` JSONB 조회
+3. `gpt-4o-mini`로 새 관심사 추출 (카테고리: `hobbies`, `relationships`, `health`, `philosophy`, `recurring_topics`, `emotional_patterns`)
+4. 기존 data와 병합 (배열: concat+중복제거 / 객체: 키 단위 merge)
+5. `memories` UPSERT (`senior_id` 기준), `conversations.memory_extracted = true`
+
+**에러 처리**
+- LLM 실패 또는 JSON 파싱 오류 → 기존 memories 보존, `{ success: false, error }` 반환
+- 발화 0건 → `{ success: true, skipped: true }` (DB 변경 없음)
+
+**관련 RPC** (migration `010_memory_rpc.sql`)
+
+| RPC | 인자 | 설명 |
+|-----|------|------|
+| `remove_memory_item` | `p_senior_id`, `p_category`, `p_item_index?`, `p_item_key?` | 개별 항목 삭제 |
+| `clear_all_memories` | `p_senior_id` | 전체 초기화 (`data = '{}'`) |
+
+---
+
+### 7.7 `tag-utterances` — 발화 태그 분류 (F-05)
+
+| 항목 | 내용 |
+|------|------|
+| 경로 | `POST /functions/v1/tag-utterances` |
+| 인증 | `Authorization: Bearer <access_token>` 필수 |
+| 호출 시점 | 세션 종료 시 fire-and-forget (`keepalive: true` fetch), `extract-memory`와 독립·동시 호출 |
+| 담당 | 권오인 |
+
+**입력**
+```ts
+{
+  conversation_id: string  // 종료된 대화 세션 UUID
+  senior_id: string        // 어르신 profile UUID
+}
+```
+
+**출력**
+```ts
+// 성공
+{ success: true, tagged_count: number }
+
+// 성공 (어르신 발화 없음 — 건너뜀)
+{ success: true, skipped: true }
+
+// 실패 (utterances 원본 항상 보존)
+{ success: false, error: string }
+```
+
+**호출 예시** (useVoiceChat.ts cleanup 내부, extract-memory 바로 아래)
+```ts
+fetch(`${VITE_SUPABASE_URL}/functions/v1/tag-utterances`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${accessToken}`,
+    'apikey': VITE_SUPABASE_ANON_KEY,
+  },
+  body: JSON.stringify({ conversation_id, senior_id }),
+  keepalive: true,
+}).catch((err) => console.error('[useVoiceChat] tag-utterances 호출 실패', err))
+```
+
+**내부 동작**
+1. anon 클라이언트로 JWT 검증 + 호출자 uid === senior_id 검증
+2. service_role로 conversations.senior_id 소유권 확인
+3. `utterances`에서 `speaker = 'senior'`인 발화만 조회 (`sequence_number` 오름차순)
+4. `gpt-4o-mini`로 발화별 태그 일괄 분류
+5. `utterances.tags` 배열 batch UPDATE (`Promise.allSettled` — 개별 실패 허용)
+
+**태그 종류 (utterance_tag Enum)**
+
+| 태그 | 의미 |
+|------|------|
+| `daily_mundane` | 일상 잡담 (날씨, 식사, TV 등) |
+| `memory_recall` | 과거 추억 회상 (옛날 이야기, 어릴 때) |
+| `emotional_peak` | 강한 감정 표현 (기쁨, 슬픔, 그리움) |
+| `philosophy` | 삶의 가치관·신념·교훈 |
+| `relationship_event` | 가족·지인 관계 사건 |
+
+**에러 처리**
+- LLM 실패 / JSON 파싱 오류 → utterances 원본 보존, `{ success: false, error }` 반환
+- 개별 utterance UPDATE 실패 → 해당 항목만 console.error, 나머지 계속 진행
+
+---
+
+### 7.6 `stt-whisper` — 음성 STT (F-03 / F-13 공용)
+
+| 항목 | 내용 |
+|------|------|
+| 경로 | `POST /functions/v1/stt-whisper` |
+| 인증 | `Authorization: Bearer <access_token>` 필수 |
+| Content-Type | `multipart/form-data` |
+| 담당 | 권오인 |
+| 상태 | **DONE** (2026-05-22) |
+
+**입력 (multipart fields)**
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| `audio` | File | ✓ | `audio/webm` 또는 `audio/mp4`, 최대 25 MB |
+| `senior_id` | string | ✓ | 어르신 UUID (본인 확인용) |
+
+**응답**
+
+| 상황 | HTTP | body |
+|------|------|------|
+| 정상 | 200 | `{ text: string }` |
+| 인증 실패 | 401 | `{ error: string }` |
+| senior_id 불일치 | 403 | `{ error: string }` |
+| 파일 누락·25MB 초과 | 422 | `{ error: string }` |
+| OpenAI 호출 실패 | 502 | `{ error: string }` |
+
+**클라이언트 래퍼**: `frontend/src/lib/ai/sttWhisperClient.ts` — `uploadAudio(blob, seniorId, accessToken)`
+
+---
+
+### 7.7 `tts-clova` — 음성 TTS (F-03)
+
+| 항목 | 내용 |
+|------|------|
+| 경로 | `POST /functions/v1/tts-clova` |
+| 인증 | `Authorization: Bearer <access_token>` 필수 |
+| Content-Type | `application/json` |
+| 담당 | 권오인 |
+| 상태 | **DONE** (Phase 1, 2026-05-21) |
+
+**입력 (JSON body)**
+
+```ts
+{
+  text: string,     // TTS 변환 텍스트 (1~1900자, Clova 한도 2,000자 - 안전 마진)
+  voice: TtsVoice,  // Phase 1: 'ngoeun' (Phase 2에서 6종으로 확장 예정)
+  speed: TtsSpeed   // 'slow'|'normal'|'fast' → Clova speed -2/0/3으로 매핑
+}
+```
+
+**응답**
+
+| 상황 | HTTP | body |
+|------|------|------|
+| 정상 | 200 | `audio/mpeg` 바이너리 (MP3, 스트림 패스스루) |
+| 인증 실패 | 401 | `{ error: string }` |
+| voice/speed enum 위반·길이 초과 | 422 | `{ error: string }` |
+| Clova 호출 실패(5xx) | 502 | `{ error: string }` |
+| Clova 응답 타임아웃(10s 초과) | 504 | `{ error: string }` |
+
+**클라이언트 래퍼**: `frontend/src/lib/ai/ttsClovaClient.ts` — `fetchTts(text, voice, speed, accessToken)`
+
+**설계 결정 (음성 응답 지연 최소화)**:
+1. **클라이언트가 voice·speed 직접 전달** (서버 DB 조회 X) — 매 TTS 호출마다 `senior_profiles` SELECT를 피해 지연 제거. `useVoiceChat` 마운트 시 1회만 캐시.
+2. **JWT 로컬 검증 (jose ES256 + JWKS 모듈 스코프 캐싱)** — `getUser()` DB 왕복 50~150ms 제거. Supabase 신규 프로젝트는 비대칭 키(ES256)로 access token을 서명하므로 JWKS endpoint에서 공개키 fetch.
+3. **MP3 스트림 패스스루** — Clova `fetch().body`(ReadableStream)를 그대로 새 Response body로 전달해 first-byte 지연 최소화.
+4. **AbortController 타임아웃 (10s)** — Clova stall 시 무한 대기로 Edge Function concurrency 슬롯이 묶이는 것을 방지. 타임아웃은 504로 매핑.
+
+**환경변수**: `NCP_CLOVA_CLIENT_ID`, `NCP_CLOVA_CLIENT_SECRET` (Supabase secrets로 등록, NCP 콘솔 발급).
 
 ---
 

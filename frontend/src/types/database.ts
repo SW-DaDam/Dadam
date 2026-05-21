@@ -16,30 +16,36 @@ export type Database = {
     Tables: {
       book_generation_jobs: {
         Row: {
-          book_id: string
+          book_id: string | null
           created_at: string
           error_log: string | null
           id: string
           retry_count: number
-          status: string
+          senior_id: string | null
+          stage_payload: Json
+          status: Database["public"]["Enums"]["job_status"]
           updated_at: string
         }
         Insert: {
-          book_id: string
+          book_id?: string | null
           created_at?: string
           error_log?: string | null
           id?: string
           retry_count?: number
-          status?: string
+          senior_id?: string | null
+          stage_payload?: Json
+          status?: Database["public"]["Enums"]["job_status"]
           updated_at?: string
         }
         Update: {
-          book_id?: string
+          book_id?: string | null
           created_at?: string
           error_log?: string | null
           id?: string
           retry_count?: number
-          status?: string
+          senior_id?: string | null
+          stage_payload?: Json
+          status?: Database["public"]["Enums"]["job_status"]
           updated_at?: string
         }
         Relationships: [
@@ -48,6 +54,13 @@ export type Database = {
             columns: ["book_id"]
             isOneToOne: false
             referencedRelation: "books"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "book_generation_jobs_senior_id_fkey"
+            columns: ["senior_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -160,24 +173,27 @@ export type Database = {
       }
       comments: {
         Row: {
+          audio_url: string | null
           author_id: string
-          chapter_id: string
+          book_id: string
           content: string
           created_at: string
           id: string
           updated_at: string
         }
         Insert: {
+          audio_url?: string | null
           author_id: string
-          chapter_id: string
+          book_id: string
           content: string
           created_at?: string
           id?: string
           updated_at?: string
         }
         Update: {
+          audio_url?: string | null
           author_id?: string
-          chapter_id?: string
+          book_id?: string
           content?: string
           created_at?: string
           id?: string
@@ -192,10 +208,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "comments_chapter_id_fkey"
-            columns: ["chapter_id"]
+            foreignKeyName: "comments_book_id_fkey"
+            columns: ["book_id"]
             isOneToOne: false
-            referencedRelation: "chapters"
+            referencedRelation: "books"
             referencedColumns: ["id"]
           },
         ]
@@ -247,6 +263,7 @@ export type Database = {
       cover_images: {
         Row: {
           book_id: string
+          chapter_id: string | null
           created_at: string
           id: string
           image_url: string
@@ -255,6 +272,7 @@ export type Database = {
         }
         Insert: {
           book_id: string
+          chapter_id?: string | null
           created_at?: string
           id?: string
           image_url: string
@@ -263,6 +281,7 @@ export type Database = {
         }
         Update: {
           book_id?: string
+          chapter_id?: string | null
           created_at?: string
           id?: string
           image_url?: string
@@ -275,6 +294,13 @@ export type Database = {
             columns: ["book_id"]
             isOneToOne: false
             referencedRelation: "books"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cover_images_chapter_id_fkey"
+            columns: ["chapter_id"]
+            isOneToOne: false
+            referencedRelation: "chapters"
             referencedColumns: ["id"]
           },
         ]
@@ -387,6 +413,7 @@ export type Database = {
           reference_type?: string | null
           title: string
           type: Database["public"]["Enums"]["notification_type"]
+          updated_at?: string
         }
         Update: {
           body?: string | null
@@ -398,6 +425,7 @@ export type Database = {
           reference_type?: string | null
           title?: string
           type?: Database["public"]["Enums"]["notification_type"]
+          updated_at?: string
         }
         Relationships: [
           {
@@ -468,7 +496,7 @@ export type Database = {
           {
             foreignKeyName: "replies_comment_id_fkey"
             columns: ["comment_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "comments"
             referencedColumns: ["id"]
           },
@@ -486,30 +514,39 @@ export type Database = {
           birth_date: string | null
           created_at: string
           dialect: string | null
+          gender: string | null
           id: string
           interests_summary: string | null
           onboarding_completed: boolean
           region: string | null
+          tts_speed: string
+          tts_voice: string
           updated_at: string
         }
         Insert: {
           birth_date?: string | null
           created_at?: string
           dialect?: string | null
+          gender?: string | null
           id: string
           interests_summary?: string | null
           onboarding_completed?: boolean
           region?: string | null
+          tts_speed?: string
+          tts_voice?: string
           updated_at?: string
         }
         Update: {
           birth_date?: string | null
           created_at?: string
           dialect?: string | null
+          gender?: string | null
           id?: string
           interests_summary?: string | null
           onboarding_completed?: boolean
           region?: string | null
+          tts_speed?: string
+          tts_voice?: string
           updated_at?: string
         }
         Relationships: [
@@ -531,6 +568,7 @@ export type Database = {
           sequence_number: number
           speaker: Database["public"]["Enums"]["speaker_role"]
           tags: Database["public"]["Enums"]["utterance_tag"][]
+          used_in_short_book_id: string | null
         }
         Insert: {
           content: string
@@ -540,6 +578,7 @@ export type Database = {
           sequence_number: number
           speaker: Database["public"]["Enums"]["speaker_role"]
           tags?: Database["public"]["Enums"]["utterance_tag"][]
+          used_in_short_book_id?: string | null
         }
         Update: {
           content?: string
@@ -549,6 +588,7 @@ export type Database = {
           sequence_number?: number
           speaker?: Database["public"]["Enums"]["speaker_role"]
           tags?: Database["public"]["Enums"]["utterance_tag"][]
+          used_in_short_book_id?: string | null
         }
         Relationships: [
           {
@@ -558,6 +598,13 @@ export type Database = {
             referencedRelation: "conversations"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "utterances_used_in_short_book_id_fkey"
+            columns: ["used_in_short_book_id"]
+            isOneToOne: false
+            referencedRelation: "books"
+            referencedColumns: ["id"]
+          },
         ]
       }
     }
@@ -565,17 +612,84 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      clear_all_memories: { Args: { p_senior_id: string }; Returns: undefined }
       get_user_role: {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
       is_family_of: { Args: { p_senior_id: string }; Returns: boolean }
+      net_http_post_cover:
+        | {
+            Args: {
+              p_anon_key: string
+              p_book_id: string
+              p_chapter_id: string
+              p_secret: string
+              p_senior_id: string
+              p_url: string
+            }
+            Returns: number
+          }
+        | {
+            Args: {
+              p_book_id: string
+              p_chapter_id: string
+              p_secret: string
+              p_senior_id: string
+              p_url: string
+            }
+            Returns: undefined
+          }
+      publish_book: {
+        Args: { book_id: string; dedication?: string }
+        Returns: undefined
+      }
+      remove_memory_item:
+        | {
+            Args: {
+              p_category: string
+              p_item_index?: number
+              p_item_key?: string
+              p_senior_id: string
+            }
+            Returns: undefined
+          }
+        | { Args: { p_senior_id: string; p_text: string }; Returns: undefined }
+      restore_chapter: { Args: { chapter_id: string }; Returns: undefined }
+      select_cover: {
+        Args: { book_id: string; cover_id: string }
+        Returns: undefined
+      }
+      soft_delete_chapter: { Args: { chapter_id: string }; Returns: undefined }
+      trigger_book_generation: {
+        Args: { p_month: number; p_senior_id: string; p_year: number }
+        Returns: string
+      }
+      trigger_short_book_generation: {
+        Args: {
+          p_senior_id: string
+          p_topic_title: string
+          p_utterance_ids: string[]
+        }
+        Returns: string
+      }
+      update_chapter_title: {
+        Args: { chapter_id: string; new_title: string }
+        Returns: undefined
+      }
     }
     Enums: {
       book_status: "draft" | "editing" | "published"
       book_type: "monthly" | "short"
       cover_status: "candidate" | "selected" | "rejected"
       invite_status: "pending" | "accepted" | "expired" | "revoked"
+      job_status:
+        | "pending"
+        | "aggregating"
+        | "chaptering"
+        | "cover_requested"
+        | "done"
+        | "failed"
       notification_type:
         | "new_book"
         | "new_comment"
@@ -721,6 +835,14 @@ export const Constants = {
       book_type: ["monthly", "short"],
       cover_status: ["candidate", "selected", "rejected"],
       invite_status: ["pending", "accepted", "expired", "revoked"],
+      job_status: [
+        "pending",
+        "aggregating",
+        "chaptering",
+        "cover_requested",
+        "done",
+        "failed",
+      ],
       notification_type: [
         "new_book",
         "new_comment",
