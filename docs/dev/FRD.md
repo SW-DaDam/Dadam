@@ -21,7 +21,7 @@
 | 개발 기간 | 2026.04.10 ~ 2026.06.16 (9주) |
 | 기준 문서 | PRD v2.3 / ERD v1.1 / 역할분담서 v2.0 |
 | 총 기능 수 | 18개 (MVP 핵심 기능) |
-| 기술 스택 | React 19 + Vite + TypeScript + Supabase + Vercel AI SDK + Whisper large-v3-turbo + Naver Clova TTS + DALL-E 3 (Web Speech API fallback) |
+| 기술 스택 | React 19 + Vite + TypeScript + Supabase + Vercel AI SDK + gpt-realtime-whisper (STT) + Naver Clova Voice Premium (TTS) + DALL-E 3 (Web Speech API fallback) |
 
 ### 1-1. 기능 트랙 구성
 
@@ -43,7 +43,7 @@
 | --- | --- | --- | --- | --- | --- |
 | F-01 | 백엔드 기반 세팅 | 인프라 | 13개 테이블, RLS, Storage 버킷, pg_cron, Realtime publication 초기 구성 | 권오인 | `feature/backend-foundation` |
 | F-02 | 카카오 OAuth 인증 | 인증/계정 | 카카오 OAuth 2.0 로그인 및 사용자 프로필 자동 생성 트리거 | 권오인 | `feature/auth` |
-| F-03 | AI 말동무 실시간 음성 대화 | AI/음성 | Whisper(large-v3-turbo) STT + Naver Clova TTS + LLM Edge Function 스트리밍 실시간 대화 (Web Speech API fallback) | 권오인 | `feature/voice-chat` |
+| F-03 | AI 말동무 실시간 음성 대화 | AI/음성 | OpenAI `gpt-realtime-whisper` STT + Naver Clova Voice Premium TTS + LLM Edge Function 스트리밍 실시간 대화 (Web Speech API fallback) / voice·속도 3단계 어르신 설정 (Phase 1: 1종 `ngoeun` 디폴트, Phase 2 6종 확장 예정) | 권오인 | `feature/voice-chat` |
 | F-04 | 관심사 메모리 추출 & 누적 | AI | 세션 종료 시 LLM이 memories.data JSONB 자동 갱신 및 누적 저장 | 권오인 | `feature/memory-system` |
 | F-05 | AI 선제 대화 & 발화 태그 분류 | AI | 기억 기반 선제 질문 생성 + utterances.tags 자동 분류 | 권오인 | `feature/proactive-chat` |
 | F-06 | 월말 책 초안 자동 생성 | 책 생성 | 3단계 파이프라인(aggregating → chaptering → cover)으로 월간 책 초안 생성 | 권오인 | `feature/book-generation` |
@@ -158,32 +158,38 @@
 | **브랜치** | `feature/voice-chat` |
 
 **기능 설명**
-- **STT**: OpenAI Whisper API(`whisper-large-v3-turbo`) 서버 호출 방식 — 어르신 발화 속도 대응(긴 침묵 허용)
-  - 클라이언트가 MediaRecorder로 녹음한 음성 청크를 Edge Function에 전송하여 텍스트로 변환
-  - F-09 파인튜닝 결과 검증 후 순정 모델 사용으로 결정 (CER 6% vs 파인튜닝 9%)
-- **TTS**: Naver Clova Voice API로 AI 응답 음성 재생 — 한국어 자연스러운 시니어 친화 보이스 톤
+- **STT**: OpenAI `gpt-realtime-whisper` REST batch 방식 — `stt-whisper` Edge Function 경유
+  - 클라이언트 MediaRecorder로 녹음한 Blob을 multipart/form-data로 전송 → 텍스트 변환
+  - 1차 실패 시 Web Speech API SpeechRecognition으로 자동 fallback
+- **TTS**: Naver Clova Voice Premium — `tts-clova` Edge Function 경유, MP3 스트림 반환
+  - Phase 1: 1종 `ngoeun`(고은, 여성 일반 Premium) 디폴트 운영 + 속도 3단계 (`slow`·`normal`·`fast`) 개인화
+  - Phase 2 확장 예정: NCP 콘솔 청취 후 6종으로 확대 (`docs/task/F-03-tts-clova-migration.md` §11)
+  - JWT 로컬 검증(ES256 JWKS) + AbortController 타임아웃(10s) + MP3 스트림 패스스루로 응답 지연 최소화
+  - 1차 실패 시 Web Speech API SpeechSynthesis로 자동 fallback
 - Vercel AI SDK를 통한 LLM Edge Function 스트리밍 응답 처리
 - 대화 내용을 `conversations` / `utterances` 테이블에 실시간 저장
 - 마이크 애니메이션으로 대화 중/대기 중 상태 시각 피드백 제공
 - MVP: Gemini 1.5 Flash / 상용: GPT-4o (`ACTIVE_MODEL` 환경변수로 전환)
+- 어르신 TTS 설정 페이지(`/s/settings/voice`): Phase 1은 단일 voice 안내 박스 + 속도 3단계 + Storage 샘플 미리듣기 + DB 저장 (Phase 2에서 voice 카드 그리드 복구 예정)
 
 **입력 조건**
 - 어르신 음성 입력 (마이크 → MediaRecorder Blob)
 - 이전 대화 컨텍스트
 - `memories` 테이블의 관심사 프로필
-- 환경변수: `OPENAI_API_KEY`(Whisper), `NAVER_CLOVA_CLIENT_ID` / `NAVER_CLOVA_CLIENT_SECRET`
+- `senior_profiles.tts_voice` / `senior_profiles.tts_speed` (마운트 시 1회 로드·캐시)
+- 환경변수: `OPENAI_API_KEY` (STT + TTS + LLM 공통)
 
 **출력 / 결과**
 - STT 변환 텍스트
 - AI 텍스트 응답 (스트리밍)
-- TTS 음성 재생 (Naver Clova MP3 응답)
+- TTS 음성 재생 (MP3 Blob URL → `<audio>` 재생)
 - `utterances` 레코드 저장
 
 **예외 처리**
 - 마이크 권한 거부 시 권한 요청 안내
-- Whisper API 호출 실패 시 Web Speech API STT로 fallback
-- Naver TTS 호출 실패 시 Web Speech API TTS로 fallback
-- 네트워크 오류 시 로컬 임시 저장 후 동기화
+- STT Edge Function 실패 시 Web Speech API SpeechRecognition으로 자동 fallback
+- TTS Edge Function 실패 시 Web Speech API SpeechSynthesis로 자동 fallback
+- MediaRecorder 미지원 환경 → 즉시 Web Speech STT 경로로 분기, 에러 없음
 
 **관련 테이블**: `conversations`, `utterances`
 

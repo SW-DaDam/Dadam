@@ -59,6 +59,24 @@ export type ChapterWithComments = Chapter & {
   comments: CommentWithReplies[]
 }
 
+// ─── TTS 설정 (F-03) ─────────────────────────────────────────
+
+/**
+ * Naver Clova Voice Premium speaker ID
+ * Phase 1: 1종(ngoeun, 일반 Premium 여성)으로 연결 테스트
+ * Phase 2 확장 예정: NCP 콘솔 청취 후 6종으로 확대 (예: vmikyung, vara, vgoeun, vdaeseong, vdonghyun, vian)
+ */
+export type TtsVoice = 'ngoeun'
+
+/** TTS 말하기 속도 — Edge Function에서 Clova speed(-5~10)로 매핑 */
+export type TtsSpeed = 'slow' | 'normal' | 'fast'
+
+/** 어르신 TTS 설정 (senior_profiles.tts_voice / tts_speed) */
+export interface TtsSettings {
+  voice: TtsVoice
+  speed: TtsSpeed
+}
+
 // ─── 음성 대화 ────────────────────────────────────────────────
 
 export type VoiceChatState = 'idle' | 'listening' | 'processing' | 'speaking'

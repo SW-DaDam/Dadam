@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>TTS Voice 비교</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+    h2 { margin-bottom: 4px; }
+    p { color: #666; margin: 0 0 20px; font-size: 14px; }
+    .voice { display: flex; align-items: center; gap:12px; padding: 10px 0; border-bottom: 1px solid #eee; }
+    .name { width: 80px; font-weight: bold; }
+    button { padding: 6px 16px; border: 1px solid #aaa; border-radius: 6px; cursor: pointer; background: #fff; }
+    button.playing { background: #333; color: #fff; border-color: #333; }
+    .current { font-size: 13px; color: #888; margin-left: 4px; }
+  </style>
+</head>
+<body>
+  <h2>목소리 비교 (13개)</h2>
+  <p>샘플 텍스트: "안녕하세요! 저는 어르신과 매일 이야기 나누는 AI 친구예요."</p>
+  <div id="list"></div>
+
+  <script>
+    const BASE = 'https://conkipcwjwvuxijazvgs.supabase.co/storage/v1/object/public/tts-samples'
+    const VOICES = ['shimmer','nova','coral','onyx','echo','sage','alloy','ash','ballad','fable','verse','marin','cedar']
+
+    let currentAudio = null
+    let currentBtn = null
+
+    const list = document.getElementById('list')
+    VOICES.forEach(v => {
+      const row = document.createElement('div')
+      row.className = 'voice'
+
+      const name = document.createElement('span')
+      name.className = 'name'
+      name.textContent = v
+
+      const btn = document.createElement('button')
+      btn.textContent = '▶ 재생'
+      btn.onclick = () => {
+        if (currentAudio && !currentAudio.paused) {
+          currentAudio.pause()
+          currentAudio.currentTime = 0
+          currentBtn.textContent = '▶ 재생'
+          currentBtn.classList.remove('playing')
+          if (currentBtn === btn) { currentAudio = null; currentBtn = null; return }
+        }
+        const audio = new Audio(`${BASE}/${v}_slow.mp3`)
+        currentAudio = audio
+        currentBtn = btn
+        btn.textContent = '■ 정지'
+        btn.classList.add('playing')
+        audio.play()
+        audio.onended = () => { btn.textContent = '▶ 재생'; btn.classList.remove('playing') }
+      }
+
+      row.appendChild(name)
+      row.appendChild(btn)
+      list.appendChild(row)
+    })
+  </script>
+</body>
+</html>

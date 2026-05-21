@@ -519,6 +519,8 @@ export type Database = {
           interests_summary: string | null
           onboarding_completed: boolean
           region: string | null
+          tts_speed: string
+          tts_voice: string
           updated_at: string
         }
         Insert: {
@@ -530,6 +532,8 @@ export type Database = {
           interests_summary?: string | null
           onboarding_completed?: boolean
           region?: string | null
+          tts_speed?: string
+          tts_voice?: string
           updated_at?: string
         }
         Update: {
@@ -541,6 +545,8 @@ export type Database = {
           interests_summary?: string | null
           onboarding_completed?: boolean
           region?: string | null
+          tts_speed?: string
+          tts_voice?: string
           updated_at?: string
         }
         Relationships: [
