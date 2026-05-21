@@ -301,7 +301,7 @@ AI 말동무와의 일상 대화를 어르신의 **월간 책**으로 자동 생
 | **실시간 통신** | Supabase Realtime (신간·댓글 알림) |
 | **AI (LLM)** | Vercel AI SDK — 개발: Gemini 1.5 Flash / 상용: GPT-4o(mini), `ACTIVE_MODEL` 전환 |
 | **음성 STT (MVP 초반)** | Web Speech API (`lang='ko-KR'`) |
-| **음성 STT (MVP 후반)** | Whisper 파인튜닝 (AI Hub 노인 음성 데이터셋 기반) |
+| **음성 STT (MVP 후반)** | OpenAI `whisper-1` REST batch (`stt-whisper` Edge Function) — F-09 3-way 비교 결과 LoRA 파인튜닝(CER 9.72%)이 turbo 순정(6.44%)을 능가하지 못해 시연 단계는 외부 API로 결정. 운영 단계 turbo 자체 호스팅 검토는 후속 task |
 | **음성 TTS** | Web Speech API (MVP) → ElevenLabs (Phase 2) |
 | **이미지 생성** | DALL-E 3 (책 표지 후보) |
 | **소셜 로그인** | 카카오 OAuth2.0 |

@@ -49,7 +49,7 @@
 | F-06 | 월말 책 초안 자동 생성 | 책 생성 | 3단계 파이프라인(aggregating → chaptering → cover)으로 월간 책 초안 생성 | 권오인 | `feature/book-generation` |
 | F-07 | AI 표지 이미지 생성 | 책 생성 | DALL-E 3 호출로 표지 후보 3~5장 생성 후 book-covers 버킷 저장 | 권오인 | `feature/cover-generation` |
 | F-08 | 책 생성 실패 복구 | 안정성 | retry_count 자동 3회 재시도 + 수동 재시도 RPC | 권오인 | `feature/book-retry` |
-| F-09 | Whisper 파인튜닝 & 배포 | AI/음성 | 한국어 시니어 음성 데이터 파인튜닝 및 Runpod Serverless 배포 | 권오인 | `feature/whisper-finetune` |
+| F-09 | Whisper 파인튜닝 검증 (포트폴리오용) | AI/음성 | 한국어 시니어 음성 데이터 LoRA 파인튜닝 결과 평가(CER 비교). **실서비스는 순정 모델 사용 결정** — `compare_with_whisper1.ipynb` 3-way 비교에서 turbo 순정 CER 6.44%로 LoRA(9.72%)·OpenAI whisper-1(9.60%)을 능가 | 권오인 | `feature/whisper-finetune` |
 
 ### 2-2. 이지형 담당 기능 (F-10 ~ F-17)
 
@@ -351,12 +351,12 @@
 
 ---
 
-### F-09. Whisper 파인튜닝 & 배포
+### F-09. Whisper 파인튜닝 검증 (포트폴리오용)
 
 | 항목 | 내용 |
 | --- | --- |
 | **기능 ID** | F-09 |
-| **기능명** | Whisper 파인튜닝 & 배포 |
+| **기능명** | Whisper 파인튜닝 검증 (포트폴리오용) |
 | **PRD 참조** | tech-stack §Whisper 파인튜닝 / datasets.md |
 | **담당자** | 권오인 |
 | **기능 구분** | AI/음성 |
@@ -364,22 +364,34 @@
 
 **기능 설명**
 - 한국어 시니어 음성 데이터셋 수집 및 전처리 (`datasets.md` 참조)
-- OpenAI Whisper 모델 파인튜닝 (Colab 환경, 2~7주차 독립 트랙)
-- Runpod Serverless 배포 및 엔드포인트 테스트
-- MVP 후반 F-03의 STT 부분을 파인튜닝 모델로 교체 (인터페이스 동일 유지)
+- OpenAI Whisper-large-v3-turbo LoRA 파인튜닝 (Colab 환경, 2~7주차 독립 트랙)
+- 4-way + 3-way 비교 평가로 파인튜닝 효과 검증
+- **결론**: 자체 LoRA 파인튜닝이 순정 turbo 대비 정확도 손해 → 실서비스는 순정 모델·외부 API 사용 결정 (F-03 STT는 `whisper-1` 채택)
+
+**평가 결과 (3-way 비교, 2026-05-21)**
+- 평가 노트북: [`whisper/compare_with_whisper1.ipynb`](../../whisper/compare_with_whisper1.ipynb)
+- 데이터셋: `senior_speech_v2` (AI Hub 노인 음성 ~165GB 선별·전처리), validation 500 샘플
+- 환경: Colab A100 40GB, batch 8
+
+| 모델 | CER | baseline 대비 |
+|------|------|--------------|
+| **baseline (turbo 순정)** | **6.44%** ⭐ | — |
+| whisper-1 (OpenAI API) | 9.60% | +3.16%p |
+| final2 (LoRA 파인튜닝) | 9.72% | +3.28%p |
+
+**해석**
+- 9주 일정·LoRA 어댑터로는 1.6B 순정 turbo 모델 능가 어려움 (의미 있는 negative result)
+- OpenAI `whisper-1`도 turbo 순정보다 떨어지나, 인프라 0 + 시연 단계 적합성 우위로 F-03 STT에 채택
+- 운영 단계 정확도 개선 검토 시 turbo 순정을 HF Inference API·자체 GPU로 호스팅하는 후속 task 가능
 
 **입력 조건**
 - 한국어 시니어 음성 WAV 파일
 - 전처리 스크립트 (`whisper/` 디렉터리)
 
 **출력 / 결과**
-- 파인튜닝된 Whisper 모델 가중치
-- Runpod Serverless 엔드포인트 URL
-- F-03 STT 모듈 교체
-
-**예외 처리**
-- 파인튜닝 미완성 시 Web Speech API로 MVP 운영 유지
-- 배포 실패 시 OpenAI Whisper API로 fallback
+- 파인튜닝된 LoRA 어댑터 가중치 (final1·final2·final3)
+- 3-way CER 비교 결과 — 위 표
+- F-03 STT 채택 결정 근거 데이터
 
 **관련 테이블**: 별도 `datasets.md` 관리 (DB 테이블 불필요)
 
