@@ -220,7 +220,7 @@ F-10 프론트 기반 ──┬─> F-11 가족 초대         (F-02 인증 필�
 | `avatars` | `{user_id}/{timestamp}.{ext}` | 각 사용자 (이지형 UI) |
 | `book-covers` | `{senior_id}/{book_id}/{cover_id}.webp` | 권오인 Edge Function (service_role) |
 | `reply-audio` | `{senior_id}/{reply_id}.webm` | 어르신 (이지형 UI) |
-| `tts-samples` | `{voice}_{speed}.mp3` (예: `shimmer_slow.mp3`) | 권오인 1회성 스크립트 (service_role), 18개 고정 |
+| `tts-samples` | `{voice}_{speed}.mp3` (예: `ngoeun_slow.mp3`) | 권오인 1회성 스크립트 (service_role). Phase 1: 3개(1 voice × 3 speed), Phase 2: 18개(6 voice × 3 speed) |
 
 ### 4.5 목업 데이터 (권오인 선제 제공)
 

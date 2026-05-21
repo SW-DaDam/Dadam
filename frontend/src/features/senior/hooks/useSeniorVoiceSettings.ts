@@ -1,19 +1,22 @@
 // 어르신 TTS 설정 로드·저장·미리듣기 훅
 // senior_profiles.tts_voice / tts_speed 컬럼과 tts-samples 버킷 연동
+// Phase 1: voice 1종(ngoeun)만 운영. Phase 2 확장 시 VALID_VOICES 배열만 갱신.
 
 import { useState, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { getSampleUrl } from '@/lib/ai/ttsOpenaiClient'
+import { getSampleUrl } from '@/lib/ai/ttsClovaClient'
 import type { TtsVoice, TtsSpeed, TtsSettings } from '@/types/domain'
 
 // DB에서 읽은 값을 TtsVoice/TtsSpeed로 좁히는 타입 가드
-const VALID_VOICES: TtsVoice[] = ['shimmer', 'nova', 'coral', 'onyx', 'echo', 'sage']
+// Phase 2 확장 시 이 배열에 6종 추가
+const VALID_VOICES: TtsVoice[] = ['ngoeun']
 const VALID_SPEEDS: TtsSpeed[] = ['slow', 'normal', 'fast']
 
 function isVoice(v: string): v is TtsVoice { return (VALID_VOICES as string[]).includes(v) }
 function isSpeed(s: string): s is TtsSpeed { return (VALID_SPEEDS as string[]).includes(s) }
 
-const DEFAULT_SETTINGS: TtsSettings = { voice: 'shimmer', speed: 'slow' }
+// Phase 1 디폴트 — 마이그레이션 후 모든 row가 ngoeun으로 통일된 상태와 일치
+const DEFAULT_SETTINGS: TtsSettings = { voice: 'ngoeun', speed: 'slow' }
 
 interface UseSeniorVoiceSettingsReturn {
   settings: TtsSettings

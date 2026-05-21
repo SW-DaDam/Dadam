@@ -498,12 +498,12 @@ const { data: signedUrl } = await supabase.rpc('create_signed_reply_audio_url', 
 | 항목 | 내용 |
 |------|------|
 | 공개 여부 | public (read) |
-| 경로 패턴 | `{voice}_{speed}.mp3` (예: `shimmer_slow.mp3`) |
+| 경로 패턴 | `{voice}_{speed}.mp3` (예: `ngoeun_slow.mp3`) |
 | 업로드 주체 | 권오인 1회성 스크립트 (`scripts/generate-tts-samples.ts`, service_role) |
-| 파일 수 | 18개 고정 (6 voice × 3 speed) |
+| 파일 수 | Phase 1: 3개(1 voice × 3 speed) — Phase 2 확장 시 18개(6 voice × 3 speed) 재생성 |
 | 용도 | 설정 페이지 "들어보기" 미리듣기 — API 비용 0원 |
 | 재생 URL | `${VITE_SUPABASE_URL}/storage/v1/object/public/tts-samples/{voice}_{speed}.mp3` |
-| 클라이언트 헬퍼 | `ttsOpenaiClient.getSampleUrl(voice, speed)` |
+| 클라이언트 헬퍼 | `ttsClovaClient.getSampleUrl(voice, speed)` |
 
 ---
 
@@ -614,7 +614,7 @@ while (reader) {
 | `generate-cover` (DALL-E 3) | 권오인 | DONE | F-07 표지 후보 생성 + `book-covers` 업로드. F-18에서도 그대로 재사용 |
 | `retry-book-job` (수동 재시도) | 권오인 | TBD | F-08, RPC `retry_book_generation`과 연계 |
 | `stt-whisper` | 권오인 | **DONE** | F-03 / F-13 공용 STT — `gpt-realtime-whisper` REST batch, MediaRecorder Blob → `{ text }`. 상세 명세 §7.6 |
-| `tts-openai` | 권오인 | **DONE** | F-03 TTS — `gpt-4o-mini-tts`, voice/speed 클라이언트 전달, MP3 스트림 응답. 상세 명세 §7.7 |
+| `tts-clova` | 권오인 | **DONE** | F-03 TTS — Naver Clova Voice Premium, voice/speed 클라이언트 전달, MP3 스트림 응답. JWT ES256 JWKS 검증 + AbortController 타임아웃. 상세 명세 §7.7 |
 
 > 상태: `TBD` (미구현) / `WIP` (구현 중) / `DONE` (완료). 각 Function 상세 스펙은 구현 PR에서 본 절에 추가.
 
@@ -889,23 +889,23 @@ fetch(`${VITE_SUPABASE_URL}/functions/v1/tag-utterances`, {
 
 ---
 
-### 7.7 `tts-openai` — 음성 TTS (F-03)
+### 7.7 `tts-clova` — 음성 TTS (F-03)
 
 | 항목 | 내용 |
 |------|------|
-| 경로 | `POST /functions/v1/tts-openai` |
+| 경로 | `POST /functions/v1/tts-clova` |
 | 인증 | `Authorization: Bearer <access_token>` 필수 |
 | Content-Type | `application/json` |
 | 담당 | 권오인 |
-| 상태 | **DONE** (2026-05-22) |
+| 상태 | **DONE** (Phase 1, 2026-05-21) |
 
 **입력 (JSON body)**
 
 ```ts
 {
-  text: string,     // TTS 변환 텍스트 (1~4000자)
-  voice: TtsVoice,  // 'shimmer'|'nova'|'coral'|'onyx'|'echo'|'sage'
-  speed: TtsSpeed   // 'slow'|'normal'|'fast'
+  text: string,     // TTS 변환 텍스트 (1~1900자, Clova 한도 2,000자 - 안전 마진)
+  voice: TtsVoice,  // Phase 1: 'ngoeun' (Phase 2에서 6종으로 확장 예정)
+  speed: TtsSpeed   // 'slow'|'normal'|'fast' → Clova speed -2/0/3으로 매핑
 }
 ```
 
@@ -913,14 +913,21 @@ fetch(`${VITE_SUPABASE_URL}/functions/v1/tag-utterances`, {
 
 | 상황 | HTTP | body |
 |------|------|------|
-| 정상 | 200 | `audio/mpeg` 바이너리 (MP3) |
+| 정상 | 200 | `audio/mpeg` 바이너리 (MP3, 스트림 패스스루) |
 | 인증 실패 | 401 | `{ error: string }` |
 | voice/speed enum 위반·길이 초과 | 422 | `{ error: string }` |
-| OpenAI 호출 실패 | 502 | `{ error: string }` |
+| Clova 호출 실패(5xx) | 502 | `{ error: string }` |
+| Clova 응답 타임아웃(10s 초과) | 504 | `{ error: string }` |
 
-**클라이언트 래퍼**: `frontend/src/lib/ai/ttsOpenaiClient.ts` — `fetchTts(text, voice, speed, accessToken)`
+**클라이언트 래퍼**: `frontend/src/lib/ai/ttsClovaClient.ts` — `fetchTts(text, voice, speed, accessToken)`
 
-**설계 결정**: 클라이언트가 voice·speed 직접 전달 (서버 DB 조회 X) — 매 TTS 호출마다 `senior_profiles` SELECT를 피해 지연 1.5~3초 제거. `useVoiceChat` 마운트 시 1회만 캐시.
+**설계 결정 (음성 응답 지연 최소화)**:
+1. **클라이언트가 voice·speed 직접 전달** (서버 DB 조회 X) — 매 TTS 호출마다 `senior_profiles` SELECT를 피해 지연 제거. `useVoiceChat` 마운트 시 1회만 캐시.
+2. **JWT 로컬 검증 (jose ES256 + JWKS 모듈 스코프 캐싱)** — `getUser()` DB 왕복 50~150ms 제거. Supabase 신규 프로젝트는 비대칭 키(ES256)로 access token을 서명하므로 JWKS endpoint에서 공개키 fetch.
+3. **MP3 스트림 패스스루** — Clova `fetch().body`(ReadableStream)를 그대로 새 Response body로 전달해 first-byte 지연 최소화.
+4. **AbortController 타임아웃 (10s)** — Clova stall 시 무한 대기로 Edge Function concurrency 슬롯이 묶이는 것을 방지. 타임아웃은 504로 매핑.
+
+**환경변수**: `NCP_CLOVA_CLIENT_ID`, `NCP_CLOVA_CLIENT_SECRET` (Supabase secrets로 등록, NCP 콘솔 발급).
 
 ---
 

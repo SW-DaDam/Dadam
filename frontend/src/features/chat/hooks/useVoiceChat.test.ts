@@ -34,7 +34,11 @@ class MockSpeechSynthesisUtterance {
   onend: (() => void) | null = null
   constructor(_text?: string) {}
 }
-const mockSpeechSynthesis = { speak: vi.fn(), cancel: vi.fn() }
+// speak() 호출 시 utterance.onend를 즉시 발화 — fallback Promise가 멈추지 않도록
+const mockSpeechSynthesis = {
+  speak: vi.fn((utterance: { onend?: () => void }) => { utterance.onend?.() }),
+  cancel: vi.fn(),
+}
 vi.stubGlobal('speechSynthesis', mockSpeechSynthesis)
 vi.stubGlobal('SpeechSynthesisUtterance', MockSpeechSynthesisUtterance)
 
@@ -77,9 +81,9 @@ vi.mock('@/lib/ai/sttWhisperClient', () => ({
   getSupportedMimeType: vi.fn().mockReturnValue('audio/webm'),
 }))
 
-// ttsOpenaiClient 모킹 (기본: 정상 응답)
+// ttsClovaClient 모킹 (기본: 정상 응답) — Phase 1 Clova Voice 연동
 const mockFetchTts = vi.fn().mockResolvedValue('blob:mock-url')
-vi.mock('@/lib/ai/ttsOpenaiClient', () => ({
+vi.mock('@/lib/ai/ttsClovaClient', () => ({
   fetchTts: (...args: unknown[]) => mockFetchTts(...args),
   getSampleUrl: vi.fn().mockReturnValue('https://storage.example.com/sample.mp3'),
   revokeObjectUrl: vi.fn(),
@@ -361,8 +365,23 @@ describe('TASK-T7: MediaRecorder + fallback 시나리오', () => {
   })
 
   it('TTS 실패 시 speechSynthesis.speak fallback이 호출된다', async () => {
+    // useVoiceChat은 SSE text-delta 라인만 파싱하므로 mock도 동일 형식으로 enqueue 필요
+    // 'data: {...}' JSON line을 보내야 accumulated에 텍스트가 쌓이고 ttsSegments 생성됨
+    const { streamVoiceChat } = await import('@/lib/ai/voiceChatClient')
+    vi.mocked(streamVoiceChat).mockImplementationOnce(() =>
+      Promise.resolve(
+        new ReadableStream({
+          start(c) {
+            const sse = 'data: {"type":"text-delta","delta":"안녕하세요. 반가워요."}\n'
+            c.enqueue(new TextEncoder().encode(sse))
+            c.close()
+          },
+        }),
+      ),
+    )
+
     // fetchTts 실패 시뮬레이션
-    mockFetchTts.mockRejectedValueOnce(new Error('[ttsOpenaiClient] 502: 서버 에러'))
+    mockFetchTts.mockRejectedValueOnce(new Error('[ttsClovaClient] 502: 서버 에러'))
 
     const { result } = renderHook(() => useVoiceChat('user-123'))
     await act(async () => {

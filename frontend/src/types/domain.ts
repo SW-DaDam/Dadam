@@ -61,10 +61,14 @@ export type ChapterWithComments = Chapter & {
 
 // ─── TTS 설정 (F-03) ─────────────────────────────────────────
 
-/** gpt-4o-mini-tts voice ID — 한국어 시니어 친화 6종 */
-export type TtsVoice = 'shimmer' | 'nova' | 'coral' | 'onyx' | 'echo' | 'sage'
+/**
+ * Naver Clova Voice Premium speaker ID
+ * Phase 1: 1종(ngoeun, 일반 Premium 여성)으로 연결 테스트
+ * Phase 2 확장 예정: NCP 콘솔 청취 후 6종으로 확대 (예: vmikyung, vara, vgoeun, vdaeseong, vdonghyun, vian)
+ */
+export type TtsVoice = 'ngoeun'
 
-/** TTS 말하기 속도 — gpt-4o-mini-tts instructions 매핑 */
+/** TTS 말하기 속도 — Edge Function에서 Clova speed(-5~10)로 매핑 */
 export type TtsSpeed = 'slow' | 'normal' | 'fast'
 
 /** 어르신 TTS 설정 (senior_profiles.tts_voice / tts_speed) */

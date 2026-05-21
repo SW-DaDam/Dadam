@@ -1,3 +1,7 @@
+// AiVoiceSettingsPage 테스트 (Phase 1)
+// voice 카드 그리드는 제거되고 안내 박스로 대체됨 — Phase 2에서 6종 카드 복구 예정
+// speed 섹션 · 미리듣기 배너 · 저장 바 · 음량 안내는 유지
+
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
@@ -17,7 +21,8 @@ const mockPlayPreview = vi.fn()
 const mockStopPreview = vi.fn()
 const mockSetSettings = vi.fn()
 
-let mockSettingsState = { voice: 'shimmer' as const, speed: 'slow' as const }
+// Phase 1: voice는 항상 'ngoeun' 1종
+let mockSettingsState = { voice: 'ngoeun' as const, speed: 'slow' as const }
 let mockPlayingKey: string | null = null
 let mockSaving = false
 let mockLoading = false
@@ -48,23 +53,25 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockSettingsState = { voice: 'shimmer', speed: 'slow' }
+  mockSettingsState = { voice: 'ngoeun', speed: 'slow' }
   mockPlayingKey = null
   mockSaving = false
   mockLoading = false
   mockError = null
 })
 
-describe('AiVoiceSettingsPage', () => {
-  it('6개 voice 카드가 렌더링된다', () => {
+describe('AiVoiceSettingsPage — Phase 1 단일 voice 운영', () => {
+  it('voice 안내 박스가 렌더링된다 ("곧 여러 종류" 문구 + "고은" 표시)', () => {
     renderPage()
-    // 각 voice 이름이 카드로 표시되는지 확인
-    expect(screen.getByText('따뜻한 목소리')).toBeTruthy()
-    expect(screen.getByText('밝은 목소리')).toBeTruthy()
-    expect(screen.getByText('부드러운 목소리')).toBeTruthy()
-    expect(screen.getByText('깊은 목소리')).toBeTruthy()
-    expect(screen.getByText('낮은 목소리')).toBeTruthy()
-    expect(screen.getByText('지혜로운 목소리')).toBeTruthy()
+    expect(screen.getByText(/곧 여러 종류 중에서/)).toBeTruthy()
+    // "고은"은 미리듣기 배너와 안내 박스 두 곳에 나타남
+    expect(screen.getAllByText(/고은/).length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('Phase 2 예정인 OpenAI 카드 라벨은 없다 (예: "따뜻한 목소리")', () => {
+    renderPage()
+    expect(screen.queryByText('따뜻한 목소리')).toBeNull()
+    expect(screen.queryByText('지혜로운 목소리')).toBeNull()
   })
 
   it('속도 옵션 3개가 렌더링된다', () => {
@@ -79,13 +86,13 @@ describe('AiVoiceSettingsPage', () => {
     expect(mockLoadSettings).toHaveBeenCalledWith('user-123')
   })
 
-  it('저장하기 버튼 클릭 시 saveSettings가 현재 선택으로 호출된다', async () => {
+  it('저장하기 버튼 클릭 시 saveSettings가 ngoeun + 현재 speed로 호출된다', async () => {
     renderPage()
     fireEvent.click(screen.getByText('저장하기'))
     await waitFor(() => {
       expect(mockSaveSettings).toHaveBeenCalledWith(
         'user-123',
-        { voice: 'shimmer', speed: 'slow' },
+        { voice: 'ngoeun', speed: 'slow' },
       )
     })
   })
@@ -105,30 +112,22 @@ describe('AiVoiceSettingsPage', () => {
     expect(saveBtn).toBeDisabled()
   })
 
-  it('loading=true 시 "불러오는 중…" 텍스트가 표시된다', () => {
-    mockLoading = true
-    renderPage()
-    expect(screen.getByText('불러오는 중…')).toBeTruthy()
-  })
-
   it('error가 있으면 에러 배너가 표시된다', () => {
     mockError = '설정을 불러오지 못했어요.'
     renderPage()
     expect(screen.getByText('설정을 불러오지 못했어요.')).toBeTruthy()
   })
 
-  it('배너 들어보기 클릭 시 playPreview가 호출된다', () => {
+  it('배너 들어보기 클릭 시 playPreview가 ngoeun + 현재 speed로 호출된다', () => {
     renderPage()
-    // 배너의 들어보기 버튼 (첫 번째 들어보기 텍스트)
     const previewBtns = screen.getAllByText('들어보기')
     fireEvent.click(previewBtns[0])
-    expect(mockPlayPreview).toHaveBeenCalledWith('shimmer', 'slow')
+    expect(mockPlayPreview).toHaveBeenCalledWith('ngoeun', 'slow')
   })
 
   it('재생 중일 때 배너 버튼 클릭 시 stopPreview가 호출된다', () => {
-    mockPlayingKey = 'shimmer_slow'
+    mockPlayingKey = 'ngoeun_slow'
     renderPage()
-    // 배너의 "정지" 버튼
     const stopBtns = screen.getAllByText('정지')
     fireEvent.click(stopBtns[0])
     expect(mockStopPreview).toHaveBeenCalled()
@@ -139,29 +138,15 @@ describe('AiVoiceSettingsPage', () => {
     expect(screen.getByText(/볼륨 키/)).toBeTruthy()
     expect(screen.queryByText('음량')).toBeNull()
   })
-})
 
-describe('AiVoiceSettingsPage — 목소리 카드 선택', () => {
-  it('nova 카드 클릭 시 해당 카드가 활성화된다', () => {
-    renderPage()
-    // "밝은 목소리" 카드 버튼 클릭
-    fireEvent.click(screen.getByText('밝은 목소리').closest('button')!)
-    // 저장 시 nova가 선택된 상태로 호출됨
-    fireEvent.click(screen.getByText('저장하기'))
-    expect(mockSaveSettings).toHaveBeenCalledWith(
-      'user-123',
-      expect.objectContaining({ voice: 'nova' }),
-    )
-  })
-
-  it('빠르게 속도 선택 후 저장 시 fast가 전달된다', async () => {
+  it('빠르게 속도 선택 후 저장 시 speed=fast가 전달된다', async () => {
     renderPage()
     fireEvent.click(screen.getByText('빠르게'))
     fireEvent.click(screen.getByText('저장하기'))
     await waitFor(() => {
       expect(mockSaveSettings).toHaveBeenCalledWith(
         'user-123',
-        expect.objectContaining({ speed: 'fast' }),
+        expect.objectContaining({ speed: 'fast', voice: 'ngoeun' }),
       )
     })
   })
