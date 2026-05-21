@@ -304,11 +304,11 @@ AI 말동무와의 일상 대화를 어르신의 **월간 책**으로 자동 생
 | **DB** | PostgreSQL (Supabase 내장) |
 | **실시간 통신** | Supabase Realtime (신간·댓글 알림) |
 | **AI (LLM)** | Vercel AI SDK — 개발: Gemini 1.5 Flash / 상용: GPT-4o(mini), `ACTIVE_MODEL` 전환 |
-| **음성 STT** | OpenAI Whisper API (`whisper-large-v3-turbo` 순정 모델) — F-09 파인튜닝 검증 결과 순정 우수(CER 6% vs 9%)로 결정 |
+| **음성 STT** | OpenAI `whisper-1` REST batch (`stt-whisper` Edge Function) — F-09 3-way 비교 결과 LoRA 파인튜닝(CER 9.72%)·whisper-1(9.60%)이 turbo 순정(6.44%)을 못 따라가지만, 시연 단계는 인프라 0 우선해 외부 API 채택. 운영 단계 turbo 자체 호스팅 검토는 후속 task |
 | **음성 STT (fallback)** | Web Speech API (`lang='ko-KR'`) — Whisper 호출 실패 시 |
-| **음성 TTS** | Naver Clova Voice API (시니어 친화 보이스) → ElevenLabs (Phase 2) |
-| **음성 TTS (fallback)** | Web Speech API (`rate=0.9`) — Naver TTS 호출 실패 시 |
-| **AI (검증/포트폴리오)** | Whisper LoRA 파인튜닝 (AI Hub 노인 음성 데이터셋 기반, `whisper/` 디렉터리에 산출물 보존) |
+| **음성 TTS** | Naver Clova Voice Premium (`tts-clova` Edge Function) — Phase 1: `ngoeun` 1종 / Phase 2: 6종 확장 예정 |
+| **음성 TTS (fallback)** | Web Speech API (`rate=0.9`) — Clova 호출 실패 시 |
+| **AI (검증/포트폴리오)** | Whisper LoRA 파인튜닝 (AI Hub 노인 음성 데이터셋 기반, `whisper/` 디렉터리에 산출물 보존). F-09 결과로 실서비스 미연동 결정 |
 | **이미지 생성** | DALL-E 3 (책 표지 후보) |
 | **소셜 로그인** | 카카오 OAuth2.0 |
 | **Infra (배포)** | Vercel (프론트엔드), Supabase (백엔드) |

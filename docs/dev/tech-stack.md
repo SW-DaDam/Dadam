@@ -189,19 +189,31 @@ Supabase Realtime을 활용해 두 가지 알림을 구현:
 
 ---
 
-## Whisper 파인튜닝 (MVP 포함)
+## Whisper 파인튜닝 검증 (F-09, 포트폴리오용)
 
 시니어 음성 인식률은 본 서비스의 핵심 품질 지표. Web Speech API는 표준 발음 기준으로
 학습되어 **시니어의 느린 말투·틀니 발음·사투리에서 인식률이 크게 떨어지는 문제**가 있어,
-Whisper 파인튜닝으로 해결.
+초기 계획은 Whisper 파인튜닝으로 해결하려 함. F-09 트랙에서 turbo-LoRA 파인튜닝 후
+3-way CER 비교를 수행한 결과 **순정 turbo가 LoRA·OpenAI API를 모두 능가**(아래 표) —
+실서비스 STT는 OpenAI `whisper-1` 클라우드 채택(시연 단계 인프라 0 우선).
 
-### 운영 계획
+### 3-way CER 비교 결과 (2026-05-21, validation 500 샘플)
+
+| 모델 | CER | baseline 대비 | 운영 채택 |
+|------|-----|--------------|-----------|
+| **baseline (turbo 순정)** | **6.44%** | — | 후속 운영 단계 후보 (자체 GPU/HF Inference API 호스팅) |
+| whisper-1 (OpenAI API) | 9.60% | +3.16%p | ✅ **F-03 시연 STT 채택** (인프라 0, 충분 정확도) |
+| final2 (LoRA 파인튜닝) | 9.72% | +3.28%p | 사용 안 함 (negative result) |
+
+평가 노트북: `whisper/compare_with_whisper1.ipynb`. 자세한 분석은 FRD §F-09.
+
+### 운영 계획 (갱신)
 
 | 단계 | 시점 | 내용 |
 |------|------|------|
 | MVP 초반 | 1~5주차 | Web Speech API로 기능 구현 (파인튜닝 병행) |
-| MVP 후반 | 6~7주차 | 파인튜닝된 Whisper 모델 배포 및 교체 |
-| 평가 | 8주차 | 시니어 사용성 테스트에서 Web Speech API vs 파인튜닝 Whisper 인식률 비교 |
+| MVP 후반 | 6~7주차 | F-09 파인튜닝 검증 → OpenAI `whisper-1`로 F-03 STT 교체 |
+| 운영 (졸업 후) | — | turbo 순정 자체 호스팅 검토 (HF Inference Endpoints 등 후속 task) |
 
 > LLM(GPT-4o / Gemini)은 **파인튜닝하지 않음**.
 > 어르신 개성 반영은 관심사 메모리 RAG + 프롬프트 엔지니어링으로 1차 해결.
