@@ -1,5 +1,13 @@
 // stt-whisper: 어르신 발화 음성 → 텍스트 변환 Edge Function
-// OpenAI gpt-realtime-whisper REST batch 방식 사용
+// OpenAI whisper-1 REST batch 방식 사용 (v1/audio/transcriptions)
+//
+// 모델 선정 사유:
+// - 초기 의도된 `gpt-realtime-whisper`는 Realtime API(WebSocket) 전용 모델이라
+//   REST `/v1/audio/transcriptions`에서 404 반환 (라운드트립 테스트에서 확인됨)
+// - `whisper-1`은 동일 endpoint에서 multipart/form-data 방식으로 정상 동작하며
+//   분당 $0.006 단순 과금, 한국어 포함 99개 언어 지원
+// - 시연 후 시니어 발화 인식 품질이 부족하면 `gpt-4o-mini-transcribe`로 모델명만 교체 가능
+//
 // F-03(음성 대화) 및 F-13(작가의 말 음성 녹음) 양쪽에서 재사용됨
 
 import { createClient } from 'npm:@supabase/supabase-js'
@@ -90,7 +98,7 @@ Deno.serve(async (req) => {
     // OpenAI Whisper API 호출
     const openai = new OpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') ?? '' })
     const transcription = await openai.audio.transcriptions.create({
-      model: 'gpt-realtime-whisper',
+      model: 'whisper-1',
       file: audioEntry,
       language: 'ko',
     })
