@@ -3,7 +3,7 @@
 // 설계 결정: 서버에서 senior_profiles를 매번 조회하면 대화 1회당 30턴 × 50~100ms 지연 발생
 //           → 클라이언트가 마운트 시 1회 로드 후 메모리 캐시로 전달하는 방식 채택
 
-import { createClient } from 'npm:@supabase/supabase-js'
+import * as jose from 'npm:jose@5'
 import OpenAI from 'npm:openai'
 
 // CORS 헤더 (voice-chat과 동일 패턴)
@@ -56,14 +56,17 @@ Deno.serve(async (req) => {
       )
     }
 
-    // anon 클라이언트로 JWT 검증 (voice-chat과 동일 패턴)
-    const anonClient = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } },
-    )
-    const { data: { user }, error: authErr } = await anonClient.auth.getUser()
-    if (authErr || !user) {
+    // JWT 로컬 검증 — getUser()는 DB 왕복이 발생해 50~150ms 추가됨
+    // SUPABASE_JWT_SECRET으로 HS256 서명만 검증 (Supabase 빌트인 시크릿)
+    const token = authHeader.replace(/^Bearer\s+/i, '')
+    const jwtSecret = Deno.env.get('SUPABASE_JWT_SECRET')
+    if (!jwtSecret) throw new Error('SUPABASE_JWT_SECRET 환경변수 없음')
+
+    try {
+      const secret = new TextEncoder().encode(jwtSecret)
+      const { payload } = await jose.jwtVerify(token, secret)
+      if (!payload.sub) throw new Error('sub 없음')
+    } catch {
       return new Response(
         JSON.stringify({ error: '유효하지 않은 인증 토큰입니다' }),
         { status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },

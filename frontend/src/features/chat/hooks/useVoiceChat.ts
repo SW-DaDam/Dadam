@@ -25,6 +25,9 @@ const FATAL_ERROR_MSG = '연결할 수 없어요. 아래 버튼을 눌러 다시
 const DEFAULT_TTS_VOICE: TtsVoice = 'shimmer'
 const DEFAULT_TTS_SPEED: TtsSpeed = 'slow'
 
+// 문장 단위 TTS 조기 요청 최소 글자수 — 너무 짧은 segment는 다음 문장과 합산
+const MIN_TTS_SEGMENT_LENGTH = 15
+
 // STT 지원 여부: MediaRecorder 또는 Web Speech API 중 하나라도 지원하면 true
 const isSttSupported =
   typeof window !== 'undefined' &&
@@ -192,16 +195,12 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
     if (dbErr) console.error('[useVoiceChat] utterance 저장 실패', dbErr)
   }, [])
 
-  // TTS 재생 — tts-openai Edge Function 1차, speechSynthesis 자동 폴백
-  const speakWithAI = useCallback(async (text: string, accessToken: string, onEnd: () => void) => {
-    // 이전에 생성된 Blob URL 먼저 정리
-    if (currentBlobUrlRef.current) {
-      revokeObjectUrl(currentBlobUrlRef.current)
-      currentBlobUrlRef.current = null
-    }
-
-    try {
-      const blobUrl = await fetchTts(text, ttsVoiceRef.current, ttsSpeedRef.current, accessToken)
+  // blob URL 하나를 재생하는 Promise 기반 헬퍼
+  // — 재생 완료·실패 모두 resolve (reject 없음, 실패는 speechSynthesis fallback으로 처리)
+  // — 분리 이유: sendToAI에서 segment별로 await하며 순서 보장 필요
+  const playBlobAsync = useCallback((blobUrl: string, fallbackText: string): Promise<void> => {
+    return new Promise((resolve) => {
+      if (currentBlobUrlRef.current) revokeObjectUrl(currentBlobUrlRef.current)
       currentBlobUrlRef.current = blobUrl
 
       if (!audioRef.current) audioRef.current = new Audio()
@@ -211,20 +210,25 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
       audio.onended = () => {
         revokeObjectUrl(blobUrl)
         currentBlobUrlRef.current = null
-        onEnd()
+        resolve()
       }
-      // <audio> 재생 실패 → speechSynthesis로 조용히 전환 (UI 변경 없음)
+      // <audio> 로드·디코드 실패 → speechSynthesis fallback 후 resolve
       audio.onerror = () => {
         revokeObjectUrl(blobUrl)
         currentBlobUrlRef.current = null
-        speakWithSpeechSynthesis(text, onEnd)
+        speakWithSpeechSynthesis(fallbackText, resolve)
       }
 
-      await audio.play()
-    } catch {
-      // fetchTts API 호출 자체 실패 → speechSynthesis로 조용히 전환
-      speakWithSpeechSynthesis(text, onEnd)
-    }
+      audio.play().catch(() => {
+        // autoplay 정책 등으로 play()가 throw해도 실제로는 재생 중일 수 있음
+        // paused 상태가 아니면 이미 재생 중이므로 fallback 생략
+        if (audio.paused) {
+          revokeObjectUrl(blobUrl)
+          currentBlobUrlRef.current = null
+          speakWithSpeechSynthesis(fallbackText, resolve)
+        }
+      })
+    })
   }, [])
 
   // Edge Function 스트리밍 호출 + TTS 재생
@@ -252,6 +256,11 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
       let accumulated = ''
       let buffer = ''
 
+      // 스트리밍 중 문장 단위 TTS 선발행 — LLM 스트리밍과 TTS fetch를 병렬로 실행
+      // 각 segment: { text, promise } — promise는 fetchTts 호출 즉시 시작됨
+      const ttsSegments: Array<{ text: string; promise: Promise<string> }> = []
+      let pendingSegment = ''
+
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
@@ -268,11 +277,39 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
             const parsed = JSON.parse(raw) as { type: string; delta?: string }
             if (parsed.type === 'text-delta' && parsed.delta) {
               accumulated += parsed.delta
+              pendingSegment += parsed.delta
+
+              // 충분한 길이(≥ MIN_TTS_SEGMENT_LENGTH)의 문장 끝을 찾아 즉시 TTS 선발행
+              // 짧은 경계("네!")는 건너뛰고 다음 경계(".")까지 합산 (global regex로 순회)
+              const re = /[.!?。！？…]+(?:\s|$)/g
+              let m: RegExpExecArray | null
+              while ((m = re.exec(pendingSegment)) !== null) {
+                const endIdx = m.index + m[0].length
+                if (endIdx >= MIN_TTS_SEGMENT_LENGTH) {
+                  const segment = pendingSegment.slice(0, endIdx).trim()
+                  ttsSegments.push({
+                    text: segment,
+                    promise: fetchTts(segment, ttsVoiceRef.current, ttsSpeedRef.current, accessToken),
+                  })
+                  pendingSegment = pendingSegment.slice(endIdx)
+                  break
+                }
+              }
             }
           } catch {
             // JSON 파싱 실패 라인은 무시
           }
         }
+      }
+
+      // 스트리밍 완료 후 남은 텍스트 처리
+      // ttsSegments가 비어 있으면(문장 끝 없이 짧은 응답) accumulated 전체를 단일 segment로
+      const remaining = (ttsSegments.length === 0 ? accumulated : pendingSegment).trim()
+      if (remaining.length > 0) {
+        ttsSegments.push({
+          text: remaining,
+          promise: fetchTts(remaining, ttsVoiceRef.current, ttsSpeedRef.current, accessToken),
+        })
       }
 
       clearTimeout(timeoutId)
@@ -285,12 +322,27 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
         timestamp: new Date(),
       }
       addMessage(aiMsg)
-      await saveUtterance('ai', accumulated)
+      // DB 저장과 TTS 재생을 병렬로 — saveUtterance 완료를 TTS가 기다릴 필요 없음
+      void saveUtterance('ai', accumulated)
 
       updateState('speaking')
-      // TTS 재생 — tts-openai 1차, speechSynthesis 폴백
-      const token = accessTokenRef.current ?? ''
-      await speakWithAI(accumulated, token, () => updateState('idle'))
+
+      // TTS segment를 순서대로 재생 (fetch는 이미 스트리밍 중에 시작됨)
+      for (const segment of ttsSegments) {
+        let blobUrl: string | null = null
+        try {
+          blobUrl = await segment.promise
+        } catch {
+          // fetchTts 실패 → segment별 speechSynthesis fallback
+        }
+        if (blobUrl) {
+          await playBlobAsync(blobUrl, segment.text)
+        } else {
+          await new Promise<void>((resolve) => speakWithSpeechSynthesis(segment.text, resolve))
+        }
+      }
+
+      updateState('idle')
     } catch (err) {
       clearTimeout(timeoutId)
       const isTimeout = err instanceof Error && err.name === 'AbortError'
@@ -299,7 +351,7 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
       if (!isTimeout) setIsFatalError(true)
       updateState('idle')
     }
-  }, [seniorId, ensureConversation, saveUtterance, addMessage, updateState, speakWithAI])
+  }, [seniorId, ensureConversation, saveUtterance, addMessage, updateState, playBlobAsync])
 
   // MediaRecorder로 녹음된 Blob → stt-whisper STT → sendToAI
   // STT 1차 실패 시 Web Speech SpeechRecognition 단일 재시도
