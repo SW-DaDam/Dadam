@@ -22,7 +22,7 @@ export function useFamilyBookshelf() {
         .eq('family_id', user!.id)
         .eq('invite_status', 'accepted')
         .limit(1)
-        .single()
+        .maybeSingle()
 
       if (!link?.senior_id) { setLoading(false); return }
 

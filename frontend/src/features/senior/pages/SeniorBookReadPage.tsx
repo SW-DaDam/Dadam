@@ -14,6 +14,8 @@ const CONTENT_SIZE_OPTIONS: { value: ContentFontSize; label: string }[] = [
   { value: 'large', label: '크게' },
 ]
 
+const REACTION_EMOJIS = ['❤️', '👍', '😂', '😢', '🙏'] as const
+
 // ─── 타입 ─────────────────────────────────────────────────────────────────────
 
 interface ReplyWithAuthor extends Reply {
@@ -222,6 +224,11 @@ export default function SeniorBookReadPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  type ReactionMap = Record<string, { emoji: string; count: number; reacted: boolean }[]>
+  const [reactions, setReactions] = useState<ReactionMap>({})
+  const [replyReactions, setReplyReactions] = useState<ReactionMap>({})
+  const [openEmojiPickerId, setOpenEmojiPickerId] = useState<string | null>(null)
+
   const { contentFontSize, setContentFontSize } = useContentFontSizeStore()
 
   const voiceReply = useVoiceReply({
@@ -283,9 +290,100 @@ export default function SeniorBookReadPage() {
 
   useEffect(() => { return () => { if (pollingRef.current) clearInterval(pollingRef.current) } }, [])
 
+  useEffect(() => {
+    const commentIds = bookComments.map((c) => c.id)
+    const replyIds = bookComments.flatMap((c) => c.replies.map((r) => r.id))
+    void loadReactions(commentIds)
+    void loadReplyReactions(replyIds)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookComments])
+
   function showToast(msg: string) {
     setToastMsg(msg)
     setTimeout(() => setToastMsg(null), 2500)
+  }
+
+  // ─── 이모지 반응 ───────────────────────────────────────────────────────────
+
+  async function loadReactions(commentIds: string[]) {
+    if (commentIds.length === 0 || !user) return
+    const { data } = await supabase
+      .from('comment_reactions')
+      .select('comment_id, emoji, user_id')
+      .in('comment_id', commentIds)
+    if (!data) return
+
+    const map: Record<string, { emoji: string; count: number; reacted: boolean }[]> = {}
+    for (const commentId of commentIds) {
+      map[commentId] = REACTION_EMOJIS.map((emoji) => {
+        const rows = data.filter((r) => r.comment_id === commentId && r.emoji === emoji)
+        return { emoji, count: rows.length, reacted: rows.some((r) => r.user_id === user.id) }
+      })
+    }
+    setReactions(map)
+  }
+
+  async function loadReplyReactions(replyIds: string[]) {
+    if (replyIds.length === 0 || !user) return
+    const { data } = await supabase
+      .from('reply_reactions')
+      .select('reply_id, emoji, user_id')
+      .in('reply_id', replyIds)
+    if (!data) return
+    const map: ReactionMap = {}
+    for (const replyId of replyIds) {
+      map[replyId] = REACTION_EMOJIS.map((emoji) => {
+        const rows = data.filter((r) => r.reply_id === replyId && r.emoji === emoji)
+        return { emoji, count: rows.length, reacted: rows.some((r) => r.user_id === user.id) }
+      })
+    }
+    setReplyReactions(map)
+  }
+
+  function toggleEmojiPicker(id: string) {
+    setOpenEmojiPickerId((prev) => (prev === id ? null : id))
+  }
+
+  async function handleToggleReaction(commentId: string, emoji: string) {
+    if (!user) return
+    const current = reactions[commentId]?.find((r) => r.emoji === emoji)
+    if (current?.reacted) {
+      await supabase.from('comment_reactions').delete()
+        .eq('comment_id', commentId).eq('user_id', user.id).eq('emoji', emoji)
+    } else {
+      await supabase.from('comment_reactions').insert({ comment_id: commentId, user_id: user.id, emoji })
+    }
+    setReactions((prev) => ({
+      ...prev,
+      [commentId]: REACTION_EMOJIS.map((e) => {
+        const r = prev[commentId]?.find((x) => x.emoji === e) ?? { emoji: e, count: 0, reacted: false }
+        if (e !== emoji) return r
+        return current?.reacted
+          ? { ...r, count: Math.max(0, r.count - 1), reacted: false }
+          : { ...r, count: r.count + 1, reacted: true }
+      }),
+    }))
+  }
+
+  async function handleToggleReplyReaction(replyId: string, emoji: string) {
+    if (!user) return
+    const current = replyReactions[replyId]?.find((r) => r.emoji === emoji)
+    if (current?.reacted) {
+      await supabase.from('reply_reactions').delete()
+        .eq('reply_id', replyId).eq('user_id', user.id).eq('emoji', emoji)
+    } else {
+      await supabase.from('reply_reactions').insert({ reply_id: replyId, user_id: user.id, emoji })
+    }
+    setReplyReactions((prev) => ({
+      ...prev,
+      [replyId]: REACTION_EMOJIS.map((e) => {
+        const r = prev[replyId]?.find((x) => x.emoji === e) ?? { emoji: e, count: 0, reacted: false }
+        if (e !== emoji) return r
+        return current?.reacted
+          ? { ...r, count: Math.max(0, r.count - 1), reacted: false }
+          : { ...r, count: r.count + 1, reacted: true }
+      }),
+    }))
   }
 
   async function handleStartCommentRecording() {
@@ -702,7 +800,7 @@ export default function SeniorBookReadPage() {
                               )}
                             </>
                           )}
-                          <div className="flex items-center gap-3 mt-0.5">
+                          <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                             <p className="text-sm text-[#6B7280]">
                               {new Date(comment.created_at).toLocaleDateString('ko-KR', {
                                 month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -713,7 +811,58 @@ export default function SeniorBookReadPage() {
                                 onClick={() => { setReplyingToId(comment.id); setReplyText('') }}
                                 className="text-sm text-[#E8820C]">답장 쓰기</button>
                             )}
+                            <button
+                              type="button"
+                              onClick={() => toggleEmojiPicker(`c_${comment.id}`)}
+                              className={`text-sm px-2 py-0.5 rounded-full border transition-colors ${
+                                openEmojiPickerId === `c_${comment.id}`
+                                  ? 'bg-[#FFF0DC] border-[#E8820C] text-[#E8820C]'
+                                  : 'bg-[#F9FAFB] border-[#E5E7EB] text-[#9CA3AF]'
+                              }`}
+                            >
+                              😊+
+</button>
                           </div>
+
+                          {/* 이모지 피커 */}
+                          {openEmojiPickerId === `c_${comment.id}` && (
+                            <div className="flex gap-2 mt-2 flex-wrap">
+                              {REACTION_EMOJIS.map((emoji) => {
+                                const r = reactions[comment.id]?.find((x) => x.emoji === emoji)
+                                return (
+                                  <button
+                                    key={emoji}
+                                    type="button"
+                                    onClick={() => handleToggleReaction(comment.id, emoji)}
+                                    className={`text-xl w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all ${
+                                      r?.reacted ? 'border-[#E8820C] bg-[#FFF0DC]' : 'border-[#E5E7EB] bg-[#F9FAFB]'
+                                    }`}
+                                  >
+                                    {emoji}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          )}
+
+                          {/* 선택된 반응 요약 */}
+                          {(reactions[comment.id] ?? []).some((r) => r.count > 0) && (
+                            <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                              {(reactions[comment.id] ?? []).filter((r) => r.count > 0).map(({ emoji, count, reacted }) => (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  onClick={() => handleToggleReaction(comment.id, emoji)}
+                                  className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-sm border transition-colors ${
+                                    reacted ? 'bg-[#FFF0DC] border-[#E8820C]' : 'bg-[#F9FAFB] border-[#E5E7EB]'
+                                  }`}
+                                >
+                                  <span>{emoji}</span>
+                                  <span className="text-xs font-medium text-[#6B7280]">{count}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -866,11 +1015,64 @@ export default function SeniorBookReadPage() {
                                 )}
                               </>
                             )}
-                            <p className="text-sm text-[#6B7280]">
-                              {new Date(reply.created_at).toLocaleDateString('ko-KR', {
-                                month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
-                              })}
-                            </p>
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <p className="text-sm text-[#6B7280]">
+                                {new Date(reply.created_at).toLocaleDateString('ko-KR', {
+                                  month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                                })}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => toggleEmojiPicker(`r_${reply.id}`)}
+                                className={`text-sm px-2 py-0.5 rounded-full border transition-colors ${
+                                  openEmojiPickerId === `r_${reply.id}`
+                                    ? 'bg-[#FFF0DC] border-[#E8820C] text-[#E8820C]'
+                                    : 'bg-[#F9FAFB] border-[#E5E7EB] text-[#9CA3AF]'
+                                }`}
+                              >
+                                😊+
+  </button>
+                            </div>
+
+                            {/* 대댓글 이모지 피커 */}
+                            {openEmojiPickerId === `r_${reply.id}` && (
+                              <div className="flex gap-2 mt-2 flex-wrap">
+                                {REACTION_EMOJIS.map((emoji) => {
+                                  const r = replyReactions[reply.id]?.find((x) => x.emoji === emoji)
+                                  return (
+                                    <button
+                                      key={emoji}
+                                      type="button"
+                                      onClick={() => handleToggleReplyReaction(reply.id, emoji)}
+                                      className={`text-xl w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all ${
+                                        r?.reacted ? 'border-[#E8820C] bg-[#FFF0DC]' : 'border-[#E5E7EB] bg-[#F9FAFB]'
+                                      }`}
+                                    >
+                                      {emoji}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            )}
+
+                            {/* 대댓글 선택된 반응 요약 */}
+                            {(replyReactions[reply.id] ?? []).some((r) => r.count > 0) && (
+                              <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                                {(replyReactions[reply.id] ?? []).filter((r) => r.count > 0).map(({ emoji, count, reacted }) => (
+                                  <button
+                                    key={emoji}
+                                    type="button"
+                                    onClick={() => handleToggleReplyReaction(reply.id, emoji)}
+                                    className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-sm border transition-colors ${
+                                      reacted ? 'bg-[#FFF0DC] border-[#E8820C]' : 'bg-[#F9FAFB] border-[#E5E7EB]'
+                                    }`}
+                                  >
+                                    <span>{emoji}</span>
+                                    <span className="text-xs font-medium text-[#6B7280]">{count}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
                         )
@@ -1030,6 +1232,7 @@ export default function SeniorBookReadPage() {
                 <p className="text-content text-[#2D2D2D] leading-[2.1] whitespace-pre-wrap tracking-wide">
                   {activeChapter.content}
                 </p>
+
               </div>
             </div>
 
@@ -1120,6 +1323,20 @@ export default function SeniorBookReadPage() {
               <p className="text-content text-[#2D2D2D] leading-[2.1] whitespace-pre-wrap tracking-wide">
                 {book.dedication}
               </p>
+
+              {/* 챕터 사진 갤러리 */}
+              {chapters.some((c) => c.photo_url) && (
+                <div className="mt-12 flex flex-col gap-6">
+                  {chapters.filter((c) => c.photo_url).map((c) => (
+                    <img
+                      key={c.id}
+                      src={c.photo_url!}
+                      alt={c.title}
+                      className="w-full rounded-2xl object-cover"
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="shrink-0 border-t border-[#EDE0CC] flex items-center bg-[#FFFBF5]">

@@ -28,6 +28,7 @@ interface UseBookEditReturn {
   restoreChapter: (chapterId: string) => Promise<void>
   updateChapterTitle: (chapterId: string, newTitle: string) => Promise<void>
   updateChapterContent: (chapterId: string, newContent: string) => Promise<void>
+  updateChapterPhotoUrl: (chapterId: string, photoUrl: string | null) => void
   selectCover: (coverId: string) => Promise<void>
   publishBook: (dedication: string) => Promise<void>
   regenerateCover: (chapterId: string) => Promise<void>
@@ -206,6 +207,10 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
     }
   }, [chapters])
 
+  const updateChapterPhotoUrl = useCallback((chapterId: string, photoUrl: string | null) => {
+    setChapters(prev => prev.map(c => c.id === chapterId ? { ...c, photo_url: photoUrl } : c))
+  }, [])
+
   const selectCover = useCallback(async (coverId: string) => {
     if (!bookId) return
     const { error } = await rpc('select_cover', { book_id: bookId, cover_id: coverId })
@@ -312,6 +317,6 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
   return {
     book, chapters, coverImages, loading, coverLoading, coverError,
     regenerating, extraCoverCount, extraCoverLimit: EXTRA_COVER_LIMIT,
-    softDeleteChapter, restoreChapter, updateChapterTitle, updateChapterContent, selectCover, publishBook, regenerateCover,
+    softDeleteChapter, restoreChapter, updateChapterTitle, updateChapterContent, updateChapterPhotoUrl, selectCover, publishBook, regenerateCover,
   }
 }
