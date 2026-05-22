@@ -131,6 +131,7 @@ export type Database = {
           created_at: string
           id: string
           is_deleted: boolean
+          photo_url: string | null
           sort_order: number
           source_utterance_ids: string[] | null
           theme: string
@@ -143,6 +144,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_deleted?: boolean
+          photo_url?: string | null
           sort_order?: number
           source_utterance_ids?: string[] | null
           theme: string
@@ -155,6 +157,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_deleted?: boolean
+          photo_url?: string | null
           sort_order?: number
           source_utterance_ids?: string[] | null
           theme?: string
@@ -167,6 +170,38 @@ export type Database = {
             columns: ["book_id"]
             isOneToOne: false
             referencedRelation: "books"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comment_reactions: {
+        Row: {
+          comment_id: string
+          created_at: string
+          emoji: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          comment_id: string
+          created_at?: string
+          emoji: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          comment_id?: string
+          created_at?: string
+          emoji?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comment_reactions_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
             referencedColumns: ["id"]
           },
         ]
@@ -466,6 +501,38 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      reply_reactions: {
+        Row: {
+          created_at: string
+          emoji: string
+          id: string
+          reply_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          emoji: string
+          id?: string
+          reply_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          emoji?: string
+          id?: string
+          reply_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reply_reactions_reply_id_fkey"
+            columns: ["reply_id"]
+            isOneToOne: false
+            referencedRelation: "replies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       replies: {
         Row: {

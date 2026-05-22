@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router'
-import { ChevronLeft, Check, Mic, Pencil, X, RotateCcw, RefreshCw, BookOpen } from 'lucide-react'
+import { ChevronLeft, Check, Mic, Pencil, X, RotateCcw, RefreshCw, BookOpen, Camera, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useBookEdit } from '@/features/bookshelf/hooks/useBookEdit'
+import { useAuthStore } from '@/shared/stores/authStore'
+import { supabase } from '@/lib/supabase'
 import type { Chapter, CoverImage } from '@/types/domain'
 
 // ─── 상수 ────────────────────────────────────────────────────────
@@ -10,9 +12,9 @@ import type { Chapter, CoverImage } from '@/types/domain'
 // STEPS는 book_type에 따라 다르므로 컴포넌트 내부에서 정의 (isShortBook 플래그 참조)
 
 const MOCK_CHAPTERS: Chapter[] = [
-  { id: 'mock-1', book_id: '', content: '4월 초부터 시작한 텃밭 가꾸기. 드디어 빨간 토마토가 열렸다. 손녀에게도 나눠주며 행복한 시간을 보냈다.', title: '봄 텃밭과 토마토', sort_order: 1, is_deleted: false, theme: '일상', source_utterance_ids: null, created_at: '', updated_at: '' },
-  { id: 'mock-2', book_id: '', content: '드디어 수빈이가 중학생이 되었다. 교복을 입은 모습이 어찌나 예쁘고 대견하던지 눈물이 날 것 같았다.', title: '손녀 수빈이의 중학교 입학', sort_order: 2, is_deleted: false, theme: '가족', source_utterance_ids: null, created_at: '', updated_at: '' },
-  { id: 'mock-3', book_id: '', content: '오랜만에 봄비가 내렸다. 빗소리를 들으며 옛 생각이 났다. 젊은 시절 남편과 함께 걷던 골목이 떠올랐다.', title: '봄비 오던 날의 추억', sort_order: 3, is_deleted: false, theme: '추억', source_utterance_ids: null, created_at: '', updated_at: '' },
+  { id: 'mock-1', book_id: '', content: '4월 초부터 시작한 텃밭 가꾸기. 드디어 빨간 토마토가 열렸다. 손녀에게도 나눠주며 행복한 시간을 보냈다.', title: '봄 텃밭과 토마토', sort_order: 1, is_deleted: false, theme: '일상', source_utterance_ids: null, photo_url: null, created_at: '', updated_at: '' },
+  { id: 'mock-2', book_id: '', content: '드디어 수빈이가 중학생이 되었다. 교복을 입은 모습이 어찌나 예쁘고 대견하던지 눈물이 날 것 같았다.', title: '손녀 수빈이의 중학교 입학', sort_order: 2, is_deleted: false, theme: '가족', source_utterance_ids: null, photo_url: null, created_at: '', updated_at: '' },
+  { id: 'mock-3', book_id: '', content: '오랜만에 봄비가 내렸다. 빗소리를 들으며 옛 생각이 났다. 젊은 시절 남편과 함께 걷던 골목이 떠올랐다.', title: '봄비 오던 날의 추억', sort_order: 3, is_deleted: false, theme: '추억', source_utterance_ids: null, photo_url: null, created_at: '', updated_at: '' },
 ]
 
 const CONTENT_MAX = 2000  // 챕터 내용 수정 최대 글자 수
@@ -69,10 +71,11 @@ function StepIndicator({
 export default function BookEditPage() {
   const navigate = useNavigate()
   const { bookId } = useParams<{ bookId: string }>()
+  const user = useAuthStore((s) => s.user)
   const {
     book, chapters: realChapters, coverImages, loading, coverLoading, coverError,
     regenerating, extraCoverCount, extraCoverLimit,
-    softDeleteChapter, restoreChapter, updateChapterTitle, updateChapterContent,
+    softDeleteChapter, restoreChapter, updateChapterTitle, updateChapterContent, updateChapterPhotoUrl,
     selectCover, publishBook, regenerateCover,
   } = useBookEdit(bookId)
 
@@ -102,6 +105,9 @@ export default function BookEditPage() {
   const [publishing, setPublishing] = useState(false)
   const [published, setPublished] = useState(false)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
+  const [uploadingPhotoId, setUploadingPhotoId] = useState<string | null>(null)
+  const photoInputRef = useRef<HTMLInputElement>(null)
+  const uploadTargetChapterRef = useRef<string | null>(null)
 
   const chapters = realChapters.length > 0 ? realChapters : MOCK_CHAPTERS
   const isMock = realChapters.length === 0
@@ -191,6 +197,69 @@ export default function BookEditPage() {
       await restoreChapter(id)
     } catch {
       showToast('되돌리기에 실패했어요')
+    }
+  }
+
+  // ─── 챕터 사진 업로드/삭제 ────────────────────────────────────────
+
+  function openPhotoUpload(chapterId: string) {
+    if (isMock) { showToast('목업 데이터입니다'); return }
+    uploadTargetChapterRef.current = chapterId
+    photoInputRef.current?.click()
+  }
+
+  async function handlePhotoFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    const chapterId = uploadTargetChapterRef.current
+    if (!file || !chapterId || !user) return
+    e.target.value = ''
+
+    if (!file.type.startsWith('image/')) { showToast('이미지 파일만 올릴 수 있어요'); return }
+    if (file.size > 10 * 1024 * 1024) { showToast('10MB 이하 사진만 올릴 수 있어요'); return }
+
+    setUploadingPhotoId(chapterId)
+    try {
+      const ext = file.name.split('.').pop() ?? 'jpg'
+      const path = `${user.id}/${chapterId}.${ext}`
+      const { error: upErr } = await supabase.storage
+        .from('chapter-photos')
+        .upload(path, file, { upsert: true, contentType: file.type })
+      if (upErr) {
+        console.error('[사진 업로드 실패]', upErr.message, upErr)
+        throw upErr
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('chapter-photos')
+        .getPublicUrl(path)
+
+      const { error: dbErr } = await supabase
+        .from('chapters')
+        .update({ photo_url: publicUrl })
+        .eq('id', chapterId)
+      if (dbErr) throw dbErr
+
+      updateChapterPhotoUrl(chapterId, publicUrl)
+      showToast('사진을 추가했어요')
+    } catch {
+      showToast('사진 업로드에 실패했어요')
+    } finally {
+      setUploadingPhotoId(null)
+      uploadTargetChapterRef.current = null
+    }
+  }
+
+  async function handlePhotoDelete(chapter: Chapter) {
+    if (!chapter.photo_url || isMock) return
+    try {
+      const url = new URL(chapter.photo_url)
+      const storagePath = decodeURIComponent(url.pathname.split('/chapter-photos/')[1])
+      await supabase.storage.from('chapter-photos').remove([storagePath])
+      await supabase.from('chapters').update({ photo_url: null }).eq('id', chapter.id)
+      updateChapterPhotoUrl(chapter.id, null)
+      showToast('사진을 삭제했어요')
+    } catch {
+      showToast('사진 삭제에 실패했어요')
     }
   }
 
@@ -310,7 +379,21 @@ export default function BookEditPage() {
                     </div>
                   </div>
 
-                  {/* 버튼 행: 내용 보기 / 내용 수정 / 이야기 빼기 */}
+                  {/* 사진 미리보기 */}
+                  {chapter.photo_url && (
+                    <div className="relative rounded-xl overflow-hidden">
+                      <img src={chapter.photo_url} alt="챕터 사진" className="w-full max-h-48 object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => handlePhotoDelete(chapter)}
+                        className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/50 flex items-center justify-center"
+                      >
+                        <Trash2 size={14} className="text-white" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* 버튼 행: 내용 보기 / 내용 수정 / 사진 / 이야기 빼기 */}
                   <div className="flex justify-end gap-2 flex-wrap">
                     <button type="button" onClick={() => setViewingChapter(chapter)}
                       className="bg-[#F3F4F6] rounded-xl px-4 py-2 min-h-11 flex items-center gap-1.5">
@@ -322,6 +405,20 @@ export default function BookEditPage() {
                       className="bg-[#EFF6FF] rounded-xl px-4 py-2 min-h-11 flex items-center gap-1.5 disabled:opacity-40">
                       <Pencil size={15} className="text-[#3B82F6]" />
                       <span className="text-base text-[#3B82F6]">내용 수정</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openPhotoUpload(chapter.id)}
+                      disabled={uploadingPhotoId === chapter.id}
+                      className="bg-[#F0FDF4] rounded-xl px-4 py-2 min-h-11 flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      {uploadingPhotoId === chapter.id
+                        ? <span className="text-base text-[#16A34A]">올리는 중…</span>
+                        : <>
+                            <Camera size={15} className="text-[#16A34A]" />
+                            <span className="text-base text-[#16A34A]">사진</span>
+                          </>
+                      }
                     </button>
                     {/* 단편은 챕터 삭제 불가 — 단편 생성 시 이미 주제를 선택했으므로 */}
                     {!isShortBook && (
@@ -369,6 +466,15 @@ export default function BookEditPage() {
               <span className="text-[1.25rem]" style={{ color: ACCENT_TEXT }}>다음으로</span>
             </button>
           </div>
+
+          {/* 숨겨진 사진 업로드 input */}
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handlePhotoFileChange}
+          />
 
           {/* 챕터 내용 보기 모달 */}
           {viewingChapter && (
@@ -559,6 +665,7 @@ export default function BookEditPage() {
         <Step4Published
           bookTitle={book?.title ?? '단편 이야기'}
           accent={ACCENT}
+          chapterCount={activeChapters.length}
           onHome={() => navigate('/s')}
           onRead={() => bookId ? navigate(`/s/books/${bookId}`) : navigate('/s/books')}
         />
@@ -579,6 +686,7 @@ export default function BookEditPage() {
         <Step4Published
           bookTitle={book?.title ?? '봄날의 기록'}
           accent={ACCENT}
+          chapterCount={activeChapters.length}
           onHome={() => navigate('/s')}
           onRead={() => bookId ? navigate(`/s/books/${bookId}`) : navigate('/s/books')}
         />
@@ -797,64 +905,146 @@ function Step3AuthorNote({
 
 // ─── Step 4: 출간 완료 ───────────────────────────────────────────
 
+const CONFETTI = [
+  { emoji: '🎉', left: '8%',  delay: '0s',    dur: '2.8s' },
+  { emoji: '✨', left: '20%', delay: '0.4s',  dur: '3.2s' },
+  { emoji: '🎊', left: '35%', delay: '0.15s', dur: '2.6s' },
+  { emoji: '📖', left: '50%', delay: '0.6s',  dur: '3.0s' },
+  { emoji: '❤️', left: '65%', delay: '0.25s', dur: '2.9s' },
+  { emoji: '🌟', left: '78%', delay: '0.5s',  dur: '3.1s' },
+  { emoji: '🎈', left: '90%', delay: '0.1s',  dur: '2.7s' },
+]
+
 function Step4Published({
   bookTitle,
   accent,
+  chapterCount,
   onHome,
   onRead,
 }: {
   bookTitle: string
   accent: string
+  chapterCount: number
   onHome: () => void
   onRead: () => void
 }) {
-  // accent 배경 위 텍스트 색상 — 노랑(#FACC15)은 어두운 텍스트 필요
+  const [visible, setVisible] = useState(false)
   const accentText = accent === '#FACC15' ? '#1F2937' : 'white'
   const accentLight = accent === '#FACC15' ? '#FEF9C3' : '#FFF0DC'
 
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(true), 80)
+    return () => clearTimeout(t)
+  }, [])
+
   return (
-    <main className="flex-1 overflow-y-auto w-full max-w-2xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-5">
-      <div className="flex flex-col items-center gap-3 py-4 relative">
-        {['left-[10%] top-[10%]', 'right-[14%] top-[8%]', 'left-[7%] top-[48%]', 'right-[10%] top-[50%]', 'left-[14%] top-[68%]', 'right-[18%] top-[70%]'].map((pos, i) => (
-          <span key={i} className={`absolute ${pos}`}
-            style={{ fontSize: ['1.5rem','1.125rem','0.875rem','1.25rem','1rem','0.875rem'][i], color: accent }}>✦</span>
+    <>
+      <style>{`
+        @keyframes confetti-fall {
+          0%   { transform: translateY(-40px) rotate(0deg) scale(1);   opacity: 1; }
+          80%  { opacity: 1; }
+          100% { transform: translateY(110vh) rotate(720deg) scale(0.6); opacity: 0; }
+        }
+        @keyframes publish-fade-up {
+          from { opacity: 0; transform: translateY(28px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes publish-scale-in {
+          from { opacity: 0; transform: scale(0.72); }
+          to   { opacity: 1; transform: scale(1); }
+        }
+        @keyframes publish-glow {
+          0%, 100% { box-shadow: 0 0 18px 4px rgba(232,130,12,0.25); }
+          50%       { box-shadow: 0 0 36px 10px rgba(232,130,12,0.55); }
+        }
+        @keyframes publish-ring {
+          0%   { transform: scale(1);   opacity: 0.6; }
+          100% { transform: scale(2.2); opacity: 0; }
+        }
+      `}</style>
+
+      {/* 컨페티 */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-20">
+        {CONFETTI.map((p, i) => (
+          <span key={i} style={{
+            position: 'absolute', left: p.left, top: '-40px',
+            fontSize: '1.625rem',
+            animation: `confetti-fall ${p.dur} ${p.delay} ease-in 1 forwards`,
+          }}>{p.emoji}</span>
         ))}
-        <div className="relative w-[140px] h-[170px]">
-          <div className="absolute top-0 left-[-8px] w-full h-full rounded-xl opacity-50" style={{ background: accentLight }} />
-          <div className="absolute top-[12px] left-[-4px] w-full h-full rounded-xl opacity-60" style={{ background: accentLight }} />
-          <div className="absolute top-[24px] left-0 w-full h-[calc(100%-24px)] rounded-xl border-2 flex flex-col items-center justify-center gap-1 px-3"
-            style={{ background: accentLight, borderColor: accent }}>
-            <div className="absolute top-0 bottom-0 left-0 w-1.5 rounded-l-xl opacity-30" style={{ background: accent }} />
-            <p className="text-[1.125rem] text-center font-medium" style={{ color: accent }}>{bookTitle}</p>
+      </div>
+
+      <main className="flex-1 overflow-y-auto w-full max-w-2xl mx-auto px-4 sm:px-6 py-8 flex flex-col gap-6">
+
+        {/* 책 일러스트 */}
+        <div className="flex justify-center pt-2">
+          <div className="relative" style={{
+            animation: visible ? 'publish-scale-in 0.55s cubic-bezier(0.34,1.56,0.64,1) forwards' : 'none',
+            opacity: visible ? undefined : 0,
+          }}>
+            {/* 펄스 링 */}
+            <div className="absolute inset-0 rounded-2xl" style={{
+              background: accentLight,
+              animation: 'publish-ring 1.6s ease-out 0.4s infinite',
+            }} />
+            {/* 책 그림자 레이어 */}
+            <div className="absolute top-0 left-[-10px] w-[148px] h-[182px] rounded-2xl opacity-30" style={{ background: accentLight }} />
+            <div className="absolute top-[14px] left-[-5px] w-[148px] h-[182px] rounded-2xl opacity-50" style={{ background: accentLight }} />
+            {/* 메인 책 */}
+            <div className="relative w-[148px] h-[182px] rounded-2xl border-2 flex flex-col items-center justify-center gap-2 px-4 overflow-hidden"
+              style={{
+                background: accentLight,
+                borderColor: accent,
+                animation: 'publish-glow 2.4s ease-in-out 0.6s infinite',
+              }}>
+              <div className="absolute top-0 bottom-0 left-0 w-2 rounded-l-2xl opacity-40" style={{ background: accent }} />
+              <span className="text-3xl">📖</span>
+              <p className="text-[1.0625rem] text-center font-bold leading-snug" style={{ color: accent }}>{bookTitle}</p>
+            </div>
           </div>
         </div>
-        <div className="mt-12" />
-      </div>
 
-      <div className="flex flex-col items-center gap-1 text-center">
-        <p className="text-[1.75rem] text-[#1F2937]">책이 출간됐어요!</p>
-        <p className="text-[1.125rem] text-[#6B7280]">가족 책장에 올라갔어요</p>
-        <p className="text-[1.125rem] text-[#6B7280]">가족이 곧 읽을 거예요 :)</p>
-      </div>
-
-      <div className="bg-[#DCFCE7] rounded-2xl px-5 py-4 flex items-start gap-3">
-        <div className="w-9 h-9 rounded-full bg-[#16A34A] flex items-center justify-center shrink-0">
-          <Check size={18} className="text-white" strokeWidth={3} />
+        {/* 헤드라인 */}
+        <div className="flex flex-col items-center gap-2 text-center"
+          style={{ animation: visible ? 'publish-fade-up 0.5s 0.3s ease both' : 'none', opacity: visible ? undefined : 0 }}>
+          <p className="text-[2rem] font-bold text-[#1F2937] leading-snug">
+            🎉 책이 완성됐어요!
+          </p>
+          <p className="text-[1.25rem] text-[#374151]">
+            소중한 이야기 <span className="font-bold" style={{ color: accent }}>{chapterCount}편</span>이
+          </p>
+          <p className="text-[1.25rem] text-[#374151]">가족의 책장에 올라갔어요</p>
+          <p className="text-[1.0625rem] text-[#9CA3AF] mt-1">
+            이 이야기는 가족과 함께 영원히 남을 거예요 ✨
+          </p>
         </div>
-        <div className="flex flex-col gap-0.5">
-          <p className="text-[1.125rem] text-[#1F2937]">가족에게 알림을 보냈어요</p>
-          <p className="text-[0.9375rem] text-[#6B7280]">연결된 가족 모두에게 새 책 알림이 갔어요</p>
-        </div>
-      </div>
 
-      <div className="flex flex-col gap-3">
-        <button type="button" onClick={onRead} className="w-full rounded-2xl py-4 text-center" style={{ background: accent }}>
-          <span className="text-[1.25rem]" style={{ color: accentText }}>지금 바로 읽어보기</span>
-        </button>
-        <button type="button" onClick={onHome} className="py-2 text-center">
-          <span className="text-[1.125rem] text-[#6B7280]">홈으로 돌아가기</span>
-        </button>
-      </div>
-    </main>
+        {/* 알림 카드 */}
+        <div className="bg-[#DCFCE7] rounded-2xl px-5 py-4 flex items-center gap-3"
+          style={{ animation: visible ? 'publish-fade-up 0.5s 0.5s ease both' : 'none', opacity: visible ? undefined : 0 }}>
+          <div className="w-10 h-10 rounded-full bg-[#16A34A] flex items-center justify-center shrink-0">
+            <Check size={20} className="text-white" strokeWidth={3} />
+          </div>
+          <div>
+            <p className="text-[1.125rem] font-medium text-[#1F2937]">가족에게 알림을 보냈어요</p>
+            <p className="text-[0.9375rem] text-[#6B7280]">연결된 가족 모두가 곧 읽을 거예요</p>
+          </div>
+        </div>
+
+        {/* 버튼 */}
+        <div className="flex flex-col gap-3"
+          style={{ animation: visible ? 'publish-fade-up 0.5s 0.65s ease both' : 'none', opacity: visible ? undefined : 0 }}>
+          <button type="button" onClick={onRead}
+            className="w-full rounded-2xl py-4 text-center shadow-lg active:scale-95 transition-transform"
+            style={{ background: accent }}>
+            <span className="text-[1.25rem] font-bold" style={{ color: accentText }}>지금 바로 읽어보기</span>
+          </button>
+          <button type="button" onClick={onHome} className="py-3 text-center">
+            <span className="text-[1.125rem] text-[#9CA3AF]">홈으로 돌아가기</span>
+          </button>
+        </div>
+
+      </main>
+    </>
   )
 }
