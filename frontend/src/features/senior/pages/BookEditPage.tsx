@@ -76,7 +76,7 @@ export default function BookEditPage() {
     book, chapters: realChapters, coverImages, loading, coverLoading, coverError,
     regenerating, extraCoverCount, extraCoverLimit,
     softDeleteChapter, restoreChapter, updateChapterTitle, updateChapterContent, updateChapterPhotoUrl,
-    selectCover, publishBook, regenerateCover,
+    selectCover, publishBook, regenerateCover, retryCover,
   } = useBookEdit(bookId)
 
   const [currentStep, setCurrentStep] = useState(1)
@@ -604,12 +604,15 @@ export default function BookEditPage() {
 
             {/* 표지 슬라이더 — flex-1 min-h-0 으로 남은 공간 모두 채워 하단 잘림 방지 */}
             <div className="flex-1 min-h-0">
-              {/* regenerating(API 호출 중) 또는 coverLoading(폴링 중)이면 로딩 화면 유지 */}
+              {/* regenerating(재생성 API 호출 중) / coverLoading(최초 생성 폴링 중)이면
+                  기존 표지가 있어도 로딩 화면을 우선 노출 — 재생성 진행 상황을 사용자에게 알림 */}
               {(regenerating || coverLoading) ? (
                 <div className="w-full h-full rounded-2xl border-2 border-dashed border-[#E5E7EB] bg-[#FFF8F0] flex flex-col items-center justify-center gap-3">
                   <div className="w-10 h-10 rounded-full border-4 border-t-transparent animate-spin"
                     style={{ borderColor: ACCENT, borderTopColor: 'transparent' }} />
-                  <p className="text-[1.0625rem] text-[#6B7280]">AI가 표지를 만들고 있어요</p>
+                  <p className="text-[1.0625rem] text-[#6B7280]">
+                    {regenerating ? '표지를 다시 만들고 있어요' : 'AI가 표지를 만들고 있어요'}
+                  </p>
                   <p className="text-sm text-[#9CA3AF]">잠시만 기다려 주세요 (약 1분)</p>
                 </div>
               ) : coverImages.length > 0 ? (
@@ -619,27 +622,39 @@ export default function BookEditPage() {
                   accent={ACCENT}
                   onSelect={setSelectedCoverId}
                 />
+              ) : coverError ? (
+                /* 표지 생성 실패 — 스피너 자리에 오류 안내 + 재시도 버튼 */
+                <div className="w-full h-full rounded-2xl border-2 border-dashed border-[#E5E7EB] bg-[#FFF8F0] flex flex-col items-center justify-center gap-4">
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center bg-red-50">
+                    <X size={24} className="text-red-400" />
+                  </div>
+                  <div className="flex flex-col items-center gap-1 text-center px-4">
+                    <p className="text-[1.0625rem] font-medium text-[#1F2937]">표지 만들기에 실패했어요</p>
+                    <p className="text-sm text-[#9CA3AF]">AI가 그림을 완성하지 못했어요</p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={coverLoading}
+                    onClick={async () => {
+                      try {
+                        await retryCover()
+                      } catch {
+                        /* retryCover 내부에서 coverError 상태로 전환 */
+                      }
+                    }}
+                    className="flex items-center gap-2 rounded-full px-6 py-3 text-white text-[1.0625rem] font-medium disabled:opacity-50"
+                    style={{ background: ACCENT }}>
+                    <RefreshCw size={18} className={cn(coverLoading && 'animate-spin')} />
+                    다시 만들기
+                  </button>
+                </div>
               ) : (
+                /* 폴백: 표지 없음·로딩 아님·에러 아님 — 정상 흐름에선 거의 도달하지 않음 */
                 <div className="w-full h-full rounded-2xl border-2 border-dashed border-[#E5E7EB] bg-[#FFF8F0] flex flex-col items-center justify-center gap-3">
-                  {coverError ? (
-                    <>
-                      <p className="text-[1.0625rem] text-[#6B7280]">표지를 불러오지 못했어요</p>
-                      <button
-                        type="button"
-                        onClick={() => window.location.reload()}
-                        className="text-sm underline underline-offset-2"
-                        style={{ color: ACCENT }}>
-                        다시 시도
-                      </button>
-                    </>
-                  ) : coverLoading ? (
-                    <>
-                      <div className="w-10 h-10 rounded-full border-4 border-t-transparent animate-spin"
-                        style={{ borderColor: ACCENT, borderTopColor: 'transparent' }} />
-                      <p className="text-[1.0625rem] text-[#6B7280]">AI가 표지를 만들고 있어요</p>
-                      <p className="text-sm text-[#9CA3AF]">잠시만 기다려 주세요 (약 1분)</p>
-                    </>
-                  ) : null}
+                  <div className="w-10 h-10 rounded-full border-4 border-t-transparent animate-spin"
+                    style={{ borderColor: ACCENT, borderTopColor: 'transparent' }} />
+                  <p className="text-[1.0625rem] text-[#6B7280]">AI가 표지를 만들고 있어요</p>
+                  <p className="text-sm text-[#9CA3AF]">잠시만 기다려 주세요 (약 1분)</p>
                 </div>
               )}
             </div>

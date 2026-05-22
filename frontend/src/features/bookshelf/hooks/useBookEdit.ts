@@ -32,6 +32,7 @@ interface UseBookEditReturn {
   selectCover: (coverId: string) => Promise<void>
   publishBook: (dedication: string) => Promise<void>
   regenerateCover: (chapterId: string) => Promise<void>
+  retryCover: () => Promise<void>  // 표지 생성 실패 후 재시도
 }
 
 export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
@@ -137,6 +138,23 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
             stopPolling()
             return
           }
+
+          // 3폴링(9초)마다 job 상태 체크 → failed 시 3분 기다리지 않고 즉시 오류 표시
+          if (pollAttemptsRef.current % 3 === 0) {
+            const { data: failedJob } = await supabase
+              .from('book_generation_jobs')
+              .select('id')
+              .eq('book_id', id)
+              .eq('status', 'failed')
+              .maybeSingle()
+            if (failedJob) {
+              setCoverLoading(false)
+              setCoverError(true)
+              stopPolling()
+              return
+            }
+          }
+
           const { data: newCovers, error: pollErr } = await supabase
             .from('cover_images')
             .select('*')
@@ -314,9 +332,83 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
     }
   }, [bookId, book?.senior_id])
 
+  // 표지 생성 실패 후 재시도 — single 모드로 표지 없는 챕터들을 순차 재생성
+  // job 상태는 failed로 남지만 cover_images가 채워지면 사용자가 표지 선택·출간 가능
+  const retryCover = useCallback(async () => {
+    if (!bookId || !book?.senior_id) return
+    setCoverError(false)
+    setCoverLoading(true)
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) throw new Error('로그인이 필요합니다')
+
+      // 표지 없는 챕터만 대상 (이미 성공한 챕터는 건너뜀)
+      const [{ data: chapterList }, { data: existingCovers }] = await Promise.all([
+        supabase.from('chapters').select('id').eq('book_id', bookId).eq('is_deleted', false).order('sort_order'),
+        supabase.from('cover_images').select('chapter_id').eq('book_id', bookId).in('status', ['candidate', 'selected']),
+      ])
+
+      if (!chapterList || chapterList.length === 0) throw new Error('챕터를 찾을 수 없습니다')
+
+      const coveredIds = new Set((existingCovers ?? []).map(c => c.chapter_id))
+      const missingChapters = chapterList.filter(ch => !coveredIds.has(ch.id))
+
+      if (missingChapters.length === 0) {
+        // 이미 모든 챕터에 표지 있음 — 화면만 갱신
+        const { data: newCovers } = await supabase
+          .from('cover_images').select('*').eq('book_id', bookId).in('status', ['candidate', 'selected'])
+        const chapterIds = chapterList.map(c => c.id)
+        if (newCovers && newCovers.length > 0) {
+          setCoverImages(sortCoversByChapterOrder(newCovers, chapterIds))
+          setCoverLoading(false)
+          return
+        }
+      }
+
+      // 표지 없는 챕터들에 single 모드 호출 (동기: 60~120s, 병렬 처리)
+      const results = await Promise.allSettled(
+        missingChapters.map(ch =>
+          fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-cover`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({
+                book_id: bookId,
+                senior_id: book.senior_id,
+                mode: 'single',
+                chapter_id: ch.id,
+              }),
+            }
+          )
+        )
+      )
+
+      // 하나라도 성공했으면 cover_images 재조회
+      const anySuccess = results.some(r => r.status === 'fulfilled' && r.value.ok)
+      if (!anySuccess) throw new Error('표지 생성에 실패했어요')
+
+      const { data: newCovers } = await supabase
+        .from('cover_images').select('*').eq('book_id', bookId).in('status', ['candidate', 'selected'])
+      const chapterIds = chapterList.map(c => c.id)
+      if (newCovers && newCovers.length > 0) {
+        coverImagesLengthRef.current = newCovers.length
+        setCoverImages(sortCoversByChapterOrder(newCovers, chapterIds))
+        setCoverLoading(false)
+      } else {
+        throw new Error('표지 생성에 실패했어요')
+      }
+    } catch {
+      setCoverLoading(false)
+      setCoverError(true)
+    }
+  }, [bookId, book?.senior_id])
+
   return {
     book, chapters, coverImages, loading, coverLoading, coverError,
     regenerating, extraCoverCount, extraCoverLimit: EXTRA_COVER_LIMIT,
-    softDeleteChapter, restoreChapter, updateChapterTitle, updateChapterContent, updateChapterPhotoUrl, selectCover, publishBook, regenerateCover,
+    softDeleteChapter, restoreChapter, updateChapterTitle, updateChapterContent, updateChapterPhotoUrl, selectCover, publishBook, regenerateCover, retryCover,
   }
 }
