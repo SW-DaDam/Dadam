@@ -16,6 +16,9 @@ const CORS_HEADERS = {
 const EXTRA_COVER_LIMIT = 3      // 사용자가 추가로 생성할 수 있는 최대 표지 수 (챕터 수 기준 초과분)
 const IMAGE_SIZE = '1024x1536'   // 책 표지 2:3 세로 비율 — 상단 여백 확보용
 const BUCKET = 'book-covers'     // Supabase Storage 버킷명
+// gpt-5.4-mini는 추론 모델 — max_completion_tokens는 추론 토큰 + 실제 JSON 출력(~300토큰)을
+// 합산해 소비함. 추론 토큰이 출력 예산을 잠식하지 않도록 넉넉히 확보
+const SCENE_LAYOUT_MAX_TOKENS = 4000
 
 // ─── 타입 ─────────────────────────────────────────────────────────────────────
 
@@ -145,16 +148,24 @@ Rules for foreground_objects:
           content: `Chapter title: ${chapter.title}\nChapter content (full):\n${chapter.content}`,
         },
       ],
-      max_tokens: 400,
-      temperature: 0.7,
+      // gpt-5.4-mini는 GPT-5 계열 추론 모델 — OpenAI API가 max_tokens와
+      // temperature 커스텀값을 거부함. max_completion_tokens를 쓰고, temperature는
+      // 기본값(1)만 허용되므로 생략한다. (generate-book이 멀쩡한 건 AI SDK가
+      // 이 보정을 자동 처리하기 때문 — raw SDK는 파라미터를 그대로 전달함)
+      max_completion_tokens: SCENE_LAYOUT_MAX_TOKENS,
       response_format: { type: 'json_object' },
     })
 
     const raw = res.choices[0]?.message?.content?.trim()
-    if (!raw) return null
+    if (!raw) {
+      console.error('[generate-cover] SceneLayout — 응답 content 없음 (finish_reason:', res.choices[0]?.finish_reason, ')')
+      return null
+    }
     return JSON.parse(raw) as SceneLayout
   } catch (e) {
-    console.error('[generate-cover] SceneLayout 파싱 실패:', e)
+    // OpenAI API 에러·JSON 파싱 실패 모두 여기로 — 실제 메시지를 남겨 원인 추적
+    const detail = (e instanceof Error) ? e.message : String(e)
+    console.error('[generate-cover] SceneLayout 생성 실패:', detail)
     return null
   }
 }
