@@ -338,7 +338,8 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
         }
         if (blobUrl) {
           await playBlobAsync(blobUrl, segment.text)
-        } else {
+        } else if (import.meta.env.VITE_TTS_DISABLED !== 'true') {
+          // VITE_TTS_DISABLED=true 시 speechSynthesis도 스킵 — 헤드리스 환경에서 onend 미발화 방지
           await new Promise<void>((resolve) => speakWithSpeechSynthesis(segment.text, resolve))
         }
       }

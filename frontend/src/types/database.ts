@@ -519,6 +519,7 @@ export type Database = {
           interests_summary: string | null
           onboarding_completed: boolean
           region: string | null
+          speech_style: string
           tts_speed: string
           tts_voice: string
           updated_at: string
@@ -532,6 +533,7 @@ export type Database = {
           interests_summary?: string | null
           onboarding_completed?: boolean
           region?: string | null
+          speech_style?: string
           tts_speed?: string
           tts_voice?: string
           updated_at?: string
@@ -545,6 +547,7 @@ export type Database = {
           interests_summary?: string | null
           onboarding_completed?: boolean
           region?: string | null
+          speech_style?: string
           tts_speed?: string
           tts_voice?: string
           updated_at?: string

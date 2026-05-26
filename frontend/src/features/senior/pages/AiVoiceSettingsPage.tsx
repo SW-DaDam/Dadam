@@ -4,7 +4,7 @@ import { ChevronLeft, Play, Square } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { useSeniorVoiceSettings } from '@/features/senior/hooks/useSeniorVoiceSettings'
-import type { TtsVoice, TtsSpeed } from '@/types/domain'
+import type { TtsVoice, TtsSpeed, SpeechStyle } from '@/types/domain'
 
 // Phase 1: voice 1종(ngoeun) 고정 운영.
 // Phase 2에서 NCP 콘솔 청취 평가 후 6종 카드 그리드(VoiceCard 컴포넌트 + VOICE_META 배열)로 재구성 예정.
@@ -16,6 +16,20 @@ const SPEED_LABEL: Record<TtsSpeed, string> = {
   slow: '천천히',
   normal: '보통',
   fast: '빠르게',
+}
+
+// 말투 카드 메타데이터 (이름 + 설명 + 예시 문장)
+const SPEECH_STYLE_META: Record<SpeechStyle, { label: string; desc: string; example: string }> = {
+  counselor: {
+    label: '공손한 상담사',
+    desc: '따뜻하고 공손하게 감정을 함께 나눠요',
+    example: '"그러실 만해요. 많이 힘드셨겠어요."',
+  },
+  friend: {
+    label: '친근한 친구',
+    desc: '오랜 친구처럼 편하고 솔직하게 대화해요',
+    example: '"아이고, 진짜? 그래서 어떻게 됐어~"',
+  },
 }
 
 export default function AiVoiceSettingsPage() {
@@ -38,10 +52,12 @@ export default function AiVoiceSettingsPage() {
   // Phase 1은 voice 변경 UI가 없으므로 voice pending 상태 불필요
   const [pendingSpeed, setPendingSpeed] = useState<TtsSpeed | null>(null)
   const [saved, setSaved] = useState(false)  // 저장 완료 피드백
+  const [pendingSpeechStyle, setPendingSpeechStyle] = useState<SpeechStyle | null>(null)
 
-  // Phase 1: voice는 항상 ngoeun 고정. speed만 사용자 선택 가능
+  // Phase 1: voice는 항상 ngoeun 고정. speed와 speech_style만 사용자 선택 가능
   const selectedVoice = PHASE1_VOICE
   const selectedSpeed = pendingSpeed ?? settings.speed
+  const selectedSpeechStyle = pendingSpeechStyle ?? settings.speech_style
 
   // 마운트 시 DB 설정 로드
   useEffect(() => {
@@ -50,9 +66,10 @@ export default function AiVoiceSettingsPage() {
 
   const handleSave = async () => {
     if (!userId) return
-    await saveSettings(userId, { voice: selectedVoice, speed: selectedSpeed })
+    await saveSettings(userId, { voice: selectedVoice, speed: selectedSpeed, speech_style: selectedSpeechStyle })
     // 저장 완료 후 pending 초기화 — 다음 로드 시 DB 값이 자동 반영됨
     setPendingSpeed(null)
+    setPendingSpeechStyle(null)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -77,7 +94,7 @@ export default function AiVoiceSettingsPage() {
           <ChevronLeft size={22} className="text-[#6B7280]" />
         </button>
         <h1 className="absolute left-1/2 -translate-x-1/2 text-lg sm:text-xl text-[#1F2937] font-medium whitespace-nowrap">
-          AI 목소리 설정
+          AI 설정
         </h1>
       </header>
 
@@ -89,6 +106,42 @@ export default function AiVoiceSettingsPage() {
             <p className="text-sm text-red-600">{error}</p>
           </div>
         )}
+
+        {/* 말투 선택 카드 섹션 */}
+        <div className="flex flex-col gap-2">
+          <p className="text-base text-[#6B7280] px-1">말투</p>
+          <div className="flex flex-col gap-3">
+            {(Object.entries(SPEECH_STYLE_META) as [SpeechStyle, typeof SPEECH_STYLE_META[SpeechStyle]][]).map(([style, meta]) => (
+              <button
+                key={style}
+                type="button"
+                onClick={() => setPendingSpeechStyle(style)}
+                className={cn(
+                  'w-full text-left bg-white border-2 rounded-2xl px-5 py-4 transition-colors',
+                  selectedSpeechStyle === style
+                    ? 'border-[#E8820C] bg-[#FFFAF5]'
+                    : 'border-[#E5E7EB]',
+                )}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <p className={cn(
+                    'text-[1.125rem] font-medium',
+                    selectedSpeechStyle === style ? 'text-[#E8820C]' : 'text-[#1F2937]',
+                  )}>
+                    {meta.label}
+                  </p>
+                  {selectedSpeechStyle === style && (
+                    <div className="w-5 h-5 rounded-full bg-[#E8820C] flex items-center justify-center shrink-0">
+                      <span className="text-[10px] text-white font-bold">✓</span>
+                    </div>
+                  )}
+                </div>
+                <p className="text-base text-[#6B7280] mb-1">{meta.desc}</p>
+                <p className="text-base text-[#9CA3AF] italic">{meta.example}</p>
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* 현재 선택 미리듣기 배너 — voice는 Phase 1 고정 라벨 표시 */}
         <div className="bg-[#FFF0DC] rounded-2xl px-5 py-4 flex items-center gap-3">
