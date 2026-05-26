@@ -49,15 +49,13 @@ const FEATURES = [
 
 function AiAvatar() {
   return (
-    <div className="relative flex items-center justify-center w-[96px] h-[96px] rounded-full bg-[#FFF0DC]">
-      <div className="absolute top-1 right-2 w-3.5 h-3.5 rounded-full bg-[#FFF0DC] border-2 border-[#E8820C]" />
-      <div className="absolute bottom-2 left-1 w-2.5 h-2.5 rounded-full bg-[#E8820C] opacity-40" />
-      <div className="absolute bottom-4 right-1 w-2 h-2 rounded-full bg-[#E8820C] opacity-25" />
-      <div className="absolute top-3 left-2 w-3 h-3 rounded-full bg-[#FFF0DC] border-[1.5px] border-[#E8820C]" />
-      <div className="w-16 h-16 rounded-full bg-[#E8820C] flex items-center justify-center">
-        <span className="text-lg text-white leading-none font-bold">AI</span>
-      </div>
-    </div>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="96" height="96" aria-hidden="true">
+      <circle cx="128" cy="128" r="128" fill="#E8820C" />
+      <path d="M 60 76 h 136 a 26 26 0 0 1 26 26 v 46 a 26 26 0 0 1 -26 26 h -52 l -22 22 v -22 h -62 a 26 26 0 0 1 -26 -26 v -46 a 26 26 0 0 1 26 -26 z" fill="#FFFFFF" />
+      <circle cx="100" cy="125" r="9" fill="#E8820C" />
+      <circle cx="128" cy="125" r="9" fill="#E8820C" />
+      <circle cx="156" cy="125" r="9" fill="#E8820C" />
+    </svg>
   )
 }
 

@@ -48,9 +48,13 @@ export default function SeniorHomePage() {
 
         {/* 인사 카드 */}
         <div className="w-full bg-[#FFF0DC] rounded-2xl px-5 py-4 flex items-center gap-4">
-          <div className="w-[68px] h-[68px] rounded-full bg-[#E8820C] flex items-center justify-center shrink-0">
-            <span className="text-lg text-white font-bold">AI</span>
-          </div>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="68" height="68" aria-hidden="true" className="shrink-0">
+            <circle cx="128" cy="128" r="128" fill="#E8820C" />
+            <path d="M 60 76 h 136 a 26 26 0 0 1 26 26 v 46 a 26 26 0 0 1 -26 26 h -52 l -22 22 v -22 h -62 a 26 26 0 0 1 -26 -26 v -46 a 26 26 0 0 1 26 -26 z" fill="#FFFFFF" />
+            <circle cx="100" cy="125" r="9" fill="#E8820C" />
+            <circle cx="128" cy="125" r="9" fill="#E8820C" />
+            <circle cx="156" cy="125" r="9" fill="#E8820C" />
+          </svg>
           <div className="flex-1 bg-white rounded-xl px-4 py-3 flex flex-col gap-1">
             <p className="text-[1.0625rem] text-[#1F2937]">좋은 아침이에요, {displayName} 님 :)</p>
             <p className="text-base text-[#6B7280]">오늘도 이야기 들려주세요</p>
