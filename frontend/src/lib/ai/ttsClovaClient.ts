@@ -53,6 +53,10 @@ export async function fetchTts(
   speed: TtsSpeed,
   accessToken: string,
 ): Promise<string> {
+  // VITE_TTS_DISABLED=true 시 즉시 throw → useVoiceChat의 speechSynthesis 폴백으로 이동
+  if (import.meta.env.VITE_TTS_DISABLED === 'true') {
+    throw new Error('[ttsClovaClient] TTS disabled (VITE_TTS_DISABLED=true)')
+  }
   const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tts-clova`
   const res = await fetchWithRetry(url, {
     method: 'POST',

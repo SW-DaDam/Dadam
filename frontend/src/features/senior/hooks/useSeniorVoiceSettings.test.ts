@@ -64,7 +64,7 @@ describe('useSeniorVoiceSettings.loadSettings', () => {
     const { result } = renderHook(() => useSeniorVoiceSettings())
     await act(async () => { await result.current.loadSettings('user-123') })
 
-    expect(result.current.settings).toEqual({ voice: 'ngoeun', speed: 'normal' })
+    expect(result.current.settings).toEqual({ voice: 'ngoeun', speed: 'normal', speech_style: 'counselor' })
     expect(result.current.error).toBeNull()
   })
 
@@ -77,8 +77,8 @@ describe('useSeniorVoiceSettings.loadSettings', () => {
     const { result } = renderHook(() => useSeniorVoiceSettings())
     await act(async () => { await result.current.loadSettings('user-123') })
 
-    // voice는 폴백, speed는 유효하므로 그대로
-    expect(result.current.settings).toEqual({ voice: 'ngoeun', speed: 'slow' })
+    // voice는 폴백, speed는 유효하므로 그대로, speech_style은 DB에 없으므로 디폴트
+    expect(result.current.settings).toEqual({ voice: 'ngoeun', speed: 'slow', speech_style: 'counselor' })
   })
 
   it('DB 조회 에러 시 에러 메시지를 설정한다', async () => {
@@ -98,9 +98,9 @@ describe('useSeniorVoiceSettings.saveSettings', () => {
   it('saveSettings 호출 시 update가 voice/speed payload로 호출된다', async () => {
     const { result } = renderHook(() => useSeniorVoiceSettings())
     await act(async () => {
-      await result.current.saveSettings('user-123', { voice: 'ngoeun', speed: 'fast' })
+      await result.current.saveSettings('user-123', { voice: 'ngoeun', speed: 'fast', speech_style: 'counselor' })
     })
-    expect(mockUpdate).toHaveBeenCalledWith({ tts_voice: 'ngoeun', tts_speed: 'fast' })
+    expect(mockUpdate).toHaveBeenCalledWith({ tts_voice: 'ngoeun', tts_speed: 'fast', speech_style: 'counselor' })
   })
 })
 

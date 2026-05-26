@@ -111,8 +111,8 @@ export default function SeniorSettingsPage() {
                 ♪
               </div>
               <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                <p className="text-[1.125rem] text-[#1F2937]">AI 목소리 설정</p>
-                <p className="text-base text-[#6B7280]">말하는 속도·목소리 조절</p>
+                <p className="text-[1.125rem] text-[#1F2937]">AI 설정</p>
+                <p className="text-base text-[#6B7280]">AI 목소리, 말투 변경</p>
               </div>
               <ChevronRight size={20} className="text-[#D1D5DB] shrink-0" />
             </button>
