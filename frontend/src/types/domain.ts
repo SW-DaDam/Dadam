@@ -71,10 +71,17 @@ export type TtsVoice = 'ngoeun'
 /** TTS 말하기 속도 — Edge Function에서 Clova speed(-5~10)로 매핑 */
 export type TtsSpeed = 'slow' | 'normal' | 'fast'
 
-/** 어르신 TTS 설정 (senior_profiles.tts_voice / tts_speed) */
+/** AI 말동무 말투 스타일 (senior_profiles.speech_style)
+ *  counselor: 공손한 상담사 (존댓말, 감정 검증 중심)
+ *  friend:    친근한 친구  (반말, 오랜 친구처럼 편안한 어투)
+ */
+export type SpeechStyle = 'counselor' | 'friend'
+
+/** 어르신 TTS + 말투 설정 (senior_profiles) */
 export interface TtsSettings {
   voice: TtsVoice
   speed: TtsSpeed
+  speech_style: SpeechStyle
 }
 
 // ─── 음성 대화 ────────────────────────────────────────────────
