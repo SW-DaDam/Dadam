@@ -181,7 +181,16 @@ async function buildSystemPrompt(seniorId: string, isFirstMessage: boolean): Pro
       ? `\n\n[First-turn instruction]\nUsing the interests above, open the conversation with ONE warm, natural proactive question so the senior feels comfortable starting to talk.\nCategory-based examples (use as reference only — do not read verbatim):\n- 취미: "요즘도 텃밭 가꾸고 계세요? 이번 철에는 뭘 심으셨나요?"\n- 가족: "지난번에 손녀 이야기를 해주셨는데, 요즘 잘 지내고 있나요?"\n- 건강: "어깨는 요즘 좀 어떠세요? 계속 좋아지고 계신가요?"\n- 추억: "고향 이야기를 해주셨는데, 요즘도 가끔 생각나시나요?"`
       : ''
 
-    return `${basePrompt}${profileContext}${ageCalibration}\n\n[Senior's known interests]\n${interestLines}${proactivePart}`
+    // 중간 기억 소환 지시: 관련 주제가 나올 때 기억을 자연스럽게 대화에 녹임
+    const midRecallPart = `\n\n[Mid-conversation memory recall]
+When the senior mentions a topic, person, place, or time period that matches something in [Senior's known interests], naturally weave that memory into your response as a warm callback.
+- Only do this when it genuinely fits the current topic — not on every turn
+- Make it feel like natural recall, not reading from a list:
+  Friend style:    "아, 영훈이 대학 갔다고 했잖아, 잘 적응하고 있어?"
+  Counselor style: "손자분 대학 입학하셨다고 하셨는데, 요즘은 어떻게 지내고 있나요?"
+- Small, subtle callbacks make the senior feel genuinely heard and remembered`
+
+    return `${basePrompt}${profileContext}${ageCalibration}\n\n[Senior's known interests]\n${interestLines}${midRecallPart}${proactivePart}`
   } catch (err) {
     // 조회 실패 시 조용히 기본 프롬프트로 폴백
     console.error('[voice-chat] 프롬프트 구성 실패, 기본 프롬프트 사용:', err)

@@ -23,6 +23,46 @@ interface MemoryData {
   items?: MemoryItem[]
 }
 
+// 한 기억 항목의 최대 텍스트 길이 (공백 포함)
+const MAX_TEXT_LENGTH = 150
+
+// 자연 경계(쉼표·마침표)를 우선 탐색해 텍스트를 maxLen 이하 청크로 재귀 분리
+function splitText(text: string, maxLen: number): string[] {
+  if (text.length <= maxLen) return [text]
+  const separators = [', ', ',', '. ', ' ']
+  for (const sep of separators) {
+    const idx = text.lastIndexOf(sep, maxLen)
+    if (idx > maxLen / 2) {
+      const cutAt = idx + sep.length
+      // sep이 maxLen 경계에 걸쳐 있으면 first가 maxLen을 초과할 수 있으므로 확인
+      if (cutAt > maxLen) continue
+      const first = text.slice(0, cutAt).trim()
+      const rest = text.slice(cutAt).trim()
+      if (first && rest) return [first, ...splitText(rest, maxLen)]
+    }
+  }
+  // 마지막 공백에서 강제 절단
+  const spaceIdx = text.lastIndexOf(' ', maxLen)
+  if (spaceIdx > 0) return [text.slice(0, spaceIdx).trim(), ...splitText(text.slice(spaceIdx + 1).trim(), maxLen)]
+  return [text.slice(0, maxLen), ...splitText(text.slice(maxLen), maxLen)]
+}
+
+// LLM이 150자 제한을 넘긴 항목을 후처리로 분리하는 안전망
+// LLM이 올바르게 압축했다면 이 함수는 아무것도 바꾸지 않음
+function enforceTextLimit(items: MemoryItem[]): MemoryItem[] {
+  const result: MemoryItem[] = []
+  for (const item of items) {
+    if (item.text.length <= MAX_TEXT_LENGTH) {
+      result.push(item)
+      continue
+    }
+    for (const chunk of splitText(item.text, MAX_TEXT_LENGTH)) {
+      result.push({ ...item, text: chunk })
+    }
+  }
+  return result
+}
+
 // 요청 본문 타입
 interface ExtractMemoryRequest {
   conversation_id: string
@@ -168,21 +208,37 @@ Your job is to return the COMPLETE, FINAL memory list after integrating the new 
 
 [Four operations — apply the most appropriate one per existing item]
 1. KEEP: No related new information → keep the item exactly as-is.
-2. MERGE: New utterance adds detail to an existing item on the same topic/person/activity → combine into one richer item. Prefer the existing item's wording as the base.
-3. UPDATE: New utterance contradicts or supersedes an existing item (e.g., moved house, cancelled plan) → replace with the new information.
+2. MERGE: New utterance adds detail to an existing item on the same topic/person/activity → combine into one richer item. Prefer the existing item's wording as the base. Apply COMPRESS rules after merging.
+3. UPDATE: New utterance contradicts or supersedes an existing item → replace the old fact with the new one and discard the outdated information.
+   UPDATE triggers — watch for these patterns:
+   - Life stage / status change: "고등학생" → "대학생", "직장인" → "퇴직", "임신 중" → "출산함"
+   - Location change: "부산에 삼" + "서울로 이사왔어" → "서울로 이사함"
+   - Health state change: "무릎 수술 예정" + "수술 잘 끝났어" → "무릎 수술 완료"
+   - Plan resolution: schedule item + "잘 다녀왔어" → remove or convert to past-tense memory
+   - Explicit correction: "아니, 그게 아니라 ~야" → replace with the corrected information
 4. ADD: Completely new information not related to any existing item → append as a new item.
 
 [When in doubt]
 - If unsure whether new info belongs to an existing item, keep them separate rather than merging incorrectly.
-- Never delete an existing item unless the new utterance explicitly contradicts it.
+- Never delete an existing item unless the new utterance explicitly contradicts or supersedes it.
 
 [text writing rules]
 - Short noun-form or predicative endings. No long run-on sentences.
   Good: "수빈이는 자주 못 온다", "텃밭 가꾸기를 좋아함", "무릎이 안 좋아서 병원 다님"
   Bad: "수빈이는 자주 못 와서 혼자 먹어야지", "텃밭에서 토마토를 키우고 있어서 수확했어"
 - If a fact involves a person already in existing memories with a known relationship, include that relationship.
-  Example: existing has "딸 수빈이" → new: "수빈이가 이사했어" → write: "딸 수빈이가 이사함"
+  Example: existing has "딸 수빈이" → new: "수빈이가 이사했어" → write: "딸 수빈이가 서울로 이사함"
 - For a new person not yet in memories, use only their name — do NOT infer a relationship.
+- Each text must be ${MAX_TEXT_LENGTH} characters or fewer (including spaces).
+  When a text would exceed ${MAX_TEXT_LENGTH} characters, apply in this strict order:
+    1. COMPRESS — strip all filler and keep only facts that are genuinely useful in future conversations.
+       Remove: exclamations, back-channels, repeated phrasing, vague qualifiers ("좀", "그냥", "뭔가")
+       Never remove: names, places, dates/time periods, physical conditions, relationship facts
+    2. UPDATE — check if any part of the compressed text supersedes an existing memory. If so, apply UPDATE instead of keeping redundant info.
+    3. SPLIT (last resort only) — if the text is already maximally compressed and still exceeds ${MAX_TEXT_LENGTH} characters, split into two items covering clearly different aspects. Each split item shares the same category and emoji.
+- When it helps future recall, add a brief context hint in parentheses:
+  Good: "손자 영훈이 대학생 (고3 때 입학)" — the hint makes the AI's recall feel natural
+  Do NOT add hints to short texts; only when the hint genuinely adds recall value.
 
 [Emoji rules]
 - Exactly ONE emoji per item. Reuse the existing emoji when keeping or merging.
@@ -202,22 +258,29 @@ Your job is to return the COMPLETE, FINAL memory list after integrating the new 
 
 [Few-shot examples]
 
-Example 1 — MERGE (same activity):
+Example 1 — MERGE then COMPRESS (same activity, result kept under ${MAX_TEXT_LENGTH} chars):
 Existing: [{"text": "동네 바둑 모임에 나감", "category": "일상", "emoji": "♟️"}]
-New utterance: "이번 주에 후배와 바둑 두러 가기로 함"
-Result: [{"text": "동네 바둑 모임 나가고, 후배와도 바둑을 즐김", "category": "취미", "emoji": "♟️"}]
+New utterance: "이번 주에 후배와 바둑 두러 가기로 했어. 정말 오랜만이야."
+Result: [{"text": "동네 바둑 모임 참여, 후배와도 바둑 즐김", "category": "취미", "emoji": "♟️"}]
+(Compressed: removed "정말 오랜만이야" as non-essential)
 
-Example 2 — MERGE (same person, add detail):
+Example 2 — MERGE with context hint (same person, add detail):
 Existing: [{"text": "민준이와 자주 낚시 가는 편임", "category": "가족", "emoji": "🎣"}]
 New utterance: "작년 봄에 민준이랑 충주호에서 낚시함"
-Result: [{"text": "민준이와 자주 낚시 가는 편, 작년 봄엔 충주호 방문", "category": "가족", "emoji": "🎣"}]
+Result: [{"text": "민준이와 자주 낚시, 작년 봄 충주호 방문", "category": "가족", "emoji": "🎣"}]
 
-Example 3 — UPDATE (contradicts existing):
+Example 3 — UPDATE (life stage change):
+Existing: [{"text": "손자 영훈이 고등학생", "category": "가족", "emoji": "👦"}]
+New utterance: "영훈이가 이번에 대학에 입학했어"
+Result: [{"text": "손자 영훈이 대학생 (고등학교 졸업 후 입학)", "category": "가족", "emoji": "👦"}]
+(Old "고등학생" fact is discarded and replaced)
+
+Example 4 — UPDATE (location change):
 Existing: [{"text": "딸 수빈이가 부산에 살고 있음", "category": "가족", "emoji": "👧"}]
 New utterance: "수빈이가 이사를 서울로 왔어"
 Result: [{"text": "딸 수빈이가 서울로 이사함", "category": "가족", "emoji": "👧"}]
 
-Example 4 — Schedule with expires_at:
+Example 5 — Schedule with expires_at:
 New utterance: "다음 달 15일에 손녀 졸업식이야" (assume today is 2026-05-12)
 Result item: {"text": "손녀 졸업식 (2026-06-15)", "category": "일정", "emoji": "🎓", "expires_at": "2026-06-16"}
 
@@ -247,7 +310,8 @@ Return the complete final memory array:`
         console.warn('[extract-memory] LLM이 빈 배열 반환, 기존 memories 보존')
         finalItems = existingItems
       } else {
-        finalItems = parsed
+        // 2차 방어: LLM이 150자 제한을 지키지 않은 항목을 후처리로 강제 분리
+        finalItems = enforceTextLimit(parsed)
       }
     } catch (llmErr) {
       console.error('[extract-memory] LLM 호출 또는 JSON 파싱 실패', llmErr)
