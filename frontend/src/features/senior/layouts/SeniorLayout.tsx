@@ -18,7 +18,7 @@ export default function SeniorLayout() {
       </div>
 
       {/* 탭바 */}
-      <nav className="w-full bg-white dark:bg-gray-800 border-t border-[#E5E7EB] dark:border-gray-700 flex shrink-0">
+      <nav className="w-full bg-white dark:bg-gray-800 border-t border-[#E5E7EB] dark:border-gray-700 flex shrink-0" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {TABS.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
