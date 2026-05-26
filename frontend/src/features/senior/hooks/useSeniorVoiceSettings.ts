@@ -5,18 +5,20 @@
 import { useState, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getSampleUrl } from '@/lib/ai/ttsClovaClient'
-import type { TtsVoice, TtsSpeed, TtsSettings } from '@/types/domain'
+import type { TtsVoice, TtsSpeed, TtsSettings, SpeechStyle } from '@/types/domain'
 
-// DB에서 읽은 값을 TtsVoice/TtsSpeed로 좁히는 타입 가드
-// Phase 2 확장 시 이 배열에 6종 추가
+// DB에서 읽은 값을 TtsVoice/TtsSpeed/SpeechStyle로 좁히는 타입 가드
+// Phase 2 확장 시 VALID_VOICES 배열에 6종 추가
 const VALID_VOICES: TtsVoice[] = ['ngoeun']
 const VALID_SPEEDS: TtsSpeed[] = ['slow', 'normal', 'fast']
+const VALID_STYLES: SpeechStyle[] = ['counselor', 'friend']
 
 function isVoice(v: string): v is TtsVoice { return (VALID_VOICES as string[]).includes(v) }
 function isSpeed(s: string): s is TtsSpeed { return (VALID_SPEEDS as string[]).includes(s) }
+function isStyle(s: string): s is SpeechStyle { return (VALID_STYLES as string[]).includes(s) }
 
-// Phase 1 디폴트 — 마이그레이션 후 모든 row가 ngoeun으로 통일된 상태와 일치
-const DEFAULT_SETTINGS: TtsSettings = { voice: 'ngoeun', speed: 'slow' }
+// Phase 1 디폴트 — speech_style은 'counselor'(기존 동작 유지)
+const DEFAULT_SETTINGS: TtsSettings = { voice: 'ngoeun', speed: 'slow', speech_style: 'counselor' }
 
 interface UseSeniorVoiceSettingsReturn {
   settings: TtsSettings
@@ -48,7 +50,7 @@ export function useSeniorVoiceSettings(): UseSeniorVoiceSettingsReturn {
     try {
       const { data, error: dbError } = await supabase
         .from('senior_profiles')
-        .select('tts_voice, tts_speed')
+        .select('tts_voice, tts_speed, speech_style')
         .eq('id', userId)
         .single()
 
@@ -56,11 +58,13 @@ export function useSeniorVoiceSettings(): UseSeniorVoiceSettingsReturn {
 
       const voice = data?.tts_voice
       const speed = data?.tts_speed
+      const style = data?.speech_style
 
-      // DB 값이 유효한 경우에만 적용 (마이그레이션 기본값 'shimmer'/'slow' 보장됨)
+      // DB 값이 유효한 경우에만 적용, 유효하지 않으면 디폴트 사용
       setSettings({
         voice: typeof voice === 'string' && isVoice(voice) ? voice : DEFAULT_SETTINGS.voice,
         speed: typeof speed === 'string' && isSpeed(speed) ? speed : DEFAULT_SETTINGS.speed,
+        speech_style: typeof style === 'string' && isStyle(style) ? style : DEFAULT_SETTINGS.speech_style,
       })
     } catch {
       setError('설정을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.')
@@ -76,7 +80,7 @@ export function useSeniorVoiceSettings(): UseSeniorVoiceSettingsReturn {
     try {
       const { error: dbError } = await supabase
         .from('senior_profiles')
-        .update({ tts_voice: s.voice, tts_speed: s.speed })
+        .update({ tts_voice: s.voice, tts_speed: s.speed, speech_style: s.speech_style })
         .eq('id', userId)
 
       if (dbError) throw dbError
