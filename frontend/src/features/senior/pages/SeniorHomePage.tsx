@@ -26,7 +26,7 @@ export default function SeniorHomePage() {
   const latestNotif = notifications[0] ?? null
 
   return (
-    <div className="flex flex-col min-h-full overflow-y-auto">
+    <div className="flex flex-col h-full">
 
       {/* 헤더 */}
       <header className="w-full min-h-[72px] bg-white border-b border-[#E5E7EB] flex items-center justify-between px-4 sm:px-6 py-3 gap-3 shrink-0">
@@ -44,7 +44,7 @@ export default function SeniorHomePage() {
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col gap-3 px-4 sm:px-6 py-4 w-full max-w-2xl mx-auto">
+      <main className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-3 px-4 sm:px-6 py-4 w-full max-w-2xl mx-auto">
 
         {/* 인사 카드 */}
         <div className="w-full bg-[#FFF0DC] rounded-2xl px-5 py-4 flex items-center gap-4">
