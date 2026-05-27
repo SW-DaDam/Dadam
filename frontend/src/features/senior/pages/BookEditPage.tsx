@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+﻿import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { ChevronLeft, Check, Mic, Pencil, X, RotateCcw, RefreshCw, BookOpen, Camera, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -323,7 +323,7 @@ export default function BookEditPage() {
       {/* ── Step 1: 챕터 확인 (F-12) ── */}
       {currentStep === 1 && (
         <>
-          <main className="flex-1 overflow-y-auto w-full max-w-2xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-4">
+          <main className="flex-1 overflow-y-auto w-full max-w-2xl md:max-w-none mx-auto px-4 sm:px-6 py-6 flex flex-col gap-4">
             <div className="flex flex-col items-center gap-2 text-center">
               <p className="text-[1.5rem] font-bold text-[#1F2937]">
                 {isShortBook ? '단편 이야기예요' : '이번 달 이야기들이에요'}
@@ -461,7 +461,7 @@ export default function BookEditPage() {
           <div className="shrink-0 bg-white border-t border-[#E5E7EB] px-4 sm:px-6 py-4">
             <button type="button" onClick={() => setCurrentStep(2)}
               disabled={activeChapters.length === 0}
-              className="w-full max-w-2xl mx-auto block disabled:opacity-40 rounded-2xl py-4 text-center"
+              className="w-full max-w-2xl md:max-w-none mx-auto block disabled:opacity-40 rounded-2xl py-4 text-center"
               style={{ background: ACCENT }}>
               <span className="text-[1.25rem]" style={{ color: ACCENT_TEXT }}>다음으로</span>
             </button>
@@ -566,7 +566,7 @@ export default function BookEditPage() {
       {/* ── Step 2: 표지 선택 (F-13) ── */}
       {currentStep === 2 && (
         <>
-          <main className="flex-1 min-h-0 overflow-hidden w-full max-w-2xl mx-auto px-4 sm:px-6 py-3 flex flex-col gap-3">
+          <main className="flex-1 min-h-0 overflow-hidden w-full max-w-2xl md:max-w-none mx-auto px-4 sm:px-6 py-3 flex flex-col gap-3">
             {/* 제목 + 재생성 버튼 행 — shrink-0 으로 높이 고정 */}
             <div className="flex items-start justify-between gap-2 shrink-0">
               <div className="flex flex-col gap-1">
@@ -665,7 +665,7 @@ export default function BookEditPage() {
             <button type="button"
               onClick={() => isShortBook ? setPublishConfirmOpen(true) : setCurrentStep(3)}
               disabled={coverImages.length === 0}
-              className="w-full max-w-2xl mx-auto block disabled:opacity-40 rounded-2xl py-4 text-center"
+              className="w-full max-w-2xl md:max-w-none mx-auto block disabled:opacity-40 rounded-2xl py-4 text-center"
               style={{ background: ACCENT }}>
               <span className="text-[1.25rem]" style={{ color: ACCENT_TEXT }}>
                 {isShortBook ? '이 표지로 출간하기' : '이 표지로 할게요'}
@@ -841,7 +841,7 @@ function Step3AuthorNote({
 
   return (
     <>
-      <main className="flex-1 overflow-y-auto w-full max-w-2xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-4">
+      <main className="flex-1 overflow-y-auto w-full max-w-2xl md:max-w-none mx-auto px-4 sm:px-6 py-6 flex flex-col gap-4">
         <div className="flex flex-col items-center gap-2 text-center">
           <p className="text-[1.5rem] text-[#1F2937]">작가의 말</p>
           <p className="text-[1.125rem] text-[#6B7280]">책의 맨 앞에 실려요. 독자(가족)에게 전하는 한마디예요</p>
@@ -905,7 +905,7 @@ function Step3AuthorNote({
       </main>
 
       <div className="shrink-0 bg-white border-t border-[#E5E7EB] px-4 sm:px-6 py-4 flex flex-col gap-3">
-        <div className="flex gap-3 w-full max-w-2xl mx-auto">
+        <div className="flex gap-3 w-full max-w-2xl md:max-w-none mx-auto">
           <button type="button" onClick={onSkip} className="flex-[2] bg-[#FFF0DC] rounded-2xl py-4 text-center">
             <span className="text-[1.125rem] text-[#E8820C]">건너뛰기</span>
           </button>
@@ -989,7 +989,7 @@ function Step4Published({
         ))}
       </div>
 
-      <main className="flex-1 overflow-y-auto w-full max-w-2xl mx-auto px-4 sm:px-6 py-8 flex flex-col gap-6">
+      <main className="flex-1 overflow-y-auto w-full max-w-2xl md:max-w-none mx-auto px-4 sm:px-6 py-8 flex flex-col gap-6">
 
         {/* 책 일러스트 */}
         <div className="flex justify-center pt-2">

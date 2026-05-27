@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+﻿import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router'
 import { Edit3, Trash2, X, ChevronLeft, ChevronRight, Loader2, BookOpen } from 'lucide-react'
 import { useBookshelf } from '@/features/bookshelf/hooks/useBookshelf'
@@ -273,7 +273,7 @@ export default function MyBooksPage() {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto flex flex-col gap-6 px-4 sm:px-6 py-5 w-full max-w-2xl mx-auto">
+      <main className="flex-1 overflow-y-auto flex flex-col gap-6 px-4 sm:px-6 py-5 w-full max-w-2xl md:max-w-none mx-auto">
 
         {loading && (
           <div className="flex items-center justify-center py-12">

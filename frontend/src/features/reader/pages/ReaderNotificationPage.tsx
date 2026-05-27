@@ -90,7 +90,7 @@ export default function ReaderNotificationPage() {
         </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto flex flex-col gap-4 px-4 sm:px-6 py-5 w-full max-w-2xl mx-auto">
+      <main className="flex-1 overflow-y-auto flex flex-col gap-4 px-4 sm:px-6 py-5 w-full max-w-2xl md:max-w-none mx-auto">
         {loading && (
           <div className="flex justify-center py-10">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-yellow-400 border-t-transparent" />

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router'
 import { ChevronLeft } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
@@ -200,7 +200,7 @@ export default function ProfileEditPage() {
         <p className="text-base text-[#6B7280]">카카오 프로필 사진이 자동으로 사용돼요</p>
       </div>
 
-      <main className="flex-1 overflow-y-auto flex flex-col gap-6 px-4 sm:px-6 py-6 w-full max-w-2xl mx-auto">
+      <main className="flex-1 overflow-y-auto flex flex-col gap-6 px-4 sm:px-6 py-6 w-full max-w-2xl md:max-w-none mx-auto">
 
         {/* 이름 필드 */}
         <div className="flex flex-col gap-2">
@@ -295,7 +295,7 @@ export default function ProfileEditPage() {
           type="button"
           onClick={handleSave}
           disabled={saving}
-          className="w-full max-w-2xl mx-auto block bg-[#E8820C] rounded-xl py-3 text-center disabled:opacity-50"
+          className="w-full max-w-2xl md:max-w-none mx-auto block bg-[#E8820C] rounded-xl py-3 text-center disabled:opacity-50"
         >
           <span className="text-[1.125rem] text-white">
             {saving ? '저장 중…' : saveResult === 'error' ? '저장 실패, 다시 시도해요' : '저장하기'}
