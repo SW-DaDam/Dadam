@@ -21,10 +21,9 @@ const MAX_STT_RETRY_COUNT = 3
 const EDGE_FUNCTION_TIMEOUT_MS = 15000
 const FATAL_ERROR_MSG = '연결할 수 없어요. 아래 버튼을 눌러 다시 시도해 주세요'
 
-// TTS 기본값: senior_profiles 로드 완료 전까지 사용
-// Phase 1: ngoeun 1종 운영. Phase 2 확장 시 사용자 선택값으로만 변경됨 (DEFAULT는 그대로 유지)
-const DEFAULT_TTS_VOICE: TtsVoice = 'ngoeun'
-const DEFAULT_TTS_SPEED: TtsSpeed = 'slow'
+// TTS 기본값: senior_profiles 로드 완료 전까지 사용 (봄달, 속도 0=normal)
+const DEFAULT_TTS_VOICE: TtsVoice = 'noyj'
+const DEFAULT_TTS_SPEED: TtsSpeed = 'normal'
 
 // 문장 단위 TTS 조기 요청 최소 글자수 — 너무 짧은 segment는 다음 문장과 합산
 const MIN_TTS_SEGMENT_LENGTH = 15

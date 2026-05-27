@@ -1,6 +1,5 @@
 // 어르신 TTS 설정 로드·저장·미리듣기 훅
 // senior_profiles.tts_voice / tts_speed 컬럼과 tts-samples 버킷 연동
-// Phase 1: voice 1종(ngoeun)만 운영. Phase 2 확장 시 VALID_VOICES 배열만 갱신.
 
 import { useState, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -8,8 +7,7 @@ import { getSampleUrl } from '@/lib/ai/ttsClovaClient'
 import type { TtsVoice, TtsSpeed, TtsSettings, SpeechStyle } from '@/types/domain'
 
 // DB에서 읽은 값을 TtsVoice/TtsSpeed/SpeechStyle로 좁히는 타입 가드
-// Phase 2 확장 시 VALID_VOICES 배열에 6종 추가
-const VALID_VOICES: TtsVoice[] = ['ngoeun']
+const VALID_VOICES: TtsVoice[] = ['nyejin', 'noyj', 'vara', 'nminsang', 'nsiyoon', 'vian']
 const VALID_SPEEDS: TtsSpeed[] = ['slow', 'normal', 'fast']
 const VALID_STYLES: SpeechStyle[] = ['counselor', 'friend']
 
@@ -17,8 +15,8 @@ function isVoice(v: string): v is TtsVoice { return (VALID_VOICES as string[]).i
 function isSpeed(s: string): s is TtsSpeed { return (VALID_SPEEDS as string[]).includes(s) }
 function isStyle(s: string): s is SpeechStyle { return (VALID_STYLES as string[]).includes(s) }
 
-// Phase 1 디폴트 — speech_style은 'counselor'(기존 동작 유지)
-const DEFAULT_SETTINGS: TtsSettings = { voice: 'ngoeun', speed: 'slow', speech_style: 'counselor' }
+// 디폴트: 봄달(noyj), 속도 normal(Clova speed 0), 상담사 말투
+const DEFAULT_SETTINGS: TtsSettings = { voice: 'noyj', speed: 'normal', speech_style: 'counselor' }
 
 interface UseSeniorVoiceSettingsReturn {
   settings: TtsSettings
