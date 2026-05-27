@@ -17,6 +17,7 @@ export function useNotifications() {
     prependNotification,
     markOneRead,
     markAllRead: storeMarkAllRead,
+    removeNotification,
     setLoading,
   } = useNotificationsStore()
 
@@ -83,5 +84,10 @@ export function useNotifications() {
     }
   }, [user?.id, fetchNotifications, prependNotification, setLoading])
 
-  return { notifications, unreadCount, loading, markAsRead, markAllRead }
+  const deleteNotification = useCallback(async (id: string) => {
+    removeNotification(id)
+    await supabase.from('notifications').delete().eq('id', id)
+  }, [removeNotification])
+
+  return { notifications, unreadCount, loading, markAsRead, markAllRead, deleteNotification }
 }
