@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { UserPlus, X } from 'lucide-react'
 import { useBookshelf } from '@/features/bookshelf/hooks/useBookshelf'
@@ -41,7 +41,7 @@ export default function FamilyBookshelfPage() {
       </header>
 
       <div className="flex-1 overflow-y-auto">
-      <main className="flex flex-col gap-4 pt-4 pb-6 w-full max-w-2xl mx-auto">
+      <main className="flex flex-col gap-4 pt-4 pb-6 w-full max-w-2xl md:max-w-none mx-auto">
 
         {/* 집필/편집 중 진행 카드 */}
         {latestDraft && (

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/shared/stores/authStore'
@@ -82,7 +82,7 @@ export default function RoleSelectPage() {
       {/* 단계 표시 */}
       <StepIndicator currentStep={1} />
 
-      <main className="flex-1 flex flex-col items-center px-4 sm:px-6 pt-0 pb-3 sm:pb-5 gap-3 sm:gap-4 w-full max-w-2xl mx-auto overflow-hidden">
+      <main className="flex-1 flex flex-col items-center px-4 sm:px-6 pt-0 pb-3 sm:pb-5 gap-3 sm:gap-4 w-full max-w-2xl md:max-w-none mx-auto overflow-hidden">
 
         {/* 안내 텍스트 */}
         <section className="flex flex-col items-center shrink-0">

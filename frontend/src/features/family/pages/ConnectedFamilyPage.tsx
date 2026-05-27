@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ChevronLeft } from 'lucide-react'
 import { useInvite } from '@/features/family/hooks/useInvite'
@@ -44,7 +44,7 @@ export default function ConnectedFamilyPage() {
         </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto flex flex-col gap-4 px-4 sm:px-6 py-5 w-full max-w-2xl mx-auto">
+      <main className="flex-1 overflow-y-auto flex flex-col gap-4 px-4 sm:px-6 py-5 w-full max-w-2xl md:max-w-none mx-auto">
 
         {loading ? (
           <div className="flex-1 flex items-center justify-center">

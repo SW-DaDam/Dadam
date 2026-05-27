@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ChevronLeft, Play, Square } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -98,7 +98,7 @@ export default function AiVoiceSettingsPage() {
         </h1>
       </header>
 
-      <main className="flex-1 overflow-y-auto flex flex-col gap-5 px-4 sm:px-6 py-5 w-full max-w-2xl mx-auto pb-48">
+      <main className="flex-1 overflow-y-auto flex flex-col gap-5 px-4 sm:px-6 py-5 w-full max-w-2xl md:max-w-none mx-auto pb-48">
 
         {/* 에러 배너 */}
         {error && (
@@ -229,7 +229,7 @@ export default function AiVoiceSettingsPage() {
           onClick={() => void handleSave()}
           disabled={saving || loading}
           className={cn(
-            'w-full max-w-2xl mx-auto block rounded-2xl py-4 text-center transition-colors',
+            'w-full max-w-2xl md:max-w-none mx-auto block rounded-2xl py-4 text-center transition-colors',
             saving || loading
               ? 'bg-[#D1D5DB]'
               : saved
