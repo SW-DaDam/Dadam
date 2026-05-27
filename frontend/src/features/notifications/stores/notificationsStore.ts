@@ -8,6 +8,7 @@ interface NotificationsState {
   prependNotification: (notification: Notification) => void
   markOneRead: (id: string) => void
   markAllRead: () => void
+  removeNotification: (id: string) => void
   setLoading: (loading: boolean) => void
 }
 
@@ -25,5 +26,7 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
     set((s) => ({
       notifications: s.notifications.map((n) => ({ ...n, is_read: true })),
     })),
+  removeNotification: (id) =>
+    set((s) => ({ notifications: s.notifications.filter((n) => n.id !== id) })),
   setLoading: (loading) => set({ loading }),
 }))
