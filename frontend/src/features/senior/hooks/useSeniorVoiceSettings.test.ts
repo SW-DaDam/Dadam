@@ -11,6 +11,8 @@ import { useSeniorVoiceSettings } from './useSeniorVoiceSettings'
 // Supabase mock — chain된 from().select().eq().single() 패턴 지원
 const mockSingle = vi.fn()
 const mockUpdate = vi.fn()
+// update().eq() 반환값을 테스트별로 제어하기 위해 분리
+const mockUpdateEq = vi.fn().mockResolvedValue({ error: null })
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
@@ -22,7 +24,7 @@ vi.mock('@/lib/supabase', () => ({
       })),
       update: vi.fn((payload) => {
         mockUpdate(payload)
-        return { eq: vi.fn().mockResolvedValue({ error: null }) }
+        return { eq: mockUpdateEq }
       }),
     })),
   },
@@ -52,6 +54,7 @@ vi.stubGlobal('Audio', MockAudio)
 beforeEach(() => {
   vi.clearAllMocks()
   mockSingle.mockReset()
+  mockUpdateEq.mockResolvedValue({ error: null })
 })
 
 describe('useSeniorVoiceSettings.loadSettings', () => {
@@ -122,6 +125,26 @@ describe('useSeniorVoiceSettings.saveSettings', () => {
       await result.current.saveSettings('user-123', { voice: 'noyj', speed: 'normal', speech_style: 'counselor' })
     })
     expect(mockUpdate).toHaveBeenCalledWith({ tts_voice: 'noyj', tts_speed: 'normal', speech_style: 'counselor' })
+  })
+
+  it('저장 성공 시 true를 반환한다', async () => {
+    const { result } = renderHook(() => useSeniorVoiceSettings())
+    let ret: boolean | undefined
+    await act(async () => {
+      ret = await result.current.saveSettings('user-123', { voice: 'vara', speed: 'normal', speech_style: 'counselor' })
+    })
+    expect(ret).toBe(true)
+  })
+
+  it('DB 에러 시 false를 반환하고 error 메시지를 설정한다', async () => {
+    mockUpdateEq.mockResolvedValueOnce({ error: { message: 'db error', code: 'PGRST500' } })
+    const { result } = renderHook(() => useSeniorVoiceSettings())
+    let ret: boolean | undefined
+    await act(async () => {
+      ret = await result.current.saveSettings('user-123', { voice: 'vara', speed: 'normal', speech_style: 'counselor' })
+    })
+    expect(ret).toBe(false)
+    expect(result.current.error).toBe('저장에 실패했어요. 잠시 후 다시 시도해 주세요.')
   })
 })
 

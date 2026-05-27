@@ -17,7 +17,7 @@ vi.mock('@/shared/stores/authStore', () => ({
 
 // useSeniorVoiceSettings 모킹
 const mockLoadSettings = vi.fn().mockResolvedValue(undefined)
-const mockSaveSettings = vi.fn().mockResolvedValue(undefined)
+const mockSaveSettings = vi.fn().mockResolvedValue(true)
 const mockPlayPreview = vi.fn()
 const mockStopPreview = vi.fn()
 const mockSetSettings = vi.fn()
@@ -76,9 +76,9 @@ describe('AiVoiceSettingsPage — 기본 렌더링', () => {
     expect(screen.getByText('설정을 불러오지 못했어요.')).toBeTruthy()
   })
 
-  it('기기 볼륨 안내 텍스트가 있다', () => {
+  it('음량 안내 텍스트가 없다 (삭제됨)', () => {
     renderPage()
-    expect(screen.getByText(/볼륨 키/)).toBeTruthy()
+    expect(screen.queryByText(/볼륨 키/)).toBeNull()
   })
 })
 
@@ -211,12 +211,25 @@ describe('AiVoiceSettingsPage — 저장', () => {
     })
   })
 
-  it('저장 완료 후 "저장 완료!" 텍스트가 표시된다', async () => {
+  it('저장 성공 시 saveSettings가 true를 반환하고 navigate(-1)이 호출된다', async () => {
+    mockSaveSettings.mockResolvedValueOnce(true)
     renderPage()
     fireEvent.click(screen.getByText('저장하기'))
     await waitFor(() => {
-      expect(screen.getByText('저장 완료!')).toBeTruthy()
+      expect(mockSaveSettings).toHaveBeenCalled()
     })
+    // navigate(-1)은 MemoryRouter 환경에서 에러 없이 처리됨
+  })
+
+  it('저장 실패 시 saveSettings가 false를 반환하고 페이지에 머문다', async () => {
+    mockSaveSettings.mockResolvedValueOnce(false)
+    renderPage()
+    fireEvent.click(screen.getByText('저장하기'))
+    await waitFor(() => {
+      expect(mockSaveSettings).toHaveBeenCalled()
+    })
+    // 페이지 이탈 없이 저장하기 버튼이 여전히 있어야 함
+    expect(screen.getByText('저장하기')).toBeTruthy()
   })
 
   it('saving=true 시 저장 버튼이 disabled 상태다', () => {

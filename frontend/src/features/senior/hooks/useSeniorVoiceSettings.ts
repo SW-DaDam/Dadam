@@ -26,7 +26,7 @@ interface UseSeniorVoiceSettingsReturn {
   playingKey: string | null           // "{voice}_{speed}" — 재생 중인 샘플 식별
   setSettings: (s: TtsSettings) => void
   loadSettings: (userId: string) => Promise<void>
-  saveSettings: (userId: string, s: TtsSettings) => Promise<void>
+  saveSettings: (userId: string, s: TtsSettings) => Promise<boolean>
   playPreview: (voice: TtsVoice, speed: TtsSpeed) => void
   stopPreview: () => void
 }
@@ -71,8 +71,8 @@ export function useSeniorVoiceSettings(): UseSeniorVoiceSettingsReturn {
     }
   }, [])
 
-  // senior_profiles tts_voice/tts_speed 업데이트
-  const saveSettings = useCallback(async (userId: string, s: TtsSettings) => {
+  // senior_profiles tts_voice/tts_speed 업데이트 — 성공 시 true, 실패 시 false 반환
+  const saveSettings = useCallback(async (userId: string, s: TtsSettings): Promise<boolean> => {
     setSaving(true)
     setError(null)
     try {
@@ -83,8 +83,10 @@ export function useSeniorVoiceSettings(): UseSeniorVoiceSettingsReturn {
 
       if (dbError) throw dbError
       setSettings(s)
+      return true
     } catch {
       setError('저장에 실패했어요. 잠시 후 다시 시도해 주세요.')
+      return false
     } finally {
       setSaving(false)
     }
