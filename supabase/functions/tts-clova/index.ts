@@ -28,8 +28,8 @@ const JWT_AUDIENCE = 'authenticated'
 // JWKS는 모듈 스코프에서 1회 생성 → 공개키가 자동 캐싱되어 매 호출마다 fetch 안 함
 const JWKS = jose.createRemoteJWKSet(new URL(`${JWT_ISSUER}/.well-known/jwks.json`))
 
-// 허용 speaker 목록 — 여성: nyejin/noyj/vara, 남성: nminsang/nsiyoon/vian
-const VALID_SPEAKERS = ['nyejin', 'noyj', 'vara', 'nminsang', 'nsiyoon', 'vian'] as const
+// 허용 speaker 목록 — 여성: nyuna/noyj/vara, 남성: nminsang/nsiyoon/vian
+const VALID_SPEAKERS = ['nyuna', 'noyj', 'vara', 'nminsang', 'nsiyoon', 'vian'] as const
 // 허용 speed 목록 (DB enum과 동일)
 const VALID_SPEEDS = ['slow', 'normal', 'fast'] as const
 

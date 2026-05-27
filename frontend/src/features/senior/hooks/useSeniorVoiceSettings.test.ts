@@ -1,6 +1,6 @@
 // useSeniorVoiceSettings 테스트
 // 핵심 검증 포인트:
-// 1. loadSettings: 유효 voice 적용, 유효하지 않은 voice는 디폴트(noyj)로 폴백
+// 1. loadSettings: 유효 voice 적용, 유효하지 않은 voice는 디폴트(vara)로 폴백
 // 2. saveSettings: DB update payload 검증
 // 3. playPreview/stopPreview: audio 제어 검증
 
@@ -69,7 +69,7 @@ describe('useSeniorVoiceSettings.loadSettings', () => {
   })
 
   it('6종 voice 모두 유효한 값으로 적용된다', async () => {
-    const validVoices = ['nyejin', 'noyj', 'vara', 'nminsang', 'nsiyoon', 'vian'] as const
+    const validVoices = ['nyuna', 'noyj', 'vara', 'nminsang', 'nsiyoon', 'vian'] as const
 
     for (const voice of validVoices) {
       mockSingle.mockResolvedValueOnce({
@@ -82,7 +82,7 @@ describe('useSeniorVoiceSettings.loadSettings', () => {
     }
   })
 
-  it('DB에 유효하지 않은 voice가 있으면 기본값(noyj)으로 폴백한다', async () => {
+  it('DB에 유효하지 않은 voice가 있으면 기본값(vara)으로 폴백한다', async () => {
     mockSingle.mockResolvedValueOnce({
       data: { tts_voice: 'unknown_voice', tts_speed: 'normal', speech_style: 'counselor' },
       error: null,
@@ -91,7 +91,7 @@ describe('useSeniorVoiceSettings.loadSettings', () => {
     const { result } = renderHook(() => useSeniorVoiceSettings())
     await act(async () => { await result.current.loadSettings('user-123') })
 
-    expect(result.current.settings.voice).toBe('noyj')
+    expect(result.current.settings.voice).toBe('vara')
   })
 
   it('DB 조회 에러 시 에러 메시지를 설정한다', async () => {
@@ -144,8 +144,8 @@ describe('useSeniorVoiceSettings.playPreview', () => {
 
   it('다른 voice 카드 클릭 시 기존 audio를 정지하고 새 audio를 재생한다', async () => {
     const { result } = renderHook(() => useSeniorVoiceSettings())
-    await act(async () => { result.current.playPreview('nyejin', 'normal') })
-    expect(result.current.playingKey).toBe('nyejin_normal')
+    await act(async () => { result.current.playPreview('nyuna', 'normal') })
+    expect(result.current.playingKey).toBe('nyuna_normal')
 
     await act(async () => { result.current.playPreview('nminsang', 'normal') })
     expect(mockAudioPause).toHaveBeenCalledTimes(1) // 기존 정지

@@ -7,7 +7,7 @@ import { getSampleUrl } from '@/lib/ai/ttsClovaClient'
 import type { TtsVoice, TtsSpeed, TtsSettings, SpeechStyle } from '@/types/domain'
 
 // DB에서 읽은 값을 TtsVoice/TtsSpeed/SpeechStyle로 좁히는 타입 가드
-const VALID_VOICES: TtsVoice[] = ['nyejin', 'noyj', 'vara', 'nminsang', 'nsiyoon', 'vian']
+const VALID_VOICES: TtsVoice[] = ['nyuna', 'noyj', 'vara', 'nminsang', 'nsiyoon', 'vian']
 const VALID_SPEEDS: TtsSpeed[] = ['slow', 'normal', 'fast']
 const VALID_STYLES: SpeechStyle[] = ['counselor', 'friend']
 
@@ -15,8 +15,8 @@ function isVoice(v: string): v is TtsVoice { return (VALID_VOICES as string[]).i
 function isSpeed(s: string): s is TtsSpeed { return (VALID_SPEEDS as string[]).includes(s) }
 function isStyle(s: string): s is SpeechStyle { return (VALID_STYLES as string[]).includes(s) }
 
-// 디폴트: 봄달(noyj), 속도 normal(Clova speed 0), 상담사 말투
-const DEFAULT_SETTINGS: TtsSettings = { voice: 'noyj', speed: 'normal', speech_style: 'counselor' }
+// 디폴트: 아라(vara), 속도 normal(Clova speed 0), 상담사 말투
+const DEFAULT_SETTINGS: TtsSettings = { voice: 'vara', speed: 'normal', speech_style: 'counselor' }
 
 interface UseSeniorVoiceSettingsReturn {
   settings: TtsSettings

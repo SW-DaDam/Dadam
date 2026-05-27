@@ -2,8 +2,8 @@
  * TTS 미리듣기 샘플 사전 생성 스크립트 (1회성)
  *
  * Phase 2: 6개 voice × 3개 speed = 18개 MP3 생성
- * 여성: nyejin(예진), noyj(봄달), vara(아라/Pro)
- * 남성: nminsang(민상), nsiyoon(시윤), vian(이안/Pro)
+ * 여성: nyuna(유나), noyj(봄달), vara(아라)
+ * 남성: nminsang(민상), nsiyoon(시윤), vian(이안)
  *
  * Naver Clova Voice Premium TTS API 사용 → Supabase Storage tts-samples 버킷 업로드
  *
@@ -27,8 +27,8 @@ dotenv.config({ path: path.join(ROOT, 'frontend/.env.local') })
 dotenv.config({ path: path.join(ROOT, 'supabase/functions/.env.local') })
 
 // ── 상수 ──────────────────────────────────────────────────────
-// Phase 2: 6종 확정 (NCP 콘솔 청취 기준)
-const VOICES = ['nyejin', 'noyj', 'vara', 'nminsang', 'nsiyoon', 'vian'] as const
+// Phase 2 확정 (NCP 콘솔 청취 기준) — 유나로 예진 교체
+const VOICES = ['nyuna', 'noyj', 'vara', 'nminsang', 'nsiyoon', 'vian'] as const
 const SPEEDS = ['slow', 'normal', 'fast'] as const
 
 // Clova speed 매핑 — Edge Function tts-clova/index.ts의 CLOVA_SPEED_MAP과 동일하게 유지
@@ -39,8 +39,8 @@ const CLOVA_SPEED_MAP: Record<typeof SPEEDS[number], number> = {
   fast: -2,
 }
 
-// Phase 1에서 사용하던 화자 — 샘플 파일 삭제 대상
-const DEPRECATED_VOICES = ['ngoeun'] as const
+// 더 이상 사용하지 않는 화자 — 샘플 파일 삭제 대상
+const DEPRECATED_VOICES = ['ngoeun', 'nyejin'] as const
 
 const SAMPLE_TEXT = '안녕하세요! 저는 어르신과 매일 이야기 나누는 AI 친구예요.'
 const BUCKET_NAME = 'tts-samples'

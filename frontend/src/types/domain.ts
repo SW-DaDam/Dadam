@@ -66,7 +66,7 @@ export type ChapterWithComments = Chapter & {
  * 여성: nyejin(예진/일반), noyj(봄달/일반), vara(아라/Pro)
  * 남성: nminsang(민상/일반), nsiyoon(시윤/일반), vian(이안/Pro)
  */
-export type TtsVoice = 'nyejin' | 'noyj' | 'vara' | 'nminsang' | 'nsiyoon' | 'vian'
+export type TtsVoice = 'nyuna' | 'noyj' | 'vara' | 'nminsang' | 'nsiyoon' | 'vian'
 
 /** TTS 말하기 속도 — Edge Function에서 Clova speed(-5~10)로 매핑 */
 export type TtsSpeed = 'slow' | 'normal' | 'fast'

@@ -1,5 +1,6 @@
-// AiVoiceSettingsPage 테스트 (Phase 2)
-// 6종 voice 카드 그리드 · speed 섹션 · 미리듣기 배너 · 저장 바 · 음량 안내 검증
+// AiVoiceSettingsPage 테스트 (Phase 2 — 성별 탭 UI)
+// 구조: 성별 탭(여성/남성) 선택 후 3종 카드 표시, 개별 듣기 버튼/PRO 배지 없음
+// 배너 "들어보기" 버튼만 유지
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
@@ -22,7 +23,7 @@ const mockStopPreview = vi.fn()
 const mockSetSettings = vi.fn()
 
 let mockSettingsState: { voice: TtsVoice; speed: TtsSpeed; speech_style: SpeechStyle } = {
-  voice: 'noyj',
+  voice: 'vara',  // 디폴트: 아라
   speed: 'normal',
   speech_style: 'counselor',
 }
@@ -56,7 +57,7 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockSettingsState = { voice: 'noyj', speed: 'normal', speech_style: 'counselor' }
+  mockSettingsState = { voice: 'vara', speed: 'normal', speech_style: 'counselor' }
   mockPlayingKey = null
   mockSaving = false
   mockLoading = false
@@ -81,81 +82,98 @@ describe('AiVoiceSettingsPage — 기본 렌더링', () => {
   })
 })
 
-describe('AiVoiceSettingsPage — voice 카드 그리드', () => {
-  it('6종 화자 이름이 모두 렌더링된다', () => {
+describe('AiVoiceSettingsPage — 성별 탭 + voice 카드', () => {
+  it('여성/남성 탭 버튼이 렌더링된다', () => {
     renderPage()
-    expect(screen.getByText('예진')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '여성' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '남성' })).toBeTruthy()
+  })
+
+  it('vara(아라) 선택 상태 → 여성 탭이 활성화되고 여성 3종이 보인다', () => {
+    // mockSettingsState.voice = 'vara' (여성)
+    renderPage()
+    // 여성 카드 3종
+    expect(screen.getByText('유나')).toBeTruthy()
     expect(screen.getByText('봄달')).toBeTruthy()
     expect(screen.getByText('아라')).toBeTruthy()
+    // 남성 카드는 보이지 않음
+    expect(screen.queryByText('민상')).toBeNull()
+  })
+
+  it('남성 탭 클릭 시 남성 3종 카드로 전환된다', () => {
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: '남성' }))
     expect(screen.getByText('민상')).toBeTruthy()
     expect(screen.getByText('시윤')).toBeTruthy()
     expect(screen.getByText('이안')).toBeTruthy()
+    // 여성 카드는 보이지 않음
+    expect(screen.queryByText('유나')).toBeNull()
   })
 
-  it('여성/남성 섹션 레이블이 렌더링된다', () => {
+  it('PRO 배지가 없다', () => {
     renderPage()
-    expect(screen.getByText('여성')).toBeTruthy()
-    expect(screen.getByText('남성')).toBeTruthy()
+    expect(screen.queryByText('PRO')).toBeNull()
   })
 
-  it('Pro 화자(아라, 이안)에 PRO 배지가 표시된다', () => {
+  it('카드에 개별 듣기 버튼이 없다', () => {
     renderPage()
-    const proBadges = screen.getAllByText('PRO')
-    expect(proBadges).toHaveLength(2)
+    // 배너의 "들어보기" 버튼 1개만 존재
+    expect(screen.getAllByText('들어보기')).toHaveLength(1)
+    expect(screen.queryByText('듣기')).toBeNull()
   })
 
-  it('voice 카드 클릭 시 해당 voice가 선택된다 (pendingVoice 반영)', async () => {
+  it('voice 카드 클릭 시 해당 voice가 저장에 반영된다', async () => {
     renderPage()
-    // 예진 카드 클릭
-    fireEvent.click(screen.getByText('예진').closest('button')!)
-    // 저장 후 saveSettings에 nyejin 전달 확인
+    // 봄달 카드 클릭 (여성 탭)
+    fireEvent.click(screen.getByText('봄달').closest('button')!)
     fireEvent.click(screen.getByText('저장하기'))
     await waitFor(() => {
       expect(mockSaveSettings).toHaveBeenCalledWith(
         'user-123',
-        expect.objectContaining({ voice: 'nyejin' }),
+        expect.objectContaining({ voice: 'noyj' }),
       )
     })
   })
 
-  it('카드 듣기 버튼 클릭 시 playPreview가 해당 voice + 현재 speed로 호출된다', () => {
+  it('남성 탭 전환 후 카드 클릭 시 해당 voice가 저장에 반영된다', async () => {
     renderPage()
-    // 봄달 카드의 듣기 버튼 클릭
-    const dutkiButtons = screen.getAllByText('듣기')
-    // 봄달은 FEMALE_VOICES[1] → 2번째 듣기 버튼
-    fireEvent.click(dutkiButtons[1])
-    expect(mockPlayPreview).toHaveBeenCalledWith('noyj', 'normal')
+    fireEvent.click(screen.getByRole('button', { name: '남성' }))
+    fireEvent.click(screen.getByText('민상').closest('button')!)
+    fireEvent.click(screen.getByText('저장하기'))
+    await waitFor(() => {
+      expect(mockSaveSettings).toHaveBeenCalledWith(
+        'user-123',
+        expect.objectContaining({ voice: 'nminsang' }),
+      )
+    })
   })
 
-  it('재생 중인 카드 정지 버튼 클릭 시 stopPreview가 호출된다', () => {
-    mockPlayingKey = 'vian_normal'
+  it('nminsang 설정 로드 시 남성 탭이 초기 활성화된다', () => {
+    mockSettingsState = { voice: 'nminsang', speed: 'normal', speech_style: 'counselor' }
     renderPage()
-    const stopBtns = screen.getAllByText('정지')
-    fireEvent.click(stopBtns[0])
-    expect(mockStopPreview).toHaveBeenCalled()
+    // 남성 탭이 활성 → 민상이 보여야 함
+    expect(screen.getByText('민상')).toBeTruthy()
+    expect(screen.queryByText('유나')).toBeNull()
   })
 })
 
 describe('AiVoiceSettingsPage — 미리듣기 배너', () => {
-  it('선택된 voice 이름이 배너에 표시된다', () => {
+  it('선택된 voice 이름(아라)과 speed가 배너에 표시된다', () => {
     renderPage()
-    // 봄달이 선택된 상태 — 카드 + 배너 두 곳에 노출됨
-    const elements = screen.getAllByText(/봄달/)
-    expect(elements.length).toBeGreaterThanOrEqual(1)
+    // 배너 서브텍스트 "아라 · 보통" 형태 — 가운데 점 포함 문자열로 검증
+    expect(screen.getByText(/아라\s*·\s*보통/)).toBeTruthy()
   })
 
   it('배너 들어보기 클릭 시 playPreview가 현재 voice + speed로 호출된다', () => {
     renderPage()
     fireEvent.click(screen.getByText('들어보기'))
-    expect(mockPlayPreview).toHaveBeenCalledWith('noyj', 'normal')
+    expect(mockPlayPreview).toHaveBeenCalledWith('vara', 'normal')
   })
 
   it('배너 재생 중일 때 정지 버튼 클릭 시 stopPreview가 호출된다', () => {
-    mockPlayingKey = 'noyj_normal'
+    mockPlayingKey = 'vara_normal'
     renderPage()
-    // 배너의 정지 버튼 (첫 번째 정지 버튼이 배너)
-    const stopBtns = screen.getAllByText('정지')
-    fireEvent.click(stopBtns[0])
+    fireEvent.click(screen.getByText('정지'))
     expect(mockStopPreview).toHaveBeenCalled()
   })
 })
@@ -182,13 +200,13 @@ describe('AiVoiceSettingsPage — speed 선택', () => {
 })
 
 describe('AiVoiceSettingsPage — 저장', () => {
-  it('저장하기 버튼 클릭 시 saveSettings가 현재 설정으로 호출된다', async () => {
+  it('저장하기 버튼 클릭 시 saveSettings가 현재 설정(vara/normal)으로 호출된다', async () => {
     renderPage()
     fireEvent.click(screen.getByText('저장하기'))
     await waitFor(() => {
       expect(mockSaveSettings).toHaveBeenCalledWith(
         'user-123',
-        { voice: 'noyj', speed: 'normal', speech_style: 'counselor' },
+        { voice: 'vara', speed: 'normal', speech_style: 'counselor' },
       )
     })
   })

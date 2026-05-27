@@ -101,7 +101,7 @@ describe('getSampleUrl', () => {
   })
 
   it('6종 voice × 3 speed 모두 올바른 파일명을 만든다', () => {
-    const voices = ['nyejin', 'noyj', 'vara', 'nminsang', 'nsiyoon', 'vian'] as const
+    const voices = ['nyuna', 'noyj', 'vara', 'nminsang', 'nsiyoon', 'vian'] as const
     const speeds = ['slow', 'normal', 'fast'] as const
     for (const v of voices) {
       for (const s of speeds) {

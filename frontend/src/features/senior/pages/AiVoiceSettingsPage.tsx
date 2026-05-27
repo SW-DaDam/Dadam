@@ -27,19 +27,20 @@ const SPEECH_STYLE_META: Record<SpeechStyle, { label: string; desc: string; exam
   },
 }
 
-// 화자 메타데이터 — NCP 콘솔 청취 기준 6종
-const VOICE_META: Record<TtsVoice, { label: string; gender: '여성' | '남성'; isPro: boolean }> = {
-  nyejin:   { label: '예진',  gender: '여성', isPro: false },
-  noyj:     { label: '봄달',  gender: '여성', isPro: false },
-  vara:     { label: '아라',  gender: '여성', isPro: true  },
-  nminsang: { label: '민상',  gender: '남성', isPro: false },
-  nsiyoon:  { label: '시윤',  gender: '남성', isPro: false },
-  vian:     { label: '이안',  gender: '남성', isPro: true  },
+// 화자 메타데이터 — 이름과 성별만 관리 (PRO 구분 표시 없음)
+const VOICE_META: Record<TtsVoice, { label: string; gender: '여성' | '남성' }> = {
+  nyuna:    { label: '유나',  gender: '여성' },
+  noyj:     { label: '봄달',  gender: '여성' },
+  vara:     { label: '아라',  gender: '여성' },
+  nminsang: { label: '민상',  gender: '남성' },
+  nsiyoon:  { label: '시윤',  gender: '남성' },
+  vian:     { label: '이안',  gender: '남성' },
 }
 
-// 설정 UI 표시 순서 (성별 그룹 순)
-const FEMALE_VOICES: TtsVoice[] = ['nyejin', 'noyj', 'vara']
+const FEMALE_VOICES: TtsVoice[] = ['nyuna', 'noyj', 'vara']
 const MALE_VOICES: TtsVoice[]   = ['nminsang', 'nsiyoon', 'vian']
+
+type GenderTab = 'female' | 'male'
 
 export default function AiVoiceSettingsPage() {
   const navigate = useNavigate()
@@ -67,9 +68,19 @@ export default function AiVoiceSettingsPage() {
   const selectedSpeed = pendingSpeed ?? settings.speed
   const selectedSpeechStyle = pendingSpeechStyle ?? settings.speech_style
 
+  // 성별 탭 — 현재 선택된 목소리 성별로 초기화
+  const [genderTab, setGenderTab] = useState<GenderTab>(() =>
+    FEMALE_VOICES.includes(settings.voice) ? 'female' : 'male',
+  )
+
   useEffect(() => {
     if (userId) void loadSettings(userId)
   }, [userId, loadSettings])
+
+  // settings 로드 완료 후 탭도 맞춰줌
+  useEffect(() => {
+    setGenderTab(FEMALE_VOICES.includes(settings.voice) ? 'female' : 'male')
+  }, [settings.voice])
 
   const handleSave = async () => {
     if (!userId) return
@@ -97,76 +108,18 @@ export default function AiVoiceSettingsPage() {
     }
   }
 
-  // 카드 미리듣기 — 해당 voice × 현재 선택된 speed
-  const handleVoicePreview = (voice: TtsVoice, e: React.MouseEvent) => {
-    e.stopPropagation() // 카드 선택 이벤트 차단
-    const key = `${voice}_${selectedSpeed}`
-    if (playingKey === key) {
-      stopPreview()
-    } else {
-      playPreview(voice, selectedSpeed)
+  // 성별 탭 전환 — 전환 시 해당 성별의 첫 번째 목소리를 pending으로 설정
+  // (단, 이미 해당 성별 목소리가 선택된 경우엔 유지)
+  const handleGenderTab = (tab: GenderTab) => {
+    setGenderTab(tab)
+    const voices = tab === 'female' ? FEMALE_VOICES : MALE_VOICES
+    const current = pendingVoice ?? settings.voice
+    if (!voices.includes(current)) {
+      setPendingVoice(voices[0])
     }
   }
 
-  // 화자 카드 렌더링 헬퍼
-  const renderVoiceCard = (voice: TtsVoice) => {
-    const meta = VOICE_META[voice]
-    const isSelected = selectedVoice === voice
-    const cardKey = `${voice}_${selectedSpeed}`
-    const isPlaying = playingKey === cardKey
-
-    return (
-      <button
-        key={voice}
-        type="button"
-        onClick={() => setPendingVoice(voice)}
-        className={cn(
-          'flex flex-col items-center gap-2 bg-white border-2 rounded-2xl px-3 py-3 transition-colors relative',
-          isSelected ? 'border-[#E8820C] bg-[#FFFAF5]' : 'border-[#E5E7EB]',
-        )}
-      >
-        {/* 선택 체크마크 */}
-        {isSelected && (
-          <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-[#E8820C] flex items-center justify-center">
-            <span className="text-[10px] text-white font-bold">✓</span>
-          </div>
-        )}
-
-        {/* 화자 이름 */}
-        <p className={cn(
-          'text-[1.125rem] font-medium',
-          isSelected ? 'text-[#E8820C]' : 'text-[#1F2937]',
-        )}>
-          {meta.label}
-        </p>
-
-        {/* Pro 배지 */}
-        {meta.isPro && (
-          <span className="bg-[#6366F1] rounded px-1.5 py-0.5 text-[10px] text-white font-bold leading-none">
-            PRO
-          </span>
-        )}
-
-        {/* 미리듣기 버튼 */}
-        <button
-          type="button"
-          onClick={(e) => handleVoicePreview(voice, e)}
-          disabled={loading}
-          className={cn(
-            'flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm transition-colors min-h-9 disabled:opacity-50',
-            isPlaying
-              ? 'bg-[#E8820C] text-white'
-              : 'bg-[#F3F4F6] text-[#6B7280]',
-          )}
-        >
-          {isPlaying
-            ? <><Square size={11} className="fill-white" /><span>정지</span></>
-            : <><Play size={11} className="fill-[#6B7280]" /><span>듣기</span></>
-          }
-        </button>
-      </button>
-    )
-  }
+  const voicesForTab = genderTab === 'female' ? FEMALE_VOICES : MALE_VOICES
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -249,24 +202,60 @@ export default function AiVoiceSettingsPage() {
           </button>
         </div>
 
-        {/* 목소리 선택 — 6종 카드 그리드 */}
-        <div className="flex flex-col gap-2">
+        {/* 목소리 선택 — 성별 탭 + 3종 카드 */}
+        <div className="flex flex-col gap-3">
           <p className="text-base text-[#6B7280] px-1">목소리</p>
 
-          {/* 여성 그룹 */}
-          <div className="flex flex-col gap-2">
-            <p className="text-sm text-[#9CA3AF] px-1">여성</p>
-            <div className="grid grid-cols-3 gap-2">
-              {FEMALE_VOICES.map(renderVoiceCard)}
-            </div>
+          {/* 성별 탭 */}
+          <div className="flex bg-[#F3F4F6] rounded-xl p-1 gap-1">
+            {(['female', 'male'] as GenderTab[]).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => handleGenderTab(tab)}
+                className={cn(
+                  'flex-1 py-2.5 rounded-lg text-[1.125rem] font-medium transition-colors',
+                  genderTab === tab
+                    ? 'bg-white text-[#1F2937] shadow-sm'
+                    : 'text-[#9CA3AF]',
+                )}
+              >
+                {tab === 'female' ? '여성' : '남성'}
+              </button>
+            ))}
           </div>
 
-          {/* 남성 그룹 */}
-          <div className="flex flex-col gap-2 mt-1">
-            <p className="text-sm text-[#9CA3AF] px-1">남성</p>
-            <div className="grid grid-cols-3 gap-2">
-              {MALE_VOICES.map(renderVoiceCard)}
-            </div>
+          {/* 선택된 성별의 3종 카드 */}
+          <div className="grid grid-cols-3 gap-2">
+            {voicesForTab.map((voice) => {
+              const isSelected = selectedVoice === voice
+              return (
+                <button
+                  key={voice}
+                  type="button"
+                  onClick={() => setPendingVoice(voice)}
+                  className={cn(
+                    'flex flex-col items-center justify-center py-5 rounded-2xl border-2 transition-colors relative',
+                    isSelected
+                      ? 'border-[#E8820C] bg-[#FFFAF5]'
+                      : 'border-[#E5E7EB] bg-white',
+                  )}
+                >
+                  {/* 선택 체크마크 */}
+                  {isSelected && (
+                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-[#E8820C] flex items-center justify-center">
+                      <span className="text-[10px] text-white font-bold">✓</span>
+                    </div>
+                  )}
+                  <p className={cn(
+                    'text-[1.125rem] font-medium',
+                    isSelected ? 'text-[#E8820C]' : 'text-[#1F2937]',
+                  )}>
+                    {VOICE_META[voice].label}
+                  </p>
+                </button>
+              )
+            })}
           </div>
         </div>
 
