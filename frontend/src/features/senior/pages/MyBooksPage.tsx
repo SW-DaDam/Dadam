@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router'
-import { Edit3, Trash2, X, ChevronLeft, ChevronRight, Loader2, BookOpen } from 'lucide-react'
+import { Edit3, Trash2, X, ChevronLeft, ChevronRight, Loader2, BookOpen, Pencil } from 'lucide-react'
 import { useBookshelf } from '@/features/bookshelf/hooks/useBookshelf'
 import { TopicSelectionModal, type TopicCandidate } from '@/features/bookshelf/components/TopicSelectionModal'
 import { useAuthStore } from '@/shared/stores/authStore'
@@ -39,7 +39,7 @@ function getPalette(month: number) {
 
 export default function MyBooksPage() {
   const navigate = useNavigate()
-  const { monthlyBooks, shortBooks, loading, refresh, deleteBook } = useBookshelf()
+  const { monthlyBooks, shortBooks, loading, refresh, deleteBook, updateBookTitle } = useBookshelf()
   const user = useAuthStore((s) => s.user)
 
   // 연/월 선택 모달 (월간 책)
@@ -65,6 +65,35 @@ export default function MyBooksPage() {
   // 책 삭제 확인 모달
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  // 책 제목 편집 모달 — 카드의 작은 연필 버튼 클릭으로 진입
+  const [titleEditTarget, setTitleEditTarget] = useState<{ id: string; title: string } | null>(null)
+  const [titleEditInput, setTitleEditInput] = useState('')
+  const [titleSaving, setTitleSaving] = useState(false)
+
+  function openTitleEdit(book: { id: string; title: string }) {
+    setTitleEditTarget(book)
+    setTitleEditInput(book.title)
+  }
+
+  async function handleSaveTitle() {
+    if (!titleEditTarget) return
+    const next = titleEditInput.trim()
+    // 빈 문자열 또는 기존과 동일하면 무시 (불필요한 DB 호출 방지)
+    if (!next || next === titleEditTarget.title) {
+      setTitleEditTarget(null)
+      return
+    }
+    setTitleSaving(true)
+    try {
+      await updateBookTitle(titleEditTarget.id, next)
+      setTitleEditTarget(null)
+    } catch {
+      setGenError('제목 변경에 실패했어요. 다시 시도해 주세요')
+    } finally {
+      setTitleSaving(false)
+    }
+  }
 
   async function handleDeleteBook() {
     if (!deleteTarget) return
@@ -297,6 +326,7 @@ export default function MyBooksPage() {
               <DraftBookCard
                 book={monthlyDraftBook}
                 onContinue={() => navigate(`/s/books/${monthlyDraftBook.id}/edit`)}
+                onEditTitle={() => openTitleEdit(monthlyDraftBook)}
               />
             )}
 
@@ -312,6 +342,7 @@ export default function MyBooksPage() {
                     book={book}
                     onEdit={() => navigate(`/s/books/${book.id}/edit`)}
                     onDelete={() => setDeleteTarget({ id: book.id, title: book.title })}
+                    onEditTitle={() => openTitleEdit(book)}
                   />
                 ))}
               </div>
@@ -329,6 +360,7 @@ export default function MyBooksPage() {
               <DraftBookCard
                 book={shortDraftBook}
                 onContinue={() => navigate(`/s/books/${shortDraftBook.id}/edit`)}
+                onEditTitle={() => openTitleEdit(shortDraftBook)}
                 label="단편"
                 accentColor="#FACC15"
                 isShort
@@ -347,6 +379,7 @@ export default function MyBooksPage() {
                     book={book}
                     onEdit={() => navigate(`/s/books/${book.id}/edit`)}
                     onDelete={() => setDeleteTarget({ id: book.id, title: book.title })}
+                    onEditTitle={() => openTitleEdit(book)}
                     isShort
                   />
                 ))}
@@ -356,6 +389,48 @@ export default function MyBooksPage() {
         )}
 
       </main>
+
+      {/* ── 책 제목 편집 모달 ────────────────────────────────── */}
+      {titleEditTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div
+            className="absolute inset-0 bg-[#1F2937] opacity-45"
+            onClick={() => !titleSaving && setTitleEditTarget(null)}
+          />
+          <div className="relative bg-white rounded-2xl w-full max-w-sm p-6 flex flex-col gap-4 z-10">
+            <p className="text-[1.25rem] font-bold text-[#1F2937] text-center">책 제목 수정</p>
+            <input
+              type="text"
+              value={titleEditInput}
+              onChange={(e) => setTitleEditInput(e.target.value)}
+              autoFocus
+              maxLength={60}
+              placeholder="새 제목을 입력하세요"
+              className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-4 py-3 text-[1.0625rem] text-[#1F2937] outline-none focus:border-[#E8820C]"
+            />
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setTitleEditTarget(null)}
+                disabled={titleSaving}
+                className="flex-1 bg-[#F3F4F6] rounded-xl py-3 text-center min-h-11 disabled:opacity-40"
+              >
+                <span className="text-[1.0625rem] text-[#6B7280]">취소</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveTitle}
+                disabled={titleSaving || !titleEditInput.trim()}
+                className="flex-1 bg-[#E8820C] rounded-xl py-3 text-center min-h-11 disabled:opacity-50"
+              >
+                <span className="text-[1.0625rem] text-white">
+                  {titleSaving ? '저장 중…' : '저장'}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── 책 삭제 확인 모달 ────────────────────────────────── */}
       {deleteTarget && (
@@ -503,12 +578,14 @@ export default function MyBooksPage() {
 function DraftBookCard({
   book,
   onContinue,
+  onEditTitle,
   label = '작성 중',
   accentColor = '#E8820C',
   isShort = false,
 }: {
   book: { id: string; title: string; year: number; month: number; chapterCount: number }
   onContinue: () => void
+  onEditTitle?: () => void
   label?: string
   accentColor?: string
   isShort?: boolean
@@ -532,10 +609,23 @@ function DraftBookCard({
         </div>
 
         {/* 책 정보 */}
-        <div className="flex-1 flex flex-col justify-between">
+        <div className="flex-1 flex flex-col justify-between min-w-0">
           <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <p className="text-[1.25rem] text-[#1F2937]">{book.title}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* 제목 + 작은 연필 아이콘 — BookEditPage 챕터명 편집과 동일 패턴 */}
+              {onEditTitle ? (
+                <button
+                  type="button"
+                  onClick={onEditTitle}
+                  aria-label="제목 수정"
+                  className="flex items-center gap-2 text-left group"
+                >
+                  <p className="text-[1.25rem] text-[#1F2937] transition-colors group-hover:opacity-70">{book.title}</p>
+                  <Pencil size={14} className="text-[#D1D5DB] shrink-0 transition-colors group-hover:opacity-70" />
+                </button>
+              ) : (
+                <p className="text-[1.25rem] text-[#1F2937]">{book.title}</p>
+              )}
               <span className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${accentColor}20` }}>
                 <span className="text-xs" style={{ color: accentColor }}>{label}</span>
               </span>
@@ -569,11 +659,13 @@ function PublishedBookCard({
   book,
   onEdit,
   onDelete,
+  onEditTitle,
   isShort = false,
 }: {
   book: { id: string; title: string; year: number; month: number; chapterCount: number }
   onEdit: () => void
   onDelete?: () => void
+  onEditTitle?: () => void
   isShort?: boolean
 }) {
   const palette = isShort ? SHORT_BOOK_PALETTE : getPalette(book.month)
@@ -596,7 +688,22 @@ function PublishedBookCard({
 
       {/* 정보 */}
       <div className="flex-1 flex flex-col justify-center gap-0.5 min-w-0">
-        <p className="text-[1.0625rem] text-[#1F2937]">{book.title}</p>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {/* 제목 + 작은 연필 아이콘 — BookEditPage 챕터명 편집과 동일 패턴 */}
+          {onEditTitle ? (
+            <button
+              type="button"
+              onClick={onEditTitle}
+              aria-label="제목 수정"
+              className="flex items-center gap-2 text-left group"
+            >
+              <p className="text-[1.0625rem] text-[#1F2937] transition-colors group-hover:opacity-70">{book.title}</p>
+              <Pencil size={14} className="text-[#D1D5DB] shrink-0 transition-colors group-hover:opacity-70" />
+            </button>
+          ) : (
+            <p className="text-[1.0625rem] text-[#1F2937]">{book.title}</p>
+          )}
+        </div>
         {/* 단편은 날짜·챕터 수 미표시 */}
         {!isShort && (
           <>
