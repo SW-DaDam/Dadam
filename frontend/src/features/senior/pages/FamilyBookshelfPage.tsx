@@ -46,13 +46,10 @@ export default function FamilyBookshelfPage() {
         {/* 집필/편집 중 진행 카드 */}
         {latestDraft && (
           <div className="mx-4 sm:mx-6 bg-white border border-[#E5E7EB] rounded-2xl px-5 py-4 flex flex-col gap-3">
-            <p className="text-[1.25rem] font-bold text-[#1F2937]">이번 달 내 책</p>
+            <p className="text-[1.25rem] font-bold text-[#1F2937]">편집중인 책</p>
             <div className="w-full h-2 bg-[#E5E7EB] rounded-full overflow-hidden">
               <div className="h-full bg-[#E8820C] rounded-full" style={{ width: '60%' }} />
             </div>
-            <p className="text-base text-[#6B7280]">
-              {latestDraft.status === 'editing' ? '편집 중이에요' : '집필 중이에요 · 월말에 완성돼요'}
-            </p>
             {latestDraft.status === 'editing' && (
               <button
                 type="button"

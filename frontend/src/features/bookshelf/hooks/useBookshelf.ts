@@ -63,6 +63,28 @@ export function useBookshelf() {
     setBooks((prev) => prev.filter((b) => b.id !== bookId))
   }
 
+  // 책 제목 업데이트 — books.title 컬럼만 변경 (RLS: 본인 책만 수정 가능)
+  // 가족 책장(useFamilyBookshelf)은 같은 books 테이블을 fetch하므로 다음 진입 시 자동 반영
+  //
+  // 중요: .select('id')로 affected row를 명시적으로 받아 0건 케이스를 에러로 식별.
+  // Supabase update는 RLS 필터/존재하지 않는 id로 0건 영향 시에도 error를 반환하지 않아
+  // silent 성공으로 위장됨 → UI는 "변경됨"으로 보이지만 DB는 그대로인 불일치 방지
+  async function updateBookTitle(bookId: string, title: string) {
+    const { data, error } = await supabase
+      .from('books')
+      .update({ title })
+      .eq('id', bookId)
+      .select('id')
+
+    if (error) throw new Error(error.message)
+    if (!data || data.length === 0) {
+      // RLS 차단 또는 존재하지 않는 bookId — local state는 절대 갱신하지 않음
+      throw new Error('수정 권한이 없거나 책을 찾을 수 없어요')
+    }
+    // DB 반영 확인 후에만 로컬 상태 갱신
+    setBooks((prev) => prev.map((b) => (b.id === bookId ? { ...b, title } : b)))
+  }
+
   return {
     books,
     monthlyBooks: books.filter((b) => b.book_type === 'monthly'),
@@ -70,5 +92,6 @@ export function useBookshelf() {
     loading,
     refresh,
     deleteBook,
+    updateBookTitle,
   }
 }

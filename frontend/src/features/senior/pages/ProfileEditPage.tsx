@@ -1,10 +1,24 @@
 ﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router'
 import { ChevronLeft } from 'lucide-react'
-import Toggle from '@/shared/components/Toggle'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { supabase } from '@/lib/supabase'
+
+// 성별 enum — DB senior_profiles.gender 컬럼과 동일 ('male' | 'female' | null)
+type Gender = 'male' | 'female' | null
+
+// 출생연도 유효 범위 — 회원가입 ProfileSetupPage와 동일 기준 유지
+const CURRENT_YEAR = new Date().getFullYear()
+const MIN_BIRTH_YEAR = 1900
+const MAX_BIRTH_YEAR = CURRENT_YEAR
+
+// birth_date 문자열(YYYY-MM-DD)에서 연도 4자리만 추출 — invalid 시 빈 문자열
+function extractYear(birthDate: string | null | undefined): string {
+  if (!birthDate) return ''
+  const year = birthDate.slice(0, 4)
+  return /^\d{4}$/.test(year) ? year : ''
+}
 
 // 계정 탈퇴 더블체크 모달
 function DeleteAccountModal({ onClose, onConfirm, deleting }: {
@@ -90,7 +104,9 @@ export default function ProfileEditPage() {
   const [nickname, setNickname] = useState(savedNickname)
   const [selected, setSelected] = useState(initialPreset)
   const [customInput, setCustomInput] = useState(initialPreset === '직접 입력')
-  const [commentNotif, setCommentNotif] = useState(true)
+  // 성별/출생연도 — senior_profiles에서 마운트 후 DB 조회로 채움
+  const [gender, setGender] = useState<Gender>(null)
+  const [birthYear, setBirthYear] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveResult, setSaveResult] = useState<'idle' | 'success' | 'error'>('idle')
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -114,6 +130,41 @@ export default function ProfileEditPage() {
         }
       })
   }, [user, profile, setProfile])
+
+  // senior_profiles에서 gender, birth_date 조회 — profile과 독립 테이블이라 별도 fetch 필요
+  // 의존성: user.id (string) — user 객체 자체보다 ID 문자열이 안정적
+  const userId = user?.id
+  useEffect(() => {
+    if (!userId) return
+    void supabase
+      .from('senior_profiles')
+      .select('gender, birth_date')
+      .eq('id', userId)
+      .single()
+      .then(({ data, error }) => {
+        // 에러 발생 시 silent하게 무시되던 경로 → 콘솔에 출력하여 디버깅 가능하도록
+        if (error) {
+          console.error('[ProfileEditPage] senior_profiles 로드 실패', error)
+          return
+        }
+        if (!data) return
+        // DB에는 'male'|'female' 외 값이 들어올 수 없도록 enum 제약이 있지만,
+        // 방어적으로 타입 좁히기 — 알 수 없는 값은 null로 처리
+        const g = data.gender
+        setGender(g === 'male' || g === 'female' ? g : null)
+        setBirthYear(extractYear(data.birth_date))
+      })
+  }, [userId])
+
+  function handleBirthYearChange(val: string) {
+    // 숫자만 허용 + 4자리 제한 — ProfileSetupPage와 동일 패턴
+    if (val.length <= 4) setBirthYear(val)
+  }
+
+  // 4자리 입력 시에만 범위 검증 — 입력 중인 1~3자리는 invalid 표시 안 함
+  const isBirthYearInvalid =
+    birthYear.length === 4 &&
+    (Number(birthYear) <= MIN_BIRTH_YEAR || Number(birthYear) >= MAX_BIRTH_YEAR)
 
   function handlePreset(preset: string) {
     if (preset === '직접 입력') {
@@ -143,24 +194,40 @@ export default function ProfileEditPage() {
     }
   }
 
-  // 호칭을 profiles.display_name에 저장
+  // 호칭(profiles.display_name) + 성별/출생연도(senior_profiles.gender, birth_date) 저장
+  // 단일 RPC update_senior_basic_info로 처리 — plpgsql 함수 본문은 한 트랜잭션이므로
+  // 두 테이블 UPDATE가 원자적으로 적용·롤백됨 (이전: 두 번 호출 → 둘째 실패 시 부분 커밋 발생)
   async function handleSave() {
-    if (!user || saving || !nickname.trim()) return
+    if (!user || saving || !nickname.trim() || isBirthYearInvalid) return
     setSaving(true)
     setSaveResult('idle')
-    const { data, error } = await supabase
-      .from('profiles')
-      .update({ display_name: nickname.trim() })
-      .eq('id', user.id)
-      .select()
-      .single()
+
+    // 출생연도 정규화 — 4자리 유효값이면 'YYYY-01-01', 아니면 null (회원가입과 동일 규칙)
+    const year = Number(birthYear)
+    const isValidYear = birthYear.length === 4 && year > MIN_BIRTH_YEAR && year < MAX_BIRTH_YEAR
+    const birthDate = isValidYear ? `${birthYear}-01-01` : null
+
+    // RPC 호출 — 실패 시 두 테이블 모두 롤백
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 자동 생성 타입에 RPC 시그니처 미반영
+    const { error: rpcError } = await (supabase as any).rpc('update_senior_basic_info', {
+      p_display_name: nickname.trim(),
+      p_gender: gender,
+      p_birth_date: birthDate,
+    })
+
     setSaving(false)
-    if (!error && data) {
-      setProfile(data)
-      navigate(-1)
-    } else {
+
+    if (rpcError) {
+      console.error('[ProfileEditPage] update_senior_basic_info 실패', rpcError)
       setSaveResult('error')
+      return
     }
+
+    // 로컬 store 갱신 — DB 반영 확인 후에만, 기존 profile에 display_name만 머지
+    if (profile) {
+      setProfile({ ...profile, display_name: nickname.trim() })
+    }
+    navigate(-1)
   }
 
   return (
@@ -175,7 +242,7 @@ export default function ProfileEditPage() {
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || isBirthYearInvalid}
           className="ml-auto bg-[#E8820C] rounded-lg px-4 py-1.5 min-h-11 disabled:opacity-50"
         >
           <span className="text-[1.0625rem] text-white">
@@ -202,14 +269,72 @@ export default function ProfileEditPage() {
 
       <main className="flex-1 overflow-y-auto flex flex-col gap-6 px-4 sm:px-6 py-6 w-full max-w-2xl md:max-w-none mx-auto">
 
-        {/* 이름 필드 */}
+        {/* 기본 정보 — 이름(카카오 자동) + 성별 + 출생연도를 하나의 박스로 묶음 */}
         <div className="flex flex-col gap-2">
-          <label className="text-base text-[#6B7280] px-1">이름</label>
-          <div className="bg-[#F3F4F6] border border-[#E5E7EB] rounded-xl px-4 py-3 flex items-center gap-3">
-            <span className="flex-1 text-[1.25rem] text-[#9CA3AF]">{displayName}</span>
-            <span className="bg-[#E5E7EB] rounded-lg px-3 py-1 text-sm text-[#6B7280] shrink-0">카카오에서 가져와요</span>
+          <label className="text-base text-[#6B7280] px-1">기본 정보</label>
+          <div className="bg-white border border-[#E5E7EB] rounded-2xl px-5 py-4 flex flex-col gap-4">
+
+            {/* 이름 (카카오 자동 동기화 — 읽기 전용) */}
+            <div className="flex flex-col gap-2">
+              <p className="text-base text-[#6B7280]">이름</p>
+              <div className="bg-[#F3F4F6] border border-[#E5E7EB] rounded-xl px-4 py-3 flex items-center gap-3">
+                <span className="flex-1 text-[1.25rem] text-[#9CA3AF]">{displayName}</span>
+                <span className="bg-[#E5E7EB] rounded-lg px-3 py-1 text-sm text-[#6B7280] shrink-0">카카오에서 가져와요</span>
+              </div>
+              <p className="text-sm text-[#9CA3AF]">이름은 카카오 앱에서 변경할 수 있어요</p>
+            </div>
+
+            {/* 구분선 — 카드 내부 그룹 시각적 분리 */}
+            <div className="border-t border-[#F3F4F6]" />
+
+            {/* 성별 */}
+            <div className="flex flex-col gap-2">
+              <p className="text-base text-[#6B7280]">성별</p>
+              <div className="flex gap-2">
+                {(['female', 'male'] as const).map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setGender(gender === g ? null : g)}
+                    className={cn(
+                      'flex-1 min-h-11 px-4 rounded-xl text-[1.0625rem] border transition-colors',
+                      gender === g
+                        ? 'bg-[#FFF0DC] border-[#E8820C] text-[#E8820C]'
+                        : 'bg-[#F3F4F6] border-[#E5E7EB] text-[#6B7280]',
+                    )}
+                  >
+                    {g === 'female' ? '여성' : '남성'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 출생연도 */}
+            <div className="flex flex-col gap-2">
+              <p className="text-base text-[#6B7280]">출생연도</p>
+              {isBirthYearInvalid && (
+                <p className="text-sm text-red-500">
+                  {MIN_BIRTH_YEAR + 1}년 ~ {MAX_BIRTH_YEAR - 1}년 사이로 입력해 주세요
+                </p>
+              )}
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={birthYear}
+                  onChange={(e) => handleBirthYearChange(e.target.value)}
+                  placeholder="예: 1955"
+                  min={MIN_BIRTH_YEAR + 1}
+                  max={MAX_BIRTH_YEAR - 1}
+                  className={cn(
+                    'w-32 min-h-11 bg-[#F3F4F6] border rounded-lg px-3 text-[1.0625rem] text-[#1F2937] outline-none focus:border-[#E8820C]',
+                    isBirthYearInvalid ? 'border-red-400' : 'border-[#E5E7EB]',
+                  )}
+                />
+                <span className="text-[1.0625rem] text-[#6B7280]">년</span>
+              </div>
+            </div>
+
           </div>
-          <p className="text-sm text-[#9CA3AF] px-1">이름은 카카오 앱에서 변경할 수 있어요</p>
         </div>
 
         {/* 호칭 필드 */}
@@ -268,18 +393,6 @@ export default function ProfileEditPage() {
           </div>
         </div>
 
-        {/* 알림 필드 */}
-        <div className="flex flex-col gap-2">
-          <label className="text-base text-[#6B7280] px-1">알림</label>
-          <div className="bg-white border border-[#E5E7EB] rounded-2xl px-5 py-4 flex items-center gap-3">
-            <div className="flex-1 flex flex-col gap-0.5">
-              <p className="text-[1.125rem] text-[#1F2937]">가족 댓글 알림</p>
-              <p className="text-base text-[#6B7280]">가족이 댓글을 달면 알려줘요</p>
-            </div>
-            <Toggle on={commentNotif} onChange={setCommentNotif} />
-          </div>
-        </div>
-
         {/* 계정 탈퇴 */}
         <div className="bg-[#FEF2F2] border border-[#FECACA] rounded-2xl py-4 text-center">
           <button type="button" onClick={() => setShowDeleteModal(true)}>
@@ -294,7 +407,7 @@ export default function ProfileEditPage() {
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || isBirthYearInvalid}
           className="w-full max-w-2xl md:max-w-none mx-auto block bg-[#E8820C] rounded-xl py-3 text-center disabled:opacity-50"
         >
           <span className="text-[1.125rem] text-white">
