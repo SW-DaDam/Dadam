@@ -482,10 +482,11 @@ export default function SeniorBookReadPage() {
         }
       }
 
-      const commenterName = profile.display_name ?? '가족'
+      const commenterName = profile.full_name ?? profile.display_name ?? '가족'
+      const bookTitle = book.book_type === 'short' ? book.title : `${book.year}년 ${book.month}월 이야기`
       const notifPayload = {
         type: 'new_comment' as const,
-        title: `${commenterName}${josa(commenterName, '이', '가')} 댓글을 남겼어요`,
+        title: `${commenterName}${josa(commenterName, '이', '가')} [${bookTitle}]에 댓글을 남겼어요`,
         body: commentText.trim(),
         reference_id: bookId,
         reference_type: 'book',
@@ -572,7 +573,7 @@ export default function SeniorBookReadPage() {
       await supabase.from('notifications').insert({
         recipient_id: replyingToAuthorId,
         type: 'new_reply',
-        title: `${replierName}${josa(replierName, '이', '가')} 음성 답장을 남겼어요`,
+        title: `${replierName}${josa(replierName, '이', '가')} [${book.book_type === 'short' ? book.title : `${book.year}년 ${book.month}월 이야기`}]에 음성 답장을 남겼어요`,
         body: textContent,
         reference_id: book.id,
         reference_type: 'book',
@@ -618,7 +619,7 @@ export default function SeniorBookReadPage() {
       const { error: ne } = await supabase.from('notifications').insert({
         recipient_id: replyingToAuthorId,
         type: 'new_reply',
-        title: `${replierName}${josa(replierName, '이', '가')} 답장을 남겼어요`,
+        title: `${replierName}${josa(replierName, '이', '가')} [${book.book_type === 'short' ? book.title : `${book.year}년 ${book.month}월 이야기`}]에 답장을 남겼어요`,
         body: replyText.trim(),
         reference_id: book.id,
         reference_type: 'book',
