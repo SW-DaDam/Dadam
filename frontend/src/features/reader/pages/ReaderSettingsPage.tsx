@@ -1,6 +1,6 @@
-﻿import { } from 'react'
+﻿import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { Bell, BookOpen, MessageCircle, Users } from 'lucide-react'
+import { Bell, BookOpen, ChevronRight, MessageCircle, Users } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { supabase } from '@/lib/supabase'
@@ -9,6 +9,8 @@ import { useFontSizeStore, type FontSize } from '@/shared/stores/fontSizeStore'
 import { useFamilyBookshelf } from '@/features/bookshelf/hooks/useFamilyBookshelf'
 import { cn } from '@/lib/utils'
 import { useNotificationPrefs } from '@/features/notifications/hooks/useNotificationPrefs'
+import { useInstallPrompt } from '@/shared/hooks/useInstallPrompt'
+import IosInstallGuide from '@/shared/components/IosInstallGuide'
 
 const FONT_OPTIONS: { value: FontSize; label: string }[] = [
   { value: 'small', label: '작음' },
@@ -27,6 +29,9 @@ export default function ReaderSettingsPage() {
   const { darkMode: darkModeOn, setDarkMode: setDarkModeOn } = useThemeStore()
   const { fontSize, setFontSize } = useFontSizeStore()
   const { seniorName, relationship } = useFamilyBookshelf()
+  const { platform, install } = useInstallPrompt()
+  const [showIosGuide, setShowIosGuide] = useState(false)
+  const showInstallRow = platform === 'android' || platform === 'ios'
 
   return (
     <div className="flex flex-col h-full">
@@ -184,6 +189,24 @@ export default function ReaderSettingsPage() {
               </div>
               <Toggle on={darkModeOn} onChange={setDarkModeOn} />
             </div>
+            {showInstallRow && (
+              <button
+                type="button"
+                onClick={platform === 'ios' ? () => setShowIosGuide(true) : install}
+                className="w-full flex items-center gap-3 px-5 py-4 text-left"
+              >
+                <div className="w-10 h-10 rounded-xl bg-[#F3F4F6] flex items-center justify-center shrink-0 text-lg text-[#6B7280]">
+                  ⊞
+                </div>
+                <div className="flex-1 flex flex-col gap-0.5 min-w-0">
+                  <p className="text-[1.125rem] text-[#1F2937]">홈 화면에 추가</p>
+                  <p className="text-base text-[#6B7280]">
+                    {platform === 'ios' ? 'Safari에서 홈 화면에 추가하는 방법' : '앱처럼 빠르게 실행할 수 있어요'}
+                  </p>
+                </div>
+                {platform === 'ios' && <ChevronRight size={20} className="text-[#D1D5DB] shrink-0" />}
+              </button>
+            )}
           </div>
         </div>
 
@@ -205,6 +228,7 @@ export default function ReaderSettingsPage() {
         <p className="text-sm text-[#D1D5DB] text-center pb-2">AI 말동무 v1.0.0 · 오브젠</p>
 
       </main>
+      {showIosGuide && <IosInstallGuide onClose={() => setShowIosGuide(false)} />}
     </div>
   )
 }
