@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ChevronRight } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
@@ -56,7 +56,7 @@ export default function SeniorSettingsPage() {
         <h1 className="text-lg sm:text-xl text-[#1F2937] font-medium">설정</h1>
       </header>
 
-      <main className="flex-1 overflow-y-auto flex flex-col gap-5 px-4 sm:px-6 py-5 w-full max-w-2xl mx-auto">
+      <main className="flex-1 overflow-y-auto flex flex-col gap-5 px-4 sm:px-6 py-5 w-full max-w-2xl md:max-w-none mx-auto">
 
         {/* 프로필 카드 */}
         <div className="bg-white border border-[#E5E7EB] rounded-2xl px-5 py-4 flex items-center gap-3">

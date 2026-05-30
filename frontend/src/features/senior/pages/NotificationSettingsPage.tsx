@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ChevronLeft } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
@@ -58,7 +58,7 @@ export default function NotificationSettingsPage() {
         <h1 className="absolute left-1/2 -translate-x-1/2 text-lg sm:text-xl text-[#1F2937] font-medium whitespace-nowrap">알림 설정</h1>
       </header>
 
-      <main className="flex-1 overflow-y-auto flex flex-col gap-5 px-4 sm:px-6 py-5 w-full max-w-2xl mx-auto">
+      <main className="flex-1 overflow-y-auto flex flex-col gap-5 px-4 sm:px-6 py-5 w-full max-w-2xl md:max-w-none mx-auto">
 
         {/* 전체 알림 토글 */}
         <div className="w-full bg-[#E8820C] rounded-2xl px-5 py-4 flex items-center justify-between">

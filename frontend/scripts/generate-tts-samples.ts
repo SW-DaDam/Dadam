@@ -1,8 +1,9 @@
 /**
  * TTS 미리듣기 샘플 사전 생성 스크립트 (1회성)
  *
- * Phase 1: 1개 voice(ngoeun) × 3개 speed = 3개 MP3 생성
- * Phase 2: 6개 voice × 3개 speed = 18개로 확장 예정
+ * Phase 2: 6개 voice × 3개 speed = 18개 MP3 생성
+ * 여성: nyuna(유나), noyj(봄달), vara(아라)
+ * 남성: nminsang(민상), nsiyoon(시윤), vian(이안)
  *
  * Naver Clova Voice Premium TTS API 사용 → Supabase Storage tts-samples 버킷 업로드
  *
@@ -14,8 +15,6 @@
  *   NCP_CLOVA_CLIENT_SECRET     — supabase/functions/.env.local
  *   VITE_SUPABASE_URL           — frontend/.env.local
  *   SUPABASE_SERVICE_ROLE_KEY   — supabase/functions/.env.local
- *
- * Phase 1 예상 비용: 3회 × 글자당 종량제 ≈ 한 자릿수 원 (NCP 콘솔 요금표 참조)
  */
 
 import { createClient } from '@supabase/supabase-js'
@@ -28,22 +27,23 @@ dotenv.config({ path: path.join(ROOT, 'frontend/.env.local') })
 dotenv.config({ path: path.join(ROOT, 'supabase/functions/.env.local') })
 
 // ── 상수 ──────────────────────────────────────────────────────
-// Phase 1: ngoeun 1종. Phase 2에서 NCP 콘솔 청취 후 6종으로 확장 예정
-const VOICES = ['ngoeun'] as const
+// Phase 2 확정 (NCP 콘솔 청취 기준) — 유나로 예진 교체
+const VOICES = ['nyuna', 'noyj', 'vara', 'nminsang', 'nsiyoon', 'vian'] as const
 const SPEEDS = ['slow', 'normal', 'fast'] as const
 
-// Clova speed 매핑 — Edge Function tts-clova/index.ts의 SPEED_MAP과 동일하게 유지
-// 음수=빠름 / 0=정상 / 양수=느림 (OpenAI 반대 방향)
+// Clova speed 매핑 — Edge Function tts-clova/index.ts의 CLOVA_SPEED_MAP과 동일하게 유지
+// 실청취 기준: slow +2(살짝 느림), normal 0(기본), fast -2(약간 빠름)
 const CLOVA_SPEED_MAP: Record<typeof SPEEDS[number], number> = {
-  slow: 3,
+  slow: 2,
   normal: 0,
   fast: -2,
 }
 
+// 더 이상 사용하지 않는 화자 — 샘플 파일 삭제 대상
+const DEPRECATED_VOICES = ['ngoeun', 'nyejin'] as const
+
 const SAMPLE_TEXT = '안녕하세요! 저는 어르신과 매일 이야기 나누는 AI 친구예요.'
-
 const BUCKET_NAME = 'tts-samples'
-
 const CLOVA_TTS_ENDPOINT = 'https://naveropenapi.apigw.ntruss.com/tts-premium/v1/tts'
 
 // ── 환경변수 확인 ──────────────────────────────────────────────
@@ -61,7 +61,7 @@ if (!NCP_CLOVA_CLIENT_ID || !NCP_CLOVA_CLIENT_SECRET || !SUPABASE_URL || !SUPABA
   process.exit(1)
 }
 
-// service_role 클라이언트 — RLS 우회해서 Storage에 업로드
+// service_role 클라이언트 — RLS 우회해서 Storage에 업로드/삭제
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 type Voice = typeof VOICES[number]
@@ -99,7 +99,6 @@ async function generateAndUpload(voice: Voice, speed: Speed): Promise<void> {
 
   const buffer = await callClovaTts(voice, speed)
 
-  // Supabase Storage 업로드 (덮어쓰기)
   const { error } = await supabase.storage
     .from(BUCKET_NAME)
     .upload(fileName, buffer, {
@@ -107,11 +106,25 @@ async function generateAndUpload(voice: Voice, speed: Speed): Promise<void> {
       upsert: true,
     })
 
-  if (error) {
-    throw new Error(`업로드 실패 (${fileName}): ${error.message}`)
-  }
-
+  if (error) throw new Error(`업로드 실패 (${fileName}): ${error.message}`)
   console.log(`  ✓ ${fileName} 업로드 완료`)
+}
+
+// Phase 1 샘플 파일 삭제 — ngoeun_slow/normal/fast.mp3
+async function deleteDeprecatedSamples(): Promise<void> {
+  const filesToDelete = DEPRECATED_VOICES.flatMap(
+    (voice) => SPEEDS.map((speed) => `${voice}_${speed}.mp3`),
+  )
+
+  console.log('\n🗑️  Phase 1 샘플 파일 삭제 중...')
+  const { error } = await supabase.storage.from(BUCKET_NAME).remove(filesToDelete)
+
+  if (error) {
+    // 파일이 없어도 에러가 날 수 있으므로 경고만 출력 (중단 X)
+    console.warn(`  ⚠️  삭제 중 오류 (이미 없는 파일일 수 있음): ${error.message}`)
+  } else {
+    console.log(`  ✓ 삭제 완료: ${filesToDelete.join(', ')}`)
+  }
 }
 
 async function main(): Promise<void> {
@@ -141,12 +154,16 @@ async function main(): Promise<void> {
 
   if (failCount > 0) {
     console.log('⚠️  실패한 파일은 스크립트를 다시 실행하면 재생성됩니다 (upsert: true)')
+    // 모든 샘플이 올라간 후에만 Phase 1 파일 삭제
     process.exit(1)
   }
 
+  // 신규 샘플 모두 성공한 경우에만 Phase 1 파일 삭제
+  await deleteDeprecatedSamples()
+
   console.log('\n📌 샘플 public URL 예시:')
-  const { data } = supabase.storage.from(BUCKET_NAME).getPublicUrl('ngoeun_slow.mp3')
-  console.log(`  ngoeun_slow.mp3 → ${data.publicUrl}`)
+  const { data } = supabase.storage.from(BUCKET_NAME).getPublicUrl('noyj_normal.mp3')
+  console.log(`  noyj_normal.mp3 → ${data.publicUrl}`)
 }
 
 main().catch((err) => {

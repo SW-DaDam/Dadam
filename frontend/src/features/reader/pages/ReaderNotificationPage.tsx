@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, X } from 'lucide-react'
 import { useNotifications } from '@/features/notifications/hooks/useNotifications'
 import type { Notification, NotificationType } from '@/types/domain'
 
@@ -64,7 +64,7 @@ function getNavPath(noti: Notification): string {
 
 export default function ReaderNotificationPage() {
   const navigate = useNavigate()
-  const { notifications, loading, markAsRead, markAllRead } = useNotifications()
+  const { notifications, loading, markAsRead, markAllRead, deleteNotification } = useNotifications()
 
   const unread = notifications.filter((n) => !n.is_read)
   const read = notifications.filter((n) => n.is_read)
@@ -90,7 +90,7 @@ export default function ReaderNotificationPage() {
         </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto flex flex-col gap-4 px-4 sm:px-6 py-5 w-full max-w-2xl mx-auto">
+      <main className="flex-1 overflow-y-auto flex flex-col gap-4 px-4 sm:px-6 py-5 w-full max-w-2xl md:max-w-none mx-auto">
         {loading && (
           <div className="flex justify-center py-10">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-yellow-400 border-t-transparent" />
@@ -154,6 +154,13 @@ export default function ReaderNotificationPage() {
                     className="bg-[#F3F4F6] rounded-lg px-3 py-1.5 shrink-0 min-h-11"
                   >
                     <span className="text-sm text-[#9CA3AF]">{actionLabelFor(n.type)} ›</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteNotification(n.id)}
+                    className="w-9 h-9 rounded-lg bg-[#F3F4F6] flex items-center justify-center shrink-0"
+                  >
+                    <X size={15} className="text-[#9CA3AF]" />
                   </button>
                 </div>
               ))}

@@ -21,10 +21,9 @@ const MAX_STT_RETRY_COUNT = 3
 const EDGE_FUNCTION_TIMEOUT_MS = 15000
 const FATAL_ERROR_MSG = '연결할 수 없어요. 아래 버튼을 눌러 다시 시도해 주세요'
 
-// TTS 기본값: senior_profiles 로드 완료 전까지 사용
-// Phase 1: ngoeun 1종 운영. Phase 2 확장 시 사용자 선택값으로만 변경됨 (DEFAULT는 그대로 유지)
-const DEFAULT_TTS_VOICE: TtsVoice = 'ngoeun'
-const DEFAULT_TTS_SPEED: TtsSpeed = 'slow'
+// TTS 기본값: senior_profiles 로드 완료 전까지 사용 (봄달, 속도 0=normal)
+const DEFAULT_TTS_VOICE: TtsVoice = 'vara'
+const DEFAULT_TTS_SPEED: TtsSpeed = 'normal'
 
 // 문장 단위 TTS 조기 요청 최소 글자수 — 너무 짧은 segment는 다음 문장과 합산
 const MIN_TTS_SEGMENT_LENGTH = 15
@@ -111,6 +110,8 @@ function transcribeWithWebSpeech(): Promise<string> {
 
 // ── 훅 ────────────────────────────────────────────────
 export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
+  // 언마운트 여부 — cleanup 후 onerror/play().catch() 에서 Web TTS fallback 방지
+  const unmountedRef = useRef(false)
   // Web Speech 경로 전용 ref (MediaRecorder 미지원 브라우저 + STT 2차 폴백)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const conversationIdRef = useRef<string | null>(null)
@@ -214,15 +215,24 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
         resolve()
       }
       // <audio> 로드·디코드 실패 → speechSynthesis fallback 후 resolve
+      // (cleanup이 핸들러를 먼저 분리하므로 src='' 비동기 onerror는 더 이상 이 경로를 타지 않음)
       audio.onerror = () => {
         revokeObjectUrl(blobUrl)
         currentBlobUrlRef.current = null
+        if (unmountedRef.current) { resolve(); return }
         speakWithSpeechSynthesis(fallbackText, resolve)
       }
 
-      audio.play().catch(() => {
+      audio.play().catch((err: unknown) => {
+        // cleanup의 audio.pause() 호출은 pending play()를 AbortError로 reject시킴
+        // → fallback 없이 조용히 resolve (Web TTS 트리거 차단)
+        const errName = err instanceof Error ? err.name : ''
+        if (errName === 'AbortError' || unmountedRef.current) {
+          resolve()
+          return
+        }
         // autoplay 정책 등으로 play()가 throw해도 실제로는 재생 중일 수 있음
-        // paused 상태가 아니면 이미 재생 중이므로 fallback 생략
+        // paused 상태가 아니면 이미 재생 중이므로 fallback 생략 (onended가 resolve 담당)
         if (audio.paused) {
           revokeObjectUrl(blobUrl)
           currentBlobUrlRef.current = null
@@ -330,12 +340,16 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
 
       // TTS segment를 순서대로 재생 (fetch는 이미 스트리밍 중에 시작됨)
       for (const segment of ttsSegments) {
+        // 언마운트 후에는 즉시 중단 — 뒤로가기 시 Web TTS fallback 트리거 방지
+        if (unmountedRef.current) break
         let blobUrl: string | null = null
         try {
           blobUrl = await segment.promise
         } catch {
           // fetchTts 실패 → segment별 speechSynthesis fallback
         }
+        // await 중에 언마운트됐을 경우 재확인 (fetch 응답 전 뒤로가기 시 이 경로로 탈출)
+        if (unmountedRef.current) break
         if (blobUrl) {
           await playBlobAsync(blobUrl, segment.text)
         } else if (import.meta.env.VITE_TTS_DISABLED !== 'true') {
@@ -467,11 +481,19 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
 
   // 언마운트 시 전체 리소스 정리 + 대화 세션 종료 처리
   useEffect(() => {
+    // StrictMode 호환: dev mode에서 마운트 직후 cleanup이 한 번 시뮬레이션 실행되며
+    // unmountedRef.current = true로 고정되어 정상 동작 중에도 sendToAI 루프가 즉시 break되는 문제 방지
+    // (useRef 값은 시뮬레이션 재마운트에서도 리셋되지 않으므로 setup body에서 명시적으로 false 처리)
+    unmountedRef.current = false
     return () => {
+      unmountedRef.current = true
       // 마이크 트랙 해제
       mediaStreamRef.current?.getTracks().forEach((t) => t.stop())
       // <audio> 재생 중단 및 Blob URL 정리
+      // 핸들러를 먼저 분리해야 src='' 가 비동기 onerror로 Web TTS fallback을 트리거하지 않음
       if (audioRef.current) {
+        audioRef.current.onended = null
+        audioRef.current.onerror = null
         audioRef.current.pause()
         audioRef.current.src = ''
       }

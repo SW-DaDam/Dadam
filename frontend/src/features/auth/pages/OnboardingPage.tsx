@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ChevronLeft } from 'lucide-react'
 import { useAuthStore } from '@/shared/stores/authStore'
@@ -91,7 +91,7 @@ export default function OnboardingPage() {
         </h1>
       </header>
 
-      <main className="flex-1 flex flex-col items-center px-4 sm:px-6 md:px-8 pt-0 pb-6 gap-5 w-full max-w-2xl mx-auto">
+      <main className="flex-1 flex flex-col items-center px-4 sm:px-6 md:px-8 pt-0 pb-6 gap-5 w-full max-w-2xl md:max-w-none mx-auto">
 
         {/* 단계 표시 */}
         <StepIndicator currentStep={3} />

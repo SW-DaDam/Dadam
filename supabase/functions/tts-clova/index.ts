@@ -8,8 +8,6 @@
 //    추가 네트워크 왕복이 없음.
 // 2. Clova fetch().body(ReadableStream)를 그대로 Response body로 패스스루 — first-byte 빠름
 // 3. 입력 검증을 Function 단에서 1차 방어 — DB CHECK 도달 전 조기 반환
-//
-// Phase 1: voice 1종(ngoeun) 운영. Phase 2 확장 시 VALID_SPEAKERS 배열만 갱신.
 
 import * as jose from 'npm:jose@5'
 
@@ -30,15 +28,15 @@ const JWT_AUDIENCE = 'authenticated'
 // JWKS는 모듈 스코프에서 1회 생성 → 공개키가 자동 캐싱되어 매 호출마다 fetch 안 함
 const JWKS = jose.createRemoteJWKSet(new URL(`${JWT_ISSUER}/.well-known/jwks.json`))
 
-// 허용 speaker 목록 — Phase 1: ngoeun만. Phase 2에서 NCP 콘솔 청취 후 6종으로 확장
-const VALID_SPEAKERS = ['ngoeun'] as const
+// 허용 speaker 목록 — 여성: nyuna/noyj/vara, 남성: nminsang/nsiyoon/vian
+const VALID_SPEAKERS = ['nyuna', 'noyj', 'vara', 'nminsang', 'nsiyoon', 'vian'] as const
 // 허용 speed 목록 (DB enum과 동일)
 const VALID_SPEEDS = ['slow', 'normal', 'fast'] as const
 
 // Clova speed 매핑 — 음수=빠름 / 0=정상 / 양수=느림 (OpenAI 반대 방향)
-// 시니어 친화: slow는 양수(+3)로 천천히, fast는 음수(-2)로 약간 빠르게
+// 실청취 기준: slow +2(살짝 느림), normal 0(기본), fast -2(약간 빠름)
 const CLOVA_SPEED_MAP: Record<TtsSpeed, number> = {
-  slow: 3,
+  slow: 2,
   normal: 0,
   fast: -2,
 }

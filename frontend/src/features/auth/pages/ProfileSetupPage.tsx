@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ChevronLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -106,7 +106,7 @@ export default function ProfileSetupPage() {
       {/* 단계 표시 */}
       <StepIndicator currentStep={2} />
 
-      <main className="flex-1 flex flex-col items-center px-4 sm:px-6 md:px-8 pt-0 pb-6 md:pb-8 gap-5 md:gap-6 w-full max-w-2xl mx-auto">
+      <main className="flex-1 flex flex-col items-center px-4 sm:px-6 md:px-8 pt-0 pb-6 md:pb-8 gap-5 md:gap-6 w-full max-w-2xl md:max-w-none mx-auto">
 
         {/* 안내 텍스트 */}
         <section className="flex flex-col items-center gap-2">
