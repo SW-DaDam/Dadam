@@ -1,8 +1,10 @@
-﻿import { useEffect } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ChevronRight } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
 import { useAuthStore } from '@/shared/stores/authStore'
+import { useInstallPrompt } from '@/shared/hooks/useInstallPrompt'
+import IosInstallGuide from '@/shared/components/IosInstallGuide'
 import { useThemeStore } from '@/shared/stores/themeStore'
 import { useFontSizeStore, type FontSize } from '@/shared/stores/fontSizeStore'
 import { useMemory } from '@/features/memory/hooks/useMemory'
@@ -43,6 +45,9 @@ export default function SeniorSettingsPage() {
 
   const { items: memoryItems } = useMemory(user?.id ?? '')
   const { familyMembers } = useInvite()
+  const { platform, install } = useInstallPrompt()
+  const [showIosGuide, setShowIosGuide] = useState(false)
+  const showInstallRow = platform === 'android' || platform === 'ios'
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -206,6 +211,25 @@ export default function SeniorSettingsPage() {
               </div>
               <Toggle on={darkMode} onChange={setDarkMode} />
             </div>
+            {/* 홈화면 추가 */}
+            {showInstallRow && (
+              <button
+                type="button"
+                onClick={platform === 'ios' ? () => setShowIosGuide(true) : install}
+                className="w-full flex items-center gap-3 px-5 py-4 text-left"
+              >
+                <div className="w-10 h-10 rounded-xl bg-[#F3F4F6] flex items-center justify-center shrink-0 text-lg text-[#6B7280]">
+                  ⊞
+                </div>
+                <div className="flex-1 flex flex-col gap-0.5 min-w-0">
+                  <p className="text-[1.125rem] text-[#1F2937]">홈 화면에 추가</p>
+                  <p className="text-base text-[#6B7280]">
+                    {platform === 'ios' ? 'Safari에서 홈 화면에 추가하는 방법' : '앱처럼 빠르게 실행할 수 있어요'}
+                  </p>
+                </div>
+                {platform === 'ios' && <ChevronRight size={20} className="text-[#D1D5DB] shrink-0" />}
+              </button>
+            )}
           </div>
         </div>
 
@@ -247,6 +271,7 @@ export default function SeniorSettingsPage() {
 
         {/* 앱 버전 */}
       </main>
+      {showIosGuide && <IosInstallGuide onClose={() => setShowIosGuide(false)} />}
     </div>
   )
 }
