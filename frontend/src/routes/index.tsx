@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate, useRouteError } from 'react-router'
+import { createBrowserRouter, Navigate } from 'react-router'
 
 // Lazy imports — 코드 스플리팅
 import { lazy, Suspense } from 'react'
@@ -50,36 +50,6 @@ function Loading() {
   )
 }
 
-function RouteErrorElement() {
-  const error = useRouteError()
-  const isChunkError =
-    error instanceof TypeError &&
-    /Failed to fetch dynamically imported module/.test(error.message)
-
-  if (isChunkError) {
-    if (!sessionStorage.getItem('chunkReload')) {
-      sessionStorage.setItem('chunkReload', '1')
-      window.location.reload()
-      return <Loading />
-    }
-    sessionStorage.removeItem('chunkReload')
-  }
-
-  return (
-    <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-4 text-center">
-      <p className="text-xl text-[#1F2937]">앱을 불러오지 못했어요</p>
-      <p className="text-base text-[#6B7280]">인터넷 연결을 확인하고 다시 시도해주세요.</p>
-      <button
-        type="button"
-        onClick={() => { sessionStorage.removeItem('chunkReload'); window.location.reload() }}
-        className="rounded-xl bg-[#E8820C] px-5 py-3 text-base text-white min-h-11"
-      >
-        새로고침
-      </button>
-    </div>
-  )
-}
-
 function withSuspense(element: React.ReactNode) {
   return <Suspense fallback={<Loading />}>{element}</Suspense>
 }
@@ -87,7 +57,6 @@ function withSuspense(element: React.ReactNode) {
 export const router = createBrowserRouter([
   {
     element: <AppShell />,
-    errorElement: <RouteErrorElement />,
     children: [
       // 인증 / 온보딩 (비보호 라우트)
       { path: '/login', element: withSuspense(<LoginPage />) },

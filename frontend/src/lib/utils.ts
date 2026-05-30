@@ -14,12 +14,6 @@ export function josa(word: string, withBatchim: string, withoutBatchim: string):
   return (code - 0xAC00) % 28 !== 0 ? withBatchim : withoutBatchim
 }
 
-// http:// → https:// 변환 (Kakao 프로필 이미지 Mixed Content 방지)
-export function toHttps(url: string | null | undefined): string | null {
-  if (!url) return null
-  return url.replace(/^http:\/\//, 'https://')
-}
-
 // 상대적 시간 표시 — 예: '방금 전', '5분 전', '2시간 전', '3일 전'
 export function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime()
