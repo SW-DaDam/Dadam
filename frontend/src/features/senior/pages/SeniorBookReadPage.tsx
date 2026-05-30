@@ -246,6 +246,7 @@ export default function SeniorBookReadPage() {
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [editingCommentText, setEditingCommentText] = useState('')
   const [replyingToId, setReplyingToId] = useState<string | null>(null)
+  const [replyingToAuthorId, setReplyingToAuthorId] = useState<string | null>(null)
   const [replyText, setReplyText] = useState('')
   const [editingReplyId, setEditingReplyId] = useState<string | null>(null)
   const [editingReplyText, setEditingReplyText] = useState('')
@@ -566,26 +567,21 @@ export default function SeniorBookReadPage() {
     if (error) { showToast('답장 전달에 실패했어요'); return }
 
     // 음성 답장 알림
-    const targetComment = bookComments.find((c) => c.id === commentId)
-    if (targetComment) {
-      const recipientId = targetComment.author_id === profile.id
-        ? book.senior_id
-        : targetComment.author_id
-      if (recipientId !== profile.id) {
-        const replierName = profile.full_name ?? profile.display_name ?? (isAuthor ? '저자' : '가족')
-        await supabase.from('notifications').insert({
-          recipient_id: recipientId,
-          type: 'new_reply',
-          title: `${replierName}${josa(replierName, '이', '가')} 음성 답장을 남겼어요`,
-          body: textContent,
-          reference_id: book.id,
-          reference_type: 'book',
-        })
-      }
+    if (replyingToAuthorId && replyingToAuthorId !== profile.id) {
+      const replierName = profile.full_name ?? profile.display_name ?? (isAuthor ? '저자' : '가족')
+      await supabase.from('notifications').insert({
+        recipient_id: replyingToAuthorId,
+        type: 'new_reply',
+        title: `${replierName}${josa(replierName, '이', '가')} 음성 답장을 남겼어요`,
+        body: textContent,
+        reference_id: book.id,
+        reference_type: 'book',
+      })
     }
 
     handleDiscardVoice()
     setReplyingToId(null)
+    setReplyingToAuthorId(null)
     showToast('음성 답장을 전달했어요')
     await reload()
   }
@@ -616,29 +612,22 @@ export default function SeniorBookReadPage() {
     })
     if (error) { showToast('답장 전달에 실패했어요'); return }
 
-    // 답장 알림 발송
-    const targetComment = bookComments.find((c) => c.id === commentId)
-    if (targetComment) {
-      // 본인 댓글에 답장(대화 이어가기) → 저자에게 알림
-      // 타인 댓글에 답장 → 그 댓글 작성자에게 알림
-      const recipientId = targetComment.author_id === profile.id
-        ? book.senior_id
-        : targetComment.author_id
-      if (recipientId !== profile.id) {
-        const replierName = profile.full_name ?? profile.display_name ?? (isAuthor ? '저자' : '가족')
-        const { error: ne } = await supabase.from('notifications').insert({
-          recipient_id: recipientId,
-          type: 'new_reply',
-          title: `${replierName}${josa(replierName, '이', '가')} 답장을 남겼어요`,
-          body: replyText.trim(),
-          reference_id: book.id,
-          reference_type: 'book',
-        })
-        if (ne) console.error('[대댓글 알림 INSERT 실패]', ne)
-      }
+    // 답장 알림: 답장하기를 누른 메시지 작성자에게 발송
+    if (replyingToAuthorId && replyingToAuthorId !== profile.id) {
+      const replierName = profile.full_name ?? profile.display_name ?? (isAuthor ? '저자' : '가족')
+      const { error: ne } = await supabase.from('notifications').insert({
+        recipient_id: replyingToAuthorId,
+        type: 'new_reply',
+        title: `${replierName}${josa(replierName, '이', '가')} 답장을 남겼어요`,
+        body: replyText.trim(),
+        reference_id: book.id,
+        reference_type: 'book',
+      })
+      if (ne) console.error('[대댓글 알림 INSERT 실패]', ne)
     }
 
     setReplyingToId(null)
+    setReplyingToAuthorId(null)
     setReplyText('')
     showToast('답장을 전달했어요')
     await reload()
@@ -862,8 +851,8 @@ export default function SeniorBookReadPage() {
                             </p>
                             {replyingToId !== comment.id && (
                               <button type="button"
-                                onClick={() => { setReplyingToId(comment.id); setReplyText('') }}
-                                className="text-sm text-[#E8820C]">답장 쓰기</button>
+                                onClick={() => { setReplyingToId(comment.id); setReplyingToAuthorId(comment.author_id); setReplyText('') }}
+                                className="text-sm text-[#E8820C]">답장하기</button>
                             )}
                             <button
                               type="button"
@@ -981,7 +970,7 @@ export default function SeniorBookReadPage() {
                               />
                               <div className="flex gap-2 justify-end">
                                 <button type="button"
-                                  onClick={() => { setReplyingToId(null); handleDiscardVoice() }}
+                                  onClick={() => { setReplyingToId(null); setReplyingToAuthorId(null); handleDiscardVoice() }}
                                   className="text-sm text-[#6B7280] px-3 py-1.5 rounded-lg bg-[#F3F4F6] min-h-9">취소</button>
                                 <button type="button" onClick={() => handleSubmitReply(comment.id)}
                                   disabled={!replyText.trim()}
@@ -1083,6 +1072,16 @@ export default function SeniorBookReadPage() {
                                   month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
                                 })}
                               </p>
+                              {/* 본인 답장이 아닐 때만 답장하기 버튼 표시 */}
+                              {reply.senior_id !== user?.id && replyingToId !== comment.id && (
+                                <button type="button"
+                                  onClick={() => {
+                                    setReplyingToId(comment.id)
+                                    setReplyingToAuthorId(reply.senior_id)
+                                    setReplyText('')
+                                  }}
+                                  className="text-sm text-[#E8820C]">답장하기</button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => toggleEmojiPicker(`r_${reply.id}`)}
@@ -1093,7 +1092,7 @@ export default function SeniorBookReadPage() {
                                 }`}
                               >
                                 😊+
-  </button>
+                              </button>
                             </div>
 
                             {/* 대댓글 이모지 피커 */}
