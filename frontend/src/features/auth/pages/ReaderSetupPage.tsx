@@ -7,24 +7,47 @@ import { setupFamilyProfile, acceptInviteCode } from '../services/authService'
 import { getDbErrorMessage } from '@/lib/errorMessages'
 import StepIndicator from '../components/StepIndicator'
 
-const QUICK_RELATIONS = ['아들', '딸', '손자', '손녀']
-const CODE_LENGTH = 6 // 초대 코드 최대 길이
+const SENIOR_TITLE_MAP: Record<string, string[]> = {
+  '아빠':     ['아들', '딸'],
+  '아버지':   ['아들', '딸'],
+  '엄마':     ['아들', '딸'],
+  '어머니':   ['아들', '딸'],
+  '할아버지': ['손자', '손녀'],
+  '할머니':   ['손자', '손녀'],
+  '장인어른': ['사위'],
+  '장모님':   ['사위'],
+  '시아버님': ['며느리'],
+  '시어머님': ['며느리'],
+}
+const SENIOR_TITLE_PRESETS = Object.keys(SENIOR_TITLE_MAP)
+const CODE_LENGTH = 6
 
 export default function ReaderSetupPage() {
   const navigate = useNavigate()
   const kakaoProfile = useAuthStore((s) => s.kakaoProfile)
   const user = useAuthStore((s) => s.user)
-  const [relation, setRelation] = useState('')
+  const [seniorTitle, setSeniorTitle] = useState('')
+  const [readerNickname, setReaderNickname] = useState('')
   const [inviteCode, setInviteCode] = useState('')
   const [inviteStatus, setInviteStatus] = useState<'idle' | 'linked' | 'error'>('idle')
   const [inviteMessage, setInviteMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
+  const readerSuggestions = SENIOR_TITLE_MAP[seniorTitle] ?? []
+
+  function handleSeniorTitle(title: string) {
+    setSeniorTitle(title)
+    const suggestions = SENIOR_TITLE_MAP[title]
+    if (suggestions?.length === 1) setReaderNickname(suggestions[0])
+    else setReaderNickname('')
+  }
+
   async function handleApplyCode(code: string) {
     if (!user || !code.trim()) return
-    const rel = relation.trim() || '가족'
-    const result = await acceptInviteCode(code.trim(), user.id, rel)
+    const st = seniorTitle.trim() || '저자'
+    const rn = readerNickname.trim() || '가족'
+    const result = await acceptInviteCode(code.trim(), user.id, st, rn)
     if (result.ok) {
       setInviteStatus('linked')
       setInviteMessage(result.message)
@@ -47,11 +70,11 @@ export default function ReaderSetupPage() {
       return
     }
 
-    // sessionStorage에 저장된 초대 코드 처리 (카카오 링크 경유 시)
     const pending = sessionStorage.getItem('pendingInviteCode')
     if (pending && inviteStatus !== 'linked') {
-      const rel = relation.trim() || '가족'
-      await acceptInviteCode(pending, user.id, rel)
+      const st = seniorTitle.trim() || '저자'
+      const rn = readerNickname.trim() || '가족'
+      await acceptInviteCode(pending, user.id, st, rn)
       sessionStorage.removeItem('pendingInviteCode')
     }
 
@@ -113,53 +136,86 @@ export default function ReaderSetupPage() {
           </div>
         </div>
 
-        {/* STEP 1 — 관계 선택 */}
-        <div className="w-full bg-white border-2 border-[#E8820C] rounded-2xl px-6 py-5 flex flex-col gap-4">
+        {/* STEP 1 — 호칭 설정 */}
+        <div className="w-full bg-white border-2 border-[#E8820C] rounded-2xl px-6 py-5 flex flex-col gap-5">
           <div className="flex items-center justify-between">
             <div className="flex flex-col gap-0.5">
-              <p className="text-xl text-[#1F2937]">저자와의 관계</p>
-              <p className="text-[1.0625rem] text-[#6B7280]">저자가 나를 어떻게 부르나요?</p>
+              <p className="text-xl text-[#1F2937]">호칭 정하기</p>
+              <p className="text-[1.0625rem] text-[#6B7280]">서로 어떻게 부를지 정해요</p>
             </div>
             <div className="bg-[#E8820C] rounded px-3 py-1">
               <span className="text-[0.9375rem] text-white">입력 필요</span>
             </div>
           </div>
 
-          {/* 예시 */}
-          <div className="bg-[#FFF0DC] rounded-lg px-4 py-2">
-            <span className="text-base text-[#E8820C]">예: "홍길동(아들)(이)가 댓글을 작성했어요"</span>
-          </div>
-
-          {/* 직접입력 필드 */}
-          <input
-            type="text"
-            value={relation}
-            onChange={(e) => setRelation(e.target.value)}
-            placeholder="직접입력"
-            className="w-full h-[72px] bg-[#FFF8F0] border-2 border-[#E8820C] rounded-xl px-5 text-[1.375rem] text-[#1F2937] outline-none placeholder:text-[#E8820C]/40"
-          />
-
-          {/* 자주 쓰는 관계 */}
+          {/* 저자를 부르는 호칭 */}
           <div className="flex flex-col gap-2">
-            <p className="text-base text-[#6B7280]">자주 쓰는 관계</p>
+            <p className="text-base text-[#6B7280]">저자를 어떻게 부르나요?</p>
             <div className="flex gap-2 flex-wrap">
-              {QUICK_RELATIONS.map((r) => (
+              {SENIOR_TITLE_PRESETS.map((t) => (
                 <button
-                  key={r}
+                  key={t}
                   type="button"
-                  onClick={() => setRelation(r)}
+                  onClick={() => handleSeniorTitle(t)}
                   className={cn(
                     'h-12 px-5 rounded-xl text-lg border transition-all',
-                    relation === r
+                    seniorTitle === t
                       ? 'bg-[#FFF0DC] border-[#E8820C] text-[#E8820C]'
                       : 'bg-[#F3F4F6] border-[#E5E7EB] text-[#6B7280]',
                   )}
                 >
-                  {r}
+                  {t}
                 </button>
               ))}
             </div>
+            <input
+              type="text"
+              value={SENIOR_TITLE_PRESETS.includes(seniorTitle) ? '' : seniorTitle}
+              onChange={(e) => handleSeniorTitle(e.target.value)}
+              placeholder="직접 입력"
+              className="w-full h-12 bg-[#FFF8F0] border border-[#E5E7EB] rounded-xl px-4 text-lg text-[#1F2937] outline-none focus:border-[#E8820C] placeholder:text-[#9CA3AF]"
+            />
           </div>
+
+          {/* 저자가 나를 부르는 호칭 */}
+          {seniorTitle !== '' && (
+            <div className="flex flex-col gap-2">
+              <p className="text-base text-[#6B7280]">저자가 나를 어떻게 부르나요?</p>
+              <div className="flex gap-2 flex-wrap">
+                {readerSuggestions.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setReaderNickname(n)}
+                    className={cn(
+                      'h-12 px-5 rounded-xl text-lg border transition-all',
+                      readerNickname === n
+                        ? 'bg-[#FFF0DC] border-[#E8820C] text-[#E8820C]'
+                        : 'bg-[#F3F4F6] border-[#E5E7EB] text-[#6B7280]',
+                    )}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="text"
+                value={readerSuggestions.includes(readerNickname) ? '' : readerNickname}
+                onChange={(e) => setReaderNickname(e.target.value)}
+                placeholder="직접 입력"
+                className="w-full h-12 bg-[#FFF8F0] border border-[#E5E7EB] rounded-xl px-4 text-lg text-[#1F2937] outline-none focus:border-[#E8820C] placeholder:text-[#9CA3AF]"
+              />
+            </div>
+          )}
+
+          {/* 확인 요약 */}
+          {seniorTitle && readerNickname && (
+            <div className="bg-[#FFF0DC] rounded-lg px-4 py-2">
+              <span className="text-base text-[#E8820C]">
+                나는 "{seniorTitle}", 저자는 나를 "{readerNickname}"(으)로 불러요
+              </span>
+            </div>
+          )}
         </div>
 
         {/* 책장 연결 */}

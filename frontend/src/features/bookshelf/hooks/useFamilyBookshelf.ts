@@ -15,10 +15,10 @@ export function useFamilyBookshelf() {
     if (!user?.id) { setLoading(false); return }
 
     async function fetch() {
-      // 1. accepted 상태 family_link에서 연결된 senior_id + relationship 조회
+      // 1. accepted 상태 family_link에서 연결된 senior_id + 호칭 조회
       const { data: link } = await supabase
         .from('family_links')
-        .select('senior_id, relationship')
+        .select('senior_id, senior_title, reader_nickname, relationship')
         .eq('family_id', user!.id)
         .eq('invite_status', 'accepted')
         .limit(1)
@@ -28,16 +28,21 @@ export function useFamilyBookshelf() {
 
       const linkedSeniorId = link.senior_id
       setSeniorId(linkedSeniorId)
-      setRelationship(link.relationship ?? '')
+      // reader_nickname: 저자가 독자를 부르는 호칭 (표시용 관계)
+      setRelationship(link.reader_nickname ?? link.relationship ?? '')
 
-      // 2. 어르신 이름 조회
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('display_name')
-        .eq('id', linkedSeniorId)
-        .single()
-
-      setSeniorName(profile?.display_name ?? '')
+      // senior_title: 독자가 저자를 부르는 호칭 → "아빠의 책장" 등에 사용
+      // 없으면 profile.display_name 폴백
+      if (link.senior_title) {
+        setSeniorName(link.senior_title)
+      } else {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('display_name')
+          .eq('id', linkedSeniorId)
+          .single()
+        setSeniorName(profile?.display_name ?? '')
+      }
 
       // 3. published 책 + 챕터·댓글 수 조회 (댓글은 book_id 직접 참조)
       const { data } = await supabase

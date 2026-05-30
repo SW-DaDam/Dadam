@@ -120,7 +120,7 @@ function useBookRead(bookId: string | undefined) {
         : Promise.resolve({ data: [] }),
       allAuthorIds.length > 0
         ? supabase.from('family_links')
-            .select('family_id, relationship')
+            .select('family_id, reader_nickname, relationship')
             .eq('senior_id', bookData.senior_id)
             .in('family_id', allAuthorIds)
             .eq('invite_status', 'accepted')
@@ -128,7 +128,7 @@ function useBookRead(bookId: string | undefined) {
     ])
 
     const authorMap = new Map((authorsData ?? []).map((p) => [p.id, p]))
-    const relationshipMap = new Map((familyLinksData ?? []).map((fl) => [fl.family_id, fl.relationship as string | null]))
+    const relationshipMap = new Map((familyLinksData ?? []).map((fl) => [fl.family_id, (fl.reader_nickname ?? fl.relationship) as string | null]))
 
     setBookComments(
       (commentsData ?? []).map((comment) => {
