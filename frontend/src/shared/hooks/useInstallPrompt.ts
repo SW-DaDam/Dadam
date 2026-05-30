@@ -1,22 +1,17 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface BeforeInstallPromptEvent extends Event {
-  prompt(): Promise<void>
+  prompt: () => Promise<void>
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
-export type InstallPlatform = 'android' | 'ios' | 'other'
+export type Platform = 'android' | 'ios' | 'other'
+export type InstallState = 'installable' | 'installed' | 'unavailable'
 
-const DISMISS_KEY = 'dadam-install-dismissed'
-const DISMISS_TTL_MS = 14 * 24 * 60 * 60 * 1000
-
-function getPlatform(): InstallPlatform {
+function getPlatform(): Platform {
   const ua = navigator.userAgent
-  // iPadOS 13+ reports as MacIntel with maxTouchPoints > 1
-  const isIos =
-    /iPad|iPhone|iPod/.test(ua) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
-  if (isIos && /Safari/.test(ua) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(ua)) return 'ios'
+  if (/iPhone|iPad|iPod/.test(ua) && !('MSStream' in window)) return 'ios'
+  if (/Android/.test(ua)) return 'android'
   return 'other'
 }
 
@@ -27,50 +22,39 @@ function isStandalone(): boolean {
   )
 }
 
-function wasDismissed(): boolean {
-  const ts = localStorage.getItem(DISMISS_KEY)
-  return !!ts && Date.now() - Number(ts) < DISMISS_TTL_MS
-}
-
 export function useInstallPrompt() {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
-  const [platform] = useState<InstallPlatform>(getPlatform)
-  const [visible, setVisible] = useState(false)
+  const platform = getPlatform()
+  const deferredPrompt = useRef<BeforeInstallPromptEvent | null>(null)
+  const [installState, setInstallState] = useState<InstallState>(() =>
+    isStandalone() ? 'installed' : platform === 'ios' ? 'installable' : 'unavailable'
+  )
 
   useEffect(() => {
-    if (isStandalone() || wasDismissed()) return
+    if (platform !== 'android') return
 
-    if (platform === 'ios') {
-      setVisible(true)
-      return
-    }
-
-    const handler = (e: Event) => {
+    const onPrompt = (e: Event) => {
       e.preventDefault()
-      setDeferredPrompt(e as BeforeInstallPromptEvent)
-      setVisible(true)
+      deferredPrompt.current = e as BeforeInstallPromptEvent
+      setInstallState('installable')
     }
-    window.addEventListener('beforeinstallprompt', handler)
-    return () => window.removeEventListener('beforeinstallprompt', handler)
+    const onInstalled = () => {
+      setInstallState('installed')
+      deferredPrompt.current = null
+    }
+
+    window.addEventListener('beforeinstallprompt', onPrompt)
+    window.addEventListener('appinstalled', onInstalled)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onPrompt)
+      window.removeEventListener('appinstalled', onInstalled)
+    }
   }, [platform])
 
-  const install = useCallback(async () => {
-    if (!deferredPrompt) return
-    await deferredPrompt.prompt()
-    const { outcome } = await deferredPrompt.userChoice
-    if (outcome === 'accepted') setVisible(false)
-    setDeferredPrompt(null)
-  }, [deferredPrompt])
-
-  const dismiss = useCallback(() => {
-    localStorage.setItem(DISMISS_KEY, String(Date.now()))
-    setVisible(false)
-  }, [])
-
-  return {
-    platform,
-    visible: visible && (platform === 'ios' || deferredPrompt !== null),
-    install,
-    dismiss,
+  async function install() {
+    if (!deferredPrompt.current) return
+    await deferredPrompt.current.prompt()
+    deferredPrompt.current = null
   }
+
+  return { platform, installState, install }
 }

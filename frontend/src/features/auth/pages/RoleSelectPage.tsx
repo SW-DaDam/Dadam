@@ -1,6 +1,6 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { cn } from '@/lib/utils'
+import { cn, toHttps } from '@/lib/utils'
 import { useAuthStore } from '@/shared/stores/authStore'
 import StepIndicator from '../components/StepIndicator'
 
@@ -48,7 +48,7 @@ export default function RoleSelectPage() {
   const user = useAuthStore((s) => s.user)
 
   const displayName: string = user?.user_metadata?.full_name ?? user?.email ?? '사용자'
-  const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
+  const avatarUrl: string | null = toHttps(user?.user_metadata?.avatar_url ?? null)
   const avatarChar = displayName.charAt(0)
 
   function handleSelect(role: Role) {
