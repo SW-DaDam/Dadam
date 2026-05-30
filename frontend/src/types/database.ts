@@ -349,8 +349,10 @@ export type Database = {
           invite_code: string
           invite_status: Database["public"]["Enums"]["invite_status"]
           invited_at: string
+          reader_nickname: string | null
           relationship: string | null
           senior_id: string
+          senior_title: string | null
         }
         Insert: {
           accepted_at?: string | null
@@ -360,8 +362,10 @@ export type Database = {
           invite_code: string
           invite_status?: Database["public"]["Enums"]["invite_status"]
           invited_at?: string
+          reader_nickname?: string | null
           relationship?: string | null
           senior_id: string
+          senior_title?: string | null
         }
         Update: {
           accepted_at?: string | null
@@ -371,8 +375,10 @@ export type Database = {
           invite_code?: string
           invite_status?: Database["public"]["Enums"]["invite_status"]
           invited_at?: string
+          reader_nickname?: string | null
           relationship?: string | null
           senior_id?: string
+          senior_title?: string | null
         }
         Relationships: [
           {
@@ -477,7 +483,9 @@ export type Database = {
           avatar_url: string | null
           created_at: string
           display_name: string
+          full_name: string | null
           id: string
+          notification_prefs: Record<string, boolean> | null
           phone: string | null
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
@@ -486,7 +494,9 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           display_name: string
+          full_name?: string | null
           id: string
+          notification_prefs?: Record<string, boolean> | null
           phone?: string | null
           role: Database["public"]["Enums"]["user_role"]
           updated_at?: string
@@ -495,7 +505,9 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           display_name?: string
+          full_name?: string | null
           id?: string
+          notification_prefs?: Record<string, boolean> | null
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string

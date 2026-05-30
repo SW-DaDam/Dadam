@@ -15,7 +15,7 @@ interface UseInviteReturn {
   loading: boolean
   error: string | null
   generateInviteCode: () => Promise<void>
-  acceptInvite: (code: string, relationship: string) => Promise<{ ok: boolean; message: string }>
+  acceptInvite: (code: string, seniorTitle: string, readerNickname: string) => Promise<{ ok: boolean; message: string }>
   removeFamilyLink: (linkId: string) => Promise<void>
   refetch: () => Promise<void>
 }
@@ -102,11 +102,11 @@ export function useInvite(): UseInviteReturn {
   // 가족이 초대 코드 입력 후 수락
   async function acceptInvite(
     code: string,
-    relationship: string,
+    seniorTitle: string,
+    readerNickname: string,
   ): Promise<{ ok: boolean; message: string }> {
     if (!user) return { ok: false, message: '로그인이 필요해요' }
 
-    // 코드 조회
     const { data: link, error: findErr } = await supabase
       .from('family_links')
       .select('*')
@@ -124,7 +124,9 @@ export function useInvite(): UseInviteReturn {
         family_id: user.id,
         invite_status: 'accepted',
         accepted_at: new Date().toISOString(),
-        relationship,
+        relationship: readerNickname,
+        senior_title: seniorTitle,
+        reader_nickname: readerNickname,
       })
       .eq('id', link.id)
 

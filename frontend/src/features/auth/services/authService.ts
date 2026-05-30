@@ -52,11 +52,12 @@ export async function setupFamilyProfile(
   return { error: null }
 }
 
-// 초대 코드 수락: pending family_link를 family_id + relationship으로 업데이트
+// 초대 코드 수락: pending family_link를 family_id + 양방향 호칭으로 업데이트
 export async function acceptInviteCode(
   code: string,
   userId: string,
-  relationship: string,
+  seniorTitle: string,
+  readerNickname: string,
 ): Promise<{ ok: boolean; message: string }> {
   const { data: link, error: findErr } = await supabase
     .from('family_links')
@@ -75,7 +76,9 @@ export async function acceptInviteCode(
       family_id: userId,
       invite_status: 'accepted',
       accepted_at: new Date().toISOString(),
-      relationship,
+      relationship: readerNickname,
+      senior_title: seniorTitle,
+      reader_nickname: readerNickname,
     })
     .eq('id', link.id)
 

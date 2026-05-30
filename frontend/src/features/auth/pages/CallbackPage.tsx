@@ -55,10 +55,10 @@ export function CallbackPage() {
     }
 
     // store에 user + kakaoProfile 저장
-    // kakaoProfile은 온보딩(ProfileSetupPage/ReaderSetupPage)에서 카카오 이름·사진 표시에 사용
     setUser(session.user)
+    const kakaoName = session.user.user_metadata?.full_name ?? session.user.user_metadata?.name ?? '사용자'
     setKakaoProfile({
-      name: session.user.user_metadata?.full_name ?? session.user.user_metadata?.name ?? '사용자',
+      name: kakaoName,
       avatarUrl: session.user.user_metadata?.avatar_url ?? null,
     })
 
@@ -81,11 +81,16 @@ export function CallbackPage() {
     }
 
     // [P1 Fix] display_name이 기본값이면 온보딩 미완료 — role과 무관하게 역할 선택으로
-    // (pendingInviteCode는 ReaderSetupPage에서 처리)
     if (profileData.display_name === DEFAULT_DISPLAY_NAME) {
       navigate('/role-select', { replace: true })
       return
     }
+
+    // 로그인 시마다 카카오 이름·프사 동기화
+    const avatarUrl = session.user.user_metadata?.avatar_url ?? null
+    void supabase.from('profiles')
+      .update({ full_name: kakaoName, avatar_url: avatarUrl } as never)
+      .eq('id', session.user.id)
 
     // 기존 사용자가 초대 링크를 통해 로그인한 경우 — /join으로 돌려보내 연결 처리
     const pendingCode = sessionStorage.getItem('pendingInviteCode')

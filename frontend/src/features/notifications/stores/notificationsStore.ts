@@ -17,7 +17,10 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
   loading: true,
   setNotifications: (notifications) => set({ notifications }),
   prependNotification: (notification) =>
-    set((s) => ({ notifications: [notification, ...s.notifications] })),
+    set((s) => {
+      if (s.notifications.some((n) => n.id === notification.id)) return s
+      return { notifications: [notification, ...s.notifications] }
+    }),
   markOneRead: (id) =>
     set((s) => ({
       notifications: s.notifications.map((n) => (n.id === id ? { ...n, is_read: true } : n)),
