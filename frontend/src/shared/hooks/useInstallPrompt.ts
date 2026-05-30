@@ -5,6 +5,12 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
+declare global {
+  interface Window {
+    __pwaInstallPrompt?: Event
+  }
+}
+
 export type Platform = 'android' | 'ios' | 'other'
 export type InstallState = 'installable' | 'installed' | 'unavailable'
 
@@ -32,14 +38,22 @@ export function useInstallPrompt() {
   useEffect(() => {
     if (platform !== 'android') return
 
+    // React 마운트 전에 이미 캡처된 이벤트가 있으면 바로 사용
+    if (window.__pwaInstallPrompt) {
+      deferredPrompt.current = window.__pwaInstallPrompt as BeforeInstallPromptEvent
+      setInstallState('installable')
+    }
+
     const onPrompt = (e: Event) => {
       e.preventDefault()
+      window.__pwaInstallPrompt = e
       deferredPrompt.current = e as BeforeInstallPromptEvent
       setInstallState('installable')
     }
     const onInstalled = () => {
       setInstallState('installed')
       deferredPrompt.current = null
+      window.__pwaInstallPrompt = undefined
     }
 
     window.addEventListener('beforeinstallprompt', onPrompt)
@@ -54,6 +68,7 @@ export function useInstallPrompt() {
     if (!deferredPrompt.current) return
     await deferredPrompt.current.prompt()
     deferredPrompt.current = null
+    window.__pwaInstallPrompt = undefined
   }
 
   return { platform, installState, install }

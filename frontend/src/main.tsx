@@ -10,6 +10,12 @@ initTheme()
 initFontSize()
 initContentFontSize()
 
+// beforeinstallprompt은 React 마운트 전에 발생할 수 있으므로 전역에서 미리 캡처
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault()
+  window.__pwaInstallPrompt = e
+})
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
