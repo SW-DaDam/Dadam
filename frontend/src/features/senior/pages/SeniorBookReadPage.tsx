@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router'
 import { ChevronLeft, Mic, Square, Play, Pause } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/shared/stores/authStore'
-import { josa } from '@/lib/utils'
+import { josa, toHttps } from '@/lib/utils'
 import { useVoiceReply, formatDuration } from '@/features/senior/hooks/useVoiceReply'
 import { useContentFontSizeStore, type ContentFontSize } from '@/shared/stores/contentFontSizeStore'
 import type { Book, Chapter, Comment, Reply, Profile } from '@/types/domain'
@@ -185,6 +185,29 @@ function avatarStyle(id: string) {
 
 function initial(name: string | null | undefined) {
   return name ? name[0] : '?'
+}
+
+interface AvatarProps {
+  name: string | null | undefined
+  avatarUrl?: string | null
+  size?: string        // Tailwind class e.g. 'w-9 h-9'
+  round?: 'full' | 'xl'
+  bg?: string
+  color?: string
+}
+function Avatar({ name, avatarUrl, size = 'w-9 h-9', round = 'xl', bg = '#F3F4F6', color = '#6B7280' }: AvatarProps) {
+  const src = toHttps(avatarUrl)
+  return (
+    <div
+      className={`${size} rounded-${round} flex items-center justify-center shrink-0 mt-0.5 overflow-hidden`}
+      style={{ backgroundColor: bg }}
+    >
+      {src
+        ? <img src={src} alt={name ?? ''} className="w-full h-full object-cover" />
+        : <span className="text-sm font-bold" style={{ color }}>{initial(name)}</span>
+      }
+    </div>
+  )
 }
 
 // ─── 메인 ─────────────────────────────────────────────────────────────────────
@@ -743,16 +766,20 @@ export default function SeniorBookReadPage() {
                       {/* 댓글 */}
                       <div className="flex items-start gap-3">
                         {isCommentByAuthor ? (
-                          <div className="w-9 h-9 rounded-full bg-[#E8820C] flex items-center justify-center shrink-0 mt-0.5">
-                            <span className="text-xs font-bold text-white">{initial(seniorName)}</span>
-                          </div>
+                          <Avatar
+                            name={kakaoName}
+                            avatarUrl={comment.author?.avatar_url}
+                            round="full"
+                            bg="#E8820C"
+                            color="#ffffff"
+                          />
                         ) : (
-                          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
-                            style={{ backgroundColor: style.bg }}>
-                            <span className="text-sm font-bold" style={{ color: style.color }}>
-                              {initial(comment.author?.display_name)}
-                            </span>
-                          </div>
+                          <Avatar
+                            name={comment.author?.full_name ?? comment.author?.display_name}
+                            avatarUrl={comment.author?.avatar_url}
+                            bg={style.bg}
+                            color={style.color}
+                          />
                         )}
                         <div className="flex-1 flex flex-col gap-0.5 min-w-0">
                           <div className="flex items-center justify-between gap-2">
@@ -962,16 +989,20 @@ export default function SeniorBookReadPage() {
                         return (
                         <div key={reply.id} className="ml-12 flex items-start gap-3">
                           {isReplyByAuthor ? (
-                            <div className="w-9 h-9 rounded-full bg-[#E8820C] flex items-center justify-center shrink-0 mt-0.5">
-                              <span className="text-xs font-bold text-white">{initial(seniorName)}</span>
-                            </div>
+                            <Avatar
+                              name={kakaoName}
+                              avatarUrl={reply.author?.avatar_url}
+                              round="full"
+                              bg="#E8820C"
+                              color="#ffffff"
+                            />
                           ) : (
-                            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
-                              style={{ backgroundColor: replyStyle.bg }}>
-                              <span className="text-sm font-bold" style={{ color: replyStyle.color }}>
-                                {initial(replyAuthorName)}
-                              </span>
-                            </div>
+                            <Avatar
+                              name={replyAuthorName}
+                              avatarUrl={reply.author?.avatar_url}
+                              bg={replyStyle.bg}
+                              color={replyStyle.color}
+                            />
                           )}
                           <div className="flex-1 flex flex-col gap-0.5 min-w-0">
                             <div className="flex items-center justify-between gap-2">
