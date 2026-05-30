@@ -32,21 +32,10 @@ export default function FamilyInvitePage() {
     if (!Kakao.isInitialized()) {
       Kakao.init(import.meta.env.VITE_KAKAO_JS_KEY)
     }
-    const imageUrl = `${window.location.origin}/og-image.png`
     Kakao.Share.sendDefault({
-      objectType: 'feed',
-      content: {
-        title: '다담에서 가족 초대가 왔어요 📖',
-        description: '버튼을 눌러 가족으로 연결하고 함께 이야기를 나눠요',
-        imageUrl,
-        link: { mobileWebUrl: link, webUrl: link },
-      },
-      buttons: [
-        {
-          title: '초대 수락하기',
-          link: { mobileWebUrl: link, webUrl: link },
-        },
-      ],
+      objectType: 'text',
+      text: '다담 — AI 말동무와 함께 만드는 가족 출판 플랫폼\n초대 링크로 접속해서 가족으로 연결해요!',
+      link: { mobileWebUrl: link, webUrl: link },
     })
   }
 
