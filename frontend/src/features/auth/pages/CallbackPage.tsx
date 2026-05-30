@@ -86,8 +86,11 @@ export function CallbackPage() {
       return
     }
 
-    // 기존 유저: 로그인 시 카카오 이름 동기화 (마이그레이션 후 활성화)
-    void supabase.from('profiles').update({ full_name: kakaoName } as never).eq('id', session.user.id)
+    // 로그인 시마다 카카오 이름·프사 동기화
+    const avatarUrl = session.user.user_metadata?.avatar_url ?? null
+    void supabase.from('profiles')
+      .update({ full_name: kakaoName, avatar_url: avatarUrl } as never)
+      .eq('id', session.user.id)
 
     // 기존 사용자가 초대 링크를 통해 로그인한 경우 — /join으로 돌려보내 연결 처리
     const pendingCode = sessionStorage.getItem('pendingInviteCode')
