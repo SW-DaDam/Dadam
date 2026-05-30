@@ -19,12 +19,12 @@ const REACTION_EMOJIS = ['❤️', '👍', '😂', '😢', '🙏'] as const
 // ─── 타입 ─────────────────────────────────────────────────────────────────────
 
 interface ReplyWithAuthor extends Reply {
-  author: Pick<Profile, 'id' | 'display_name' | 'avatar_url'> | null
+  author: Pick<Profile, 'id' | 'display_name' | 'avatar_url'> & { full_name?: string | null } | null
   relationship: string | null
 }
 
 interface CommentWithData extends Comment {
-  author: Pick<Profile, 'id' | 'display_name' | 'avatar_url'> | null
+  author: Pick<Profile, 'id' | 'display_name' | 'avatar_url'> & { full_name?: string | null } | null
   relationship: string | null
   replies: ReplyWithAuthor[]
 }
@@ -82,10 +82,10 @@ function useBookRead(bookId: string | undefined) {
     // 시니어 프로필(이름) 조회
     const { data: profileData } = await supabase
       .from('profiles')
-      .select('display_name')
+      .select('display_name, full_name')
       .eq('id', bookData.senior_id)
       .single()
-    setSeniorName(profileData?.display_name ?? '')
+    setSeniorName(profileData?.full_name ?? profileData?.display_name ?? '')
 
     // 챕터 조회 (삭제되지 않은 것만, sort_order 순)
     const { data: chaptersData } = await supabase
@@ -116,7 +116,7 @@ function useBookRead(bookId: string | undefined) {
 
     const [{ data: authorsData }, { data: familyLinksData }] = await Promise.all([
       allAuthorIds.length > 0
-        ? supabase.from('profiles').select('id, display_name, avatar_url').in('id', allAuthorIds)
+        ? supabase.from('profiles').select('id, display_name, full_name, avatar_url').in('id', allAuthorIds)
         : Promise.resolve({ data: [] }),
       allAuthorIds.length > 0
         ? supabase.from('family_links')
@@ -196,11 +196,24 @@ export default function SeniorBookReadPage() {
   const user = useAuthStore((s) => s.user)
   const { book, seniorName, chapters, bookComments, coverImageUrl, loading, reload } = useBookRead(bookId)
 
-  // 저자 표시 이름: 로그인 유저가 책 저자일 때만 user_metadata 사용, 가족 뷰어는 seniorName
   const isAuthor = book ? user?.id === book.senior_id : false
   const kakaoName: string = isAuthor
     ? (user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? seniorName)
     : seniorName
+
+  // 독자 뷰어가 저자를 부르는 호칭 (family_links.senior_title)
+  const [seniorTitleForReader, setSeniorTitleForReader] = useState<string>('')
+  useEffect(() => {
+    if (isAuthor || !user?.id || !book?.senior_id) return
+    void supabase
+      .from('family_links')
+      .select('senior_title')
+      .eq('family_id', user.id)
+      .eq('senior_id', book.senior_id)
+      .eq('invite_status', 'accepted')
+      .maybeSingle()
+      .then(({ data }) => { if (data?.senior_title) setSeniorTitleForReader(data.senior_title) })
+  }, [isAuthor, user?.id, book?.senior_id])
 
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null)
   const [readingOpen, setReadingOpen] = useState(false)
@@ -745,17 +758,19 @@ export default function SeniorBookReadPage() {
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1.5">
                               <p className={`text-base font-bold ${isCommentByAuthor ? 'text-[#E8820C]' : 'text-[#1F2937]'}`}>
-                                {comment.author?.display_name ?? '가족'}
+                                {(comment.author?.full_name ?? comment.author?.display_name) ?? '가족'}
                               </p>
                               {isCommentByAuthor ? (
                                 <span className="text-xs text-[#E8820C] bg-[#FFF0DC] rounded-full px-2 py-0.5 leading-none">
-                                  저자
+                                  {isAuthor ? '저자' : (seniorTitleForReader || '저자')}
                                 </span>
-                              ) : comment.relationship && (
+                              ) : comment.author_id === user?.id ? (
+                                <span className="text-xs text-[#6B7280] bg-[#F3F4F6] rounded-full px-2 py-0.5 leading-none">나</span>
+                              ) : comment.relationship ? (
                                 <span className="text-xs text-[#6B7280] bg-[#F3F4F6] rounded-full px-2 py-0.5 leading-none">
                                   {comment.relationship}
                                 </span>
-                              )}
+                              ) : null}
                             </div>
                             {isOwnComment && editingCommentId !== comment.id && (
                               <div className="flex gap-3 shrink-0">
@@ -942,7 +957,7 @@ export default function SeniorBookReadPage() {
                       {comment.replies.map((reply) => {
                         const isReplyByAuthor = book ? reply.senior_id === book.senior_id : false
                         const replyStyle = avatarStyle(reply.senior_id)
-                        const replyAuthorName = reply.author?.display_name ?? (isReplyByAuthor ? seniorName : '가족')
+                        const replyAuthorName = (reply.author?.full_name ?? reply.author?.display_name) ?? (isReplyByAuthor ? seniorName : '가족')
                         const isOwnReply = profile?.id === reply.senior_id
                         return (
                         <div key={reply.id} className="ml-12 flex items-start gap-3">
@@ -965,12 +980,16 @@ export default function SeniorBookReadPage() {
                                   {replyAuthorName}
                                 </p>
                                 {isReplyByAuthor ? (
-                                  <span className="text-xs text-[#E8820C] bg-[#FFF0DC] rounded-full px-2 py-0.5 leading-none">저자</span>
-                                ) : reply.relationship && (
+                                  <span className="text-xs text-[#E8820C] bg-[#FFF0DC] rounded-full px-2 py-0.5 leading-none">
+                                    {isAuthor ? '저자' : (seniorTitleForReader || '저자')}
+                                  </span>
+                                ) : reply.senior_id === user?.id ? (
+                                  <span className="text-xs text-[#6B7280] bg-[#F3F4F6] rounded-full px-2 py-0.5 leading-none">나</span>
+                                ) : reply.relationship ? (
                                   <span className="text-xs text-[#6B7280] bg-[#F3F4F6] rounded-full px-2 py-0.5 leading-none">
                                     {reply.relationship}
                                   </span>
-                                )}
+                                ) : null}
                               </div>
                               {isOwnReply && editingReplyId !== reply.id && (
                                 <div className="flex gap-3 shrink-0">
