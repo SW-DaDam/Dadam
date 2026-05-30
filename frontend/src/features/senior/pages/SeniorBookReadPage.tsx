@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+﻿import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { ChevronLeft, Mic, Square, Play, Pause } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -657,7 +657,7 @@ export default function SeniorBookReadPage() {
         <div className="ml-auto w-11" />
       </header>
 
-      <main className="flex-1 overflow-y-auto w-full max-w-2xl mx-auto">
+      <main className="flex-1 overflow-y-auto w-full max-w-2xl md:max-w-none mx-auto">
 
 
         {chapters.length === 0 ? (

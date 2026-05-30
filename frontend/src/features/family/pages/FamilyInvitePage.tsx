@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ChevronLeft, ChevronRight, Copy } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -49,7 +49,7 @@ export default function FamilyInvitePage() {
         <h1 className="absolute left-1/2 -translate-x-1/2 text-lg sm:text-xl text-[#1F2937] font-medium whitespace-nowrap">가족 초대하기</h1>
       </header>
 
-      <main className="flex-1 overflow-y-auto flex flex-col gap-4 px-4 sm:px-6 py-5 w-full max-w-2xl mx-auto">
+      <main className="flex-1 overflow-y-auto flex flex-col gap-4 px-4 sm:px-6 py-5 w-full max-w-2xl md:max-w-none mx-auto">
 
         {/* 안내 배너 */}
         <div className="w-full bg-[#FFF0DC] rounded-2xl px-5 py-4 flex items-center gap-3">

@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router'
 import { ChevronLeft } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
-import { cn, toHttps } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { supabase } from '@/lib/supabase'
 
@@ -65,7 +65,7 @@ export default function ReaderProfileEditPage() {
   const user = useAuthStore((s) => s.user)
   const clear = useAuthStore((s) => s.clear)
   const displayName: string = user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? '사용자'
-  const avatarUrl: string | null = toHttps(user?.user_metadata?.avatar_url ?? null)
+  const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
   const [relation, setRelation] = useState('아들')
   const [notifBook, setNotifBook] = useState(true)
   const [notifReply, setNotifReply] = useState(true)
@@ -111,7 +111,7 @@ export default function ReaderProfileEditPage() {
         </button>
       </header>
 
-      <main className="flex-1 min-h-0 overflow-y-auto pb-[160px] w-full max-w-2xl mx-auto">
+      <main className="flex-1 min-h-0 overflow-y-auto pb-[160px] w-full max-w-2xl md:max-w-none mx-auto">
 
         {/* 프로필 사진 */}
         <div className="bg-white border-b border-[#E5E7EB] flex flex-col items-center gap-3 py-6">
@@ -254,7 +254,7 @@ export default function ReaderProfileEditPage() {
       </main>
 
       {/* 하단 저장 바 */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#E5E7EB] px-4 sm:px-6 py-4 flex flex-col gap-3 max-w-2xl mx-auto">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#E5E7EB] px-4 sm:px-6 py-4 flex flex-col gap-3 max-w-2xl md:max-w-none mx-auto">
         <p className="text-base text-[#6B7280] text-center">변경 사항은 저장 버튼을 눌러야 적용돼요</p>
         <button type="button" className="w-full bg-[#E8820C] rounded-2xl py-4 text-center">
           <span className="text-[1.375rem] text-white">저장하기</span>

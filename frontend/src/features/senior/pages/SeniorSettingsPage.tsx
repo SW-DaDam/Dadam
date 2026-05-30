@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+﻿import { useEffect } from 'react'
 import { useNavigate } from 'react-router'
 import { ChevronRight } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
@@ -7,10 +7,8 @@ import { useThemeStore } from '@/shared/stores/themeStore'
 import { useFontSizeStore, type FontSize } from '@/shared/stores/fontSizeStore'
 import { useMemory } from '@/features/memory/hooks/useMemory'
 import { useInvite } from '@/features/family/hooks/useInvite'
-import { cn, toHttps } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
-import { useInstallPrompt } from '@/shared/hooks/useInstallPrompt'
-import IosInstallGuide from '@/shared/components/IosInstallGuide'
 
 const FONT_OPTIONS: { value: FontSize; label: string }[] = [
   { value: 'small', label: '작음' },
@@ -27,7 +25,7 @@ export default function SeniorSettingsPage() {
   const profile = useAuthStore((s) => s.profile)
   const setProfile = useAuthStore((s) => s.setProfile)
   const displayName: string = user?.user_metadata?.full_name ?? user?.email ?? '사용자'
-  const avatarUrl: string | null = toHttps(user?.user_metadata?.avatar_url ?? null)
+  const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
   const avatarChar = displayName.charAt(0)
   // DB에서 저장된 호칭 사용, 없으면 프로필 로드 전 기본값
   const nickname: string = profile?.display_name ?? '...'
@@ -45,9 +43,6 @@ export default function SeniorSettingsPage() {
 
   const { items: memoryItems } = useMemory(user?.id ?? '')
   const { familyMembers } = useInvite()
-  const { platform, installState, install } = useInstallPrompt()
-  const [showIosGuide, setShowIosGuide] = useState(false)
-  const showInstallRow = installState !== 'installed' && (platform === 'ios' || (platform === 'android' && installState === 'installable'))
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -56,7 +51,7 @@ export default function SeniorSettingsPage() {
         <h1 className="text-lg sm:text-xl text-[#1F2937] font-medium">설정</h1>
       </header>
 
-      <main className="flex-1 overflow-y-auto flex flex-col gap-5 px-4 sm:px-6 py-5 w-full max-w-2xl mx-auto">
+      <main className="flex-1 overflow-y-auto flex flex-col gap-5 px-4 sm:px-6 py-5 w-full max-w-2xl md:max-w-none mx-auto">
 
         {/* 프로필 카드 */}
         <div className="bg-white border border-[#E5E7EB] rounded-2xl px-5 py-4 flex items-center gap-3">
@@ -211,25 +206,6 @@ export default function SeniorSettingsPage() {
               </div>
               <Toggle on={darkMode} onChange={setDarkMode} />
             </div>
-            {/* 홈화면 추가 */}
-            {showInstallRow && (
-              <button
-                type="button"
-                onClick={platform === 'ios' ? () => setShowIosGuide(true) : install}
-                className="w-full flex items-center gap-3 px-5 py-4 text-left"
-              >
-                <div className="w-10 h-10 rounded-xl bg-[#F3F4F6] flex items-center justify-center shrink-0 text-lg text-[#6B7280]">
-                  ⊞
-                </div>
-                <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                  <p className="text-[1.125rem] text-[#1F2937]">홈 화면에 추가</p>
-                  <p className="text-base text-[#6B7280]">
-                    {platform === 'ios' ? 'Safari에서 홈 화면에 추가하는 방법 보기' : '앱처럼 빠르게 실행할 수 있어요'}
-                  </p>
-                </div>
-                {platform === 'ios' && <ChevronRight size={20} className="text-[#D1D5DB] shrink-0" />}
-              </button>
-            )}
           </div>
         </div>
 
@@ -271,7 +247,6 @@ export default function SeniorSettingsPage() {
 
         {/* 앱 버전 */}
       </main>
-      {showIosGuide && <IosInstallGuide onClose={() => setShowIosGuide(false)} />}
     </div>
   )
 }

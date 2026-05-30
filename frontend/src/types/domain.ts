@@ -62,11 +62,11 @@ export type ChapterWithComments = Chapter & {
 // ─── TTS 설정 (F-03) ─────────────────────────────────────────
 
 /**
- * Naver Clova Voice Premium speaker ID
- * Phase 1: 1종(ngoeun, 일반 Premium 여성)으로 연결 테스트
- * Phase 2 확장 예정: NCP 콘솔 청취 후 6종으로 확대 (예: vmikyung, vara, vgoeun, vdaeseong, vdonghyun, vian)
+ * Naver Clova Voice Premium speaker ID (6종)
+ * 여성: nyejin(예진/일반), noyj(봄달/일반), vara(아라/Pro)
+ * 남성: nminsang(민상/일반), nsiyoon(시윤/일반), vian(이안/Pro)
  */
-export type TtsVoice = 'ngoeun'
+export type TtsVoice = 'nyuna' | 'noyj' | 'vara' | 'nminsang' | 'nsiyoon' | 'vian'
 
 /** TTS 말하기 속도 — Edge Function에서 Clova speed(-5~10)로 매핑 */
 export type TtsSpeed = 'slow' | 'normal' | 'fast'

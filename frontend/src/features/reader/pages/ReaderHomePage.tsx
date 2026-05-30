@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router'
+﻿import { useNavigate } from 'react-router'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { useFamilyBookshelf } from '@/features/bookshelf/hooks/useFamilyBookshelf'
 import { ShelfRack } from '@/features/bookshelf/components/ShelfRack'
@@ -31,7 +31,7 @@ export default function ReaderHomePage() {
         <span className="flex-1 min-w-0 truncate text-lg text-[#6B7280]">{todayLabel()}</span>
       </header>
 
-      <main className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-3 px-4 sm:px-6 py-4 w-full max-w-2xl mx-auto">
+      <main className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-3 px-4 sm:px-6 py-4 w-full max-w-2xl md:max-w-none mx-auto">
 
         {/* 인사 카드 */}
         <div className="bg-[#FFF0DC] rounded-2xl px-5 py-4 flex items-center gap-3">
