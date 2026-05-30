@@ -565,18 +565,23 @@ export default function SeniorBookReadPage() {
     const { error } = await voiceReply.uploadReply(commentId, voiceBlob, textContent)
     if (error) { showToast('답장 전달에 실패했어요'); return }
 
-    // 독자에게 알림
+    // 음성 답장 알림
     const targetComment = bookComments.find((c) => c.id === commentId)
-    if (targetComment && targetComment.author_id !== profile.id) {
-      const replierName = profile.display_name || (isAuthor ? '저자' : '가족')
-      await supabase.from('notifications').insert({
-        recipient_id: targetComment.author_id,
-        type: 'new_reply',
-        title: `${replierName}${josa(replierName, '이', '가')} 음성 답장을 남겼어요`,
-        body: textContent,
-        reference_id: book.id,
-        reference_type: 'book',
-      })
+    if (targetComment) {
+      const recipientId = targetComment.author_id === profile.id
+        ? book.senior_id
+        : targetComment.author_id
+      if (recipientId !== profile.id) {
+        const replierName = profile.full_name ?? profile.display_name ?? (isAuthor ? '저자' : '가족')
+        await supabase.from('notifications').insert({
+          recipient_id: recipientId,
+          type: 'new_reply',
+          title: `${replierName}${josa(replierName, '이', '가')} 음성 답장을 남겼어요`,
+          body: textContent,
+          reference_id: book.id,
+          reference_type: 'book',
+        })
+      }
     }
 
     handleDiscardVoice()
@@ -611,19 +616,26 @@ export default function SeniorBookReadPage() {
     })
     if (error) { showToast('답장 전달에 실패했어요'); return }
 
-    // 댓글 작성자(가족)에게 답장 알림 발송 (본인 제외)
+    // 답장 알림 발송
     const targetComment = bookComments.find((c) => c.id === commentId)
-    if (targetComment && targetComment.author_id !== profile.id) {
-      const replierName = profile.display_name || (isAuthor ? '저자' : '가족')
-      const { error: ne } = await supabase.from('notifications').insert({
-        recipient_id: targetComment.author_id,
-        type: 'new_reply',
-        title: `${replierName}${josa(replierName, '이', '가')} 답장을 남겼어요`,
-        body: replyText.trim(),
-        reference_id: book.id,
-        reference_type: 'book',
-      })
-      if (ne) console.error('[대댓글 알림 INSERT 실패]', ne)
+    if (targetComment) {
+      // 본인 댓글에 답장(대화 이어가기) → 저자에게 알림
+      // 타인 댓글에 답장 → 그 댓글 작성자에게 알림
+      const recipientId = targetComment.author_id === profile.id
+        ? book.senior_id
+        : targetComment.author_id
+      if (recipientId !== profile.id) {
+        const replierName = profile.full_name ?? profile.display_name ?? (isAuthor ? '저자' : '가족')
+        const { error: ne } = await supabase.from('notifications').insert({
+          recipient_id: recipientId,
+          type: 'new_reply',
+          title: `${replierName}${josa(replierName, '이', '가')} 답장을 남겼어요`,
+          body: replyText.trim(),
+          reference_id: book.id,
+          reference_type: 'book',
+        })
+        if (ne) console.error('[대댓글 알림 INSERT 실패]', ne)
+      }
     }
 
     setReplyingToId(null)
