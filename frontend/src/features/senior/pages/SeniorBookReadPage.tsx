@@ -497,17 +497,16 @@ export default function SeniorBookReadPage() {
         const { error: ne } = await supabase.from('notifications').insert({ recipient_id: book.senior_id, ...notifPayload })
         if (ne) console.error('[알림 INSERT 실패]', ne)
       } else {
-        // 저자 → 연결된 가족 전체에게 알림
-        const { data: links, error: le } = await supabase
+        // 저자 → 연결된 가족 전체에게 알림 (family_id 중복 제거)
+        const { data: links } = await supabase
           .from('family_links')
           .select('family_id')
           .eq('senior_id', book.senior_id)
           .eq('invite_status', 'accepted')
-        if (le) console.error('[family_links 조회 실패]', le)
-        console.log('[저자 댓글 알림 대상]', links)
-        if (links && links.length > 0) {
+        const uniqueIds = [...new Set((links ?? []).map((l) => l.family_id).filter(Boolean))] as string[]
+        if (uniqueIds.length > 0) {
           const { error: ne2 } = await supabase.from('notifications').insert(
-            links.flatMap((l) => l.family_id ? [{ recipient_id: l.family_id, ...notifPayload }] : [])
+            uniqueIds.map((id) => ({ recipient_id: id, ...notifPayload }))
           )
           if (ne2) console.error('[알림 INSERT 실패]', ne2)
         }
