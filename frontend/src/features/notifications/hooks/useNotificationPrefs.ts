@@ -43,12 +43,16 @@ export function useNotificationPrefs() {
   }, [user?.id])
 
   const updatePref = useCallback((key: keyof NotifPrefs, value: boolean) => {
+    if (!user?.id) return
     setPrefs((prev) => {
       const next = { ...prev, [key]: value }
-      void supabase
+      supabase
         .from('profiles')
         .update({ notification_prefs: next })
-        .eq('id', user?.id ?? '')
+        .eq('id', user.id)
+        .then(({ error }) => {
+          if (error) console.error('[알림 설정 저장 실패]', error.message)
+        })
       return next
     })
   }, [user?.id])
