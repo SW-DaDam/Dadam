@@ -1,6 +1,6 @@
 ﻿import { useEffect } from 'react'
 import { useNavigate } from 'react-router'
-import { ChevronRight } from 'lucide-react'
+import { Bell, ChevronRight } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { useThemeStore } from '@/shared/stores/themeStore'
@@ -218,8 +218,8 @@ export default function SeniorSettingsPage() {
               onClick={() => navigate('/s/settings/notifications')}
               className="w-full flex items-center gap-3 px-5 py-4 text-left"
             >
-              <div className="w-10 h-10 rounded-xl bg-[#F3F4F6] flex items-center justify-center shrink-0 text-lg">
-                🔔
+              <div className="w-10 h-10 rounded-xl bg-[#F3F4F6] flex items-center justify-center shrink-0">
+                <Bell size={20} className="text-[#6B7280]" />
               </div>
               <div className="flex-1 flex flex-col gap-0.5">
                 <p className="text-[1.125rem] text-[#1F2937]">알림 설정</p>
