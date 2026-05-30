@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router'
 import { ChevronLeft } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
-import { cn, toHttps } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { supabase } from '@/lib/supabase'
 
@@ -65,7 +65,7 @@ export default function ReaderProfileEditPage() {
   const user = useAuthStore((s) => s.user)
   const clear = useAuthStore((s) => s.clear)
   const displayName: string = user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? '사용자'
-  const avatarUrl: string | null = toHttps(user?.user_metadata?.avatar_url ?? null)
+  const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
   const [relation, setRelation] = useState('아들')
   const [notifBook, setNotifBook] = useState(true)
   const [notifReply, setNotifReply] = useState(true)
