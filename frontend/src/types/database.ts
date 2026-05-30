@@ -485,6 +485,7 @@ export type Database = {
           display_name: string
           full_name: string | null
           id: string
+          notification_prefs: Record<string, boolean> | null
           phone: string | null
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
@@ -495,6 +496,7 @@ export type Database = {
           display_name: string
           full_name?: string | null
           id: string
+          notification_prefs?: Record<string, boolean> | null
           phone?: string | null
           role: Database["public"]["Enums"]["user_role"]
           updated_at?: string
@@ -505,6 +507,7 @@ export type Database = {
           display_name?: string
           full_name?: string | null
           id?: string
+          notification_prefs?: Record<string, boolean> | null
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string

@@ -3,6 +3,14 @@ import { supabase } from '@/lib/supabase'
 import type { Notification } from '@/types/domain'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { useNotificationsStore } from '../stores/notificationsStore'
+import { useNotificationPrefs } from './useNotificationPrefs'
+
+// notification_type → NotifPrefs 키 매핑
+const TYPE_TO_PREF: Record<string, string> = {
+  new_comment: 'new_comment',
+  new_reply: 'new_reply',
+  new_book: 'new_book',
+}
 
 const PAGE_SIZE = 50
 const POLLING_MS = 30_000
@@ -21,8 +29,18 @@ export function useNotifications() {
     setLoading,
   } = useNotificationsStore()
 
+  const { prefs } = useNotificationPrefs()
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const unreadCount = notifications.filter((n) => !n.is_read).length
+
+  // 알림 설정에서 꺼진 타입은 표시하지 않음
+  function isAllowed(n: Notification) {
+    const prefKey = TYPE_TO_PREF[n.type]
+    if (!prefKey) return true
+    return prefs[prefKey as keyof typeof prefs] !== false
+  }
+
+  const filteredNotifications = notifications.filter(isAllowed)
+  const unreadCount = filteredNotifications.filter((n) => !n.is_read).length
 
   const fetchNotifications = useCallback(async () => {
     if (!user?.id) return
@@ -89,5 +107,5 @@ export function useNotifications() {
     await supabase.from('notifications').delete().eq('id', id)
   }, [removeNotification])
 
-  return { notifications, unreadCount, loading, markAsRead, markAllRead, deleteNotification }
+  return { notifications: filteredNotifications, unreadCount, loading, markAsRead, markAllRead, deleteNotification }
 }
