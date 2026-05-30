@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router'
 import { ChevronLeft } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, toHttps } from '@/lib/utils'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { supabase } from '@/lib/supabase'
 
@@ -95,7 +95,7 @@ export default function ProfileEditPage() {
   const profile = useAuthStore((s) => s.profile)
   const setProfile = useAuthStore((s) => s.setProfile)
   const displayName: string = user?.user_metadata?.full_name ?? user?.email ?? '사용자'
-  const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
+  const avatarUrl: string | null = toHttps(user?.user_metadata?.avatar_url ?? null)
 
   // DB에서 저장된 호칭을 초기값으로 사용, 없으면 '엄마'
   const savedNickname = profile?.display_name ?? '엄마'
