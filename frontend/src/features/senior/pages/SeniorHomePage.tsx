@@ -65,17 +65,17 @@ export default function SeniorHomePage() {
         <button
           type="button"
           onClick={() => navigate('/s/chat')}
-          className="w-full bg-white border border-[#E5E7EB] rounded-2xl px-5 py-6 flex flex-col items-center gap-4"
+          className="w-full bg-white border border-[#E5E7EB] rounded-2xl px-5 py-5 flex flex-col items-center gap-3 overflow-hidden"
         >
           <p className="text-[1.375rem] text-[#1F2937]">AI 말동무와 대화하기</p>
 
           {/* 동심원 장식 */}
-          <div className="relative flex items-center justify-center w-[160px] h-[160px]">
-            <div className="absolute w-[160px] h-[160px] rounded-full bg-[#FFF8F0]" />
-            <div className="absolute w-[120px] h-[120px] rounded-full bg-[#FFF0DC]" />
-            <div className="absolute w-[80px] h-[80px] rounded-full bg-[#E5E7EB]" />
+          <div className="relative flex items-center justify-center w-[120px] h-[120px] shrink-0">
+            <div className="absolute w-[120px] h-[120px] rounded-full bg-[#FFF8F0]" />
+            <div className="absolute w-[90px] h-[90px] rounded-full bg-[#FFF0DC]" />
+            <div className="absolute w-[60px] h-[60px] rounded-full bg-[#E5E7EB]" />
             {/* 마이크 아이콘 */}
-            <svg width="36" height="48" viewBox="0 0 36 54" fill="none" aria-hidden="true" className="relative z-10">
+            <svg width="28" height="38" viewBox="0 0 36 54" fill="none" aria-hidden="true" className="relative z-10">
               <rect x="9" y="0" width="18" height="28" rx="9" fill="#9CA3AF" />
               <path d="M2 24c0 8.837 7.163 16 16 16s16-7.163 16-16" stroke="#9CA3AF" strokeWidth="4" strokeLinecap="round" fill="none" />
               <line x1="18" y1="40" x2="18" y2="52" stroke="#9CA3AF" strokeWidth="4" strokeLinecap="round" />
