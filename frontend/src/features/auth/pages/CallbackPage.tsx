@@ -65,7 +65,7 @@ export function CallbackPage() {
     // profiles 조회로 역할 + 온보딩 완료 여부 확인
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
-      .select('role, display_name, full_name')
+      .select('role, display_name')
       .eq('id', session.user.id)
       .single()
 
@@ -86,10 +86,8 @@ export function CallbackPage() {
       return
     }
 
-    // 기존 유저: full_name 미설정이면 카카오 이름으로 채우기
-    if (!profileData.full_name) {
-      void supabase.from('profiles').update({ full_name: kakaoName }).eq('id', session.user.id)
-    }
+    // 기존 유저: 로그인 시 카카오 이름 동기화 (마이그레이션 후 활성화)
+    void supabase.from('profiles').update({ full_name: kakaoName } as never).eq('id', session.user.id)
 
     // 기존 사용자가 초대 링크를 통해 로그인한 경우 — /join으로 돌려보내 연결 처리
     const pendingCode = sessionStorage.getItem('pendingInviteCode')
