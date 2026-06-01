@@ -806,19 +806,21 @@ export default function SeniorBookReadPage() {
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1.5">
                               <p className={`text-base font-bold ${isCommentByAuthor ? 'text-[#E8820C]' : 'text-[#1F2937]'}`}>
-                                {(comment.author?.full_name ?? comment.author?.display_name) ?? '가족'}
+                                {isCommentByAuthor
+                                  ? (comment.author?.full_name ?? comment.author?.display_name ?? (isAuthor ? '저자' : seniorTitleForReader || '저자'))
+                                  : comment.author_id === user?.id
+                                    ? (comment.author?.full_name ?? comment.author?.display_name ?? '나')
+                                    : `${comment.author?.full_name ?? comment.author?.display_name ?? '독자'}${comment.relationship ? ` (${comment.relationship})` : ''}`
+                                }
                               </p>
-                              {isCommentByAuthor ? (
+                              {isCommentByAuthor && (
                                 <span className="text-xs text-[#E8820C] bg-[#FFF0DC] rounded-full px-2 py-0.5 leading-none">
                                   {isAuthor ? '저자' : (seniorTitleForReader || '저자')}
                                 </span>
-                              ) : comment.author_id === user?.id ? (
+                              )}
+                              {!isCommentByAuthor && comment.author_id === user?.id && (
                                 <span className="text-xs text-[#6B7280] bg-[#F3F4F6] rounded-full px-2 py-0.5 leading-none">나</span>
-                              ) : comment.relationship ? (
-                                <span className="text-xs text-[#6B7280] bg-[#F3F4F6] rounded-full px-2 py-0.5 leading-none">
-                                  {comment.relationship}
-                                </span>
-                              ) : null}
+                              )}
                             </div>
                             {isOwnComment && editingCommentId !== comment.id && (
                               <div className="flex gap-3 shrink-0">
@@ -1005,7 +1007,12 @@ export default function SeniorBookReadPage() {
                       {comment.replies.map((reply) => {
                         const isReplyByAuthor = book ? reply.senior_id === book.senior_id : false
                         const replyStyle = avatarStyle(reply.senior_id)
-                        const replyAuthorName = (reply.author?.full_name ?? reply.author?.display_name) ?? (isReplyByAuthor ? seniorName : '가족')
+                        const replyBaseName = reply.author?.full_name ?? reply.author?.display_name
+                        const replyAuthorName = isReplyByAuthor
+                          ? (replyBaseName ?? seniorName)
+                          : reply.senior_id === user?.id
+                            ? (replyBaseName ?? '나')
+                            : `${replyBaseName ?? '독자'}${reply.relationship ? ` (${reply.relationship})` : ''}`
                         const isOwnReply = profile?.id === reply.senior_id
                         return (
                         <div key={reply.id} className="ml-12 flex items-start gap-3">
@@ -1031,17 +1038,14 @@ export default function SeniorBookReadPage() {
                                 <p className={`text-[0.9375rem] font-bold ${isReplyByAuthor ? 'text-[#E8820C]' : 'text-[#1F2937]'}`}>
                                   {replyAuthorName}
                                 </p>
-                                {isReplyByAuthor ? (
+                                {isReplyByAuthor && (
                                   <span className="text-xs text-[#E8820C] bg-[#FFF0DC] rounded-full px-2 py-0.5 leading-none">
                                     {isAuthor ? '저자' : (seniorTitleForReader || '저자')}
                                   </span>
-                                ) : reply.senior_id === user?.id ? (
+                                )}
+                                {!isReplyByAuthor && reply.senior_id === user?.id && (
                                   <span className="text-xs text-[#6B7280] bg-[#F3F4F6] rounded-full px-2 py-0.5 leading-none">나</span>
-                                ) : reply.relationship ? (
-                                  <span className="text-xs text-[#6B7280] bg-[#F3F4F6] rounded-full px-2 py-0.5 leading-none">
-                                    {reply.relationship}
-                                  </span>
-                                ) : null}
+                                )}
                               </div>
                               {isOwnReply && editingReplyId !== reply.id && (
                                 <div className="flex gap-3 shrink-0">
