@@ -468,7 +468,10 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
     }
 
     recognition.onend = () => {
-      setState((prev) => (prev === 'listening' ? 'idle' : prev))
+      // 인식이 끝났을 때 아직 listening이면 idle로 전환.
+      // updateState로 stateRef까지 함께 갱신해야 한다 — 직접 setState만 쓰면
+      // stateRef가 'listening'으로 남아 no-speech 재시작(stateRef 참조) 등 게이트 로직이 오동작한다.
+      if (stateRef.current === 'listening') updateState('idle')
     }
 
     recognitionRef.current = recognition

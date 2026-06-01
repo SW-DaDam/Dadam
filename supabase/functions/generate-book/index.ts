@@ -16,6 +16,8 @@ import {
   type UtteranceItem,
   type MemoryItem,
 } from './prompts.ts'
+// 내부 호출(service_role) 인증 + job 처리 권한 헬퍼 (auth.ts 참조)
+import { isServiceRoleToken, canProcessJob } from './auth.ts'
 
 // CORS 헤더: pg_cron 내부 호출 + 개발 중 수동 POST 모두 허용
 const CORS_HEADERS = {
@@ -446,10 +448,16 @@ async function runPipelineForSenior(
   }
 
   // books.chapter_count 업데이트
-  await supabase
+  // 실패해도 책·챕터는 이미 생성됐고 chapter_count는 표시용 카운터이므로 비치명 — 경고만 남김
+  // (이전엔 에러를 확인하지 않아 실패 시 chapter_count가 0으로 남는 silent failure였음)
+  const { error: countErr } = await supabase
     .from('books')
     .update({ chapter_count: chaptersToInsert.length })
     .eq('id', bookId)
+
+  if (countErr) {
+    console.warn(`[generate-book] job ${jobId} — chapter_count 업데이트 실패 (비치명):`, countErr)
+  }
 
   // book_id를 job에 저장
   await updateJobStatus(supabase, jobId, 'chaptering', {
@@ -702,10 +710,15 @@ async function handleShortBook(
     return { outcome: 'failed' }
   }
 
-  await supabase
+  // chapter_count 업데이트 — 실패해도 비치명(표시용 카운터)이므로 경고만 남김
+  const { error: countErr } = await supabase
     .from('books')
     .update({ chapter_count: chaptersToInsert.length })
     .eq('id', bookId)
+
+  if (countErr) {
+    console.warn(`[generate-book:short] job ${jobId} — chapter_count 업데이트 실패 (비치명):`, countErr)
+  }
 
   await updateJobStatus(supabase, jobId, 'chaptering', {
     book_id: bookId,
@@ -773,43 +786,38 @@ Deno.serve(async (req) => {
     }
 
     // 호출자 JWT 검증
-    // service_role JWT는 auth.getUser()를 통과하지 못하므로 토큰 payload의 role로 분기
-    // - role=service_role: 서명 검증 없이 통과 (pg_cron, 내부 호출 전용)
-    // - role=authenticated: auth.getUser()로 실제 사용자 세션 검증
+    // service_role JWT는 auth.getUser()를 통과하지 못하므로 별도 분기가 필요하다.
+    // [중요] 토큰 payload의 role 클레임은 서명 검증 없이는 위조 가능하므로 신뢰하지 않는다.
+    // - 토큰이 실제 service_role 키와 정확히 일치: 내부 호출(pg_cron 등)로 인정해 통과
+    // - 그 외 모든 토큰: auth.getUser()로 실제 사용자 세션을 서명까지 검증
     const token = authHeader.replace('Bearer ', '')
-    let tokenRole: string | null = null
-    try {
-      // JWT payload는 URL-safe base64 — '-'/'_' 치환 후 padding 보정 필요
-      const raw = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
-      const b64 = raw.padEnd(raw.length + (4 - (raw.length % 4)) % 4, '=')
-      const payload = JSON.parse(atob(b64))
-      tokenRole = payload.role ?? null
-    } catch {
-      return new Response(
-        JSON.stringify({ error: '유효하지 않은 인증 토큰입니다' }),
-        { status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
-      )
-    }
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    // 내부(pg_cron 등 service_role) 호출 여부 — 일반 사용자 권한 검사 분기에 사용
+    const isInternalCall = isServiceRoleToken(token, serviceRoleKey)
+    // 일반 사용자 호출자의 uid — job 소유권 검증(IDOR 방지)에 사용. 내부 호출이면 null.
+    let callerUserId: string | null = null
 
-    if (tokenRole !== 'service_role') {
-      // 일반 사용자 토큰은 Supabase Auth로 검증
+    if (!isInternalCall) {
+      // service_role 키와 불일치 → 일반 사용자 토큰으로 간주하고 Supabase Auth로 검증
+      // (위조된 role=service_role 토큰도 키와 다르므로 이 경로로 떨어져 401 처리됨)
       const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
       const callerSupabase = createClient(
         Deno.env.get('SUPABASE_URL')!,
         anonKey,
         { global: { headers: { Authorization: authHeader } } },
       )
-      const { error: authError } = await callerSupabase.auth.getUser()
-      if (authError) {
+      const { data: { user }, error: authError } = await callerSupabase.auth.getUser()
+      if (authError || !user) {
         return new Response(
           JSON.stringify({ error: '유효하지 않은 인증 토큰입니다' }),
           { status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
         )
       }
+      callerUserId = user.id
     }
 
     // 인증 통과 후 service_role 클라이언트 사용 (RLS 우회 — 배치 작업용)
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    // serviceRoleKey 는 위 인증 분기에서 이미 선언됨 — 재사용
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       serviceRoleKey,
@@ -835,6 +843,15 @@ Deno.serve(async (req) => {
         return new Response(
           JSON.stringify({ error: `job을 찾을 수 없습니다: ${body.job_id}` }),
           { status: 404, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+        )
+      }
+
+      // IDOR 방지: 일반 사용자는 본인 소유(senior_id == 호출자 uid) job만 처리 가능.
+      // 내부(service_role) 호출은 모두 허용 (canProcessJob 참조).
+      if (!canProcessJob(isInternalCall, callerUserId, pendingJob.senior_id)) {
+        return new Response(
+          JSON.stringify({ error: '본인 job만 처리할 수 있습니다' }),
+          { status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
         )
       }
 
@@ -871,6 +888,16 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({ message: '파이프라인 완료', job_id: body.job_id, result: outcome }),
         { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+      )
+    }
+
+    // job_id 없는 호출(특정 senior 디버그 모드 + 전체 배치)은 내부(service_role) 전용.
+    // 일반 사용자가 임의 senior로 생성을 트리거하거나(말일 체크 우회) 전체 배치를 돌리지
+    // 못하도록 차단한다. 프론트엔드는 항상 본인 job_id로만 호출하므로 영향 없음.
+    if (!isInternalCall) {
+      return new Response(
+        JSON.stringify({ error: 'job_id 없는 호출은 내부 전용입니다' }),
+        { status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
       )
     }
 

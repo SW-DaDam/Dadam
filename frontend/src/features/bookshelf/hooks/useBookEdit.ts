@@ -298,35 +298,11 @@ export function useBookEdit(bookId: string | undefined): UseBookEditReturn {
         return
       }
 
-      // 202: 백그라운드 처리 — count 기반 폴링 (신규 row 삽입 케이스)
-      setCoverLoading(true)
-      const prevCount = coverImagesLengthRef.current
-      pollAttemptsRef.current = 0
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current)
-      pollTimerRef.current = setInterval(async () => {
-        pollAttemptsRef.current += 1
-        if (pollAttemptsRef.current > COVER_POLL_MAX_ATTEMPTS) {
-          setCoverLoading(false)
-          setCoverError(true)
-          if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null }
-          return
-        }
-        const { data: newCovers } = await supabase
-          .from('cover_images')
-          .select('*')
-          .eq('book_id', bookId)
-          .in('status', ['candidate', 'selected'])
-        // row 수가 늘었으면 새 이미지 완성 — 202 신규 삽입 케이스
-        if (newCovers && newCovers.length > prevCount) {
-          const { data: currentChapters } = await supabase
-            .from('chapters').select('id').eq('book_id', bookId).order('sort_order')
-          const chapterIds = currentChapters?.map((c) => c.id) ?? []
-          coverImagesLengthRef.current = newCovers.length
-          setCoverImages(sortCoversByChapterOrder(newCovers, chapterIds))
-          setCoverLoading(false)
-          if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null }
-        }
-      }, COVER_POLL_INTERVAL_MS)
+      // 참고: generate-cover의 single 모드는 항상 동기 200(생성 완료 후 반환)이므로
+      // 여기 도달하는 성공 응답은 위 200 분기에서 모두 처리된다.
+      // (이전엔 202 count 기반 폴링 블록이 있었으나, single 모드는 202를 반환하지 않고
+      //  재생성은 같은 storage 경로를 덮어써 row 수·image_url이 변하지 않으므로
+      //  count 폴링으로는 완료를 감지할 수 없었다 — 도달 불가 + 부정확한 dead code라 제거.)
     } finally {
       setRegenerating(false)
     }
