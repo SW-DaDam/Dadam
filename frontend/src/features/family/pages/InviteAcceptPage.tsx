@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { useInvite } from '@/features/family/hooks/useInvite'
 import { useAuth } from '@/features/auth/hooks/useAuth'
+import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 
 // 저자 호칭 → 독자 호칭 자동 제안 매핑
@@ -42,6 +43,19 @@ export default function InviteAcceptPage() {
     if (suggestions?.length === 1) setReaderNickname(suggestions[0])
     else setReaderNickname('')
   }
+
+  // 이미 연결된 사용자면 바로 독자 홈으로
+  useEffect(() => {
+    if (!session?.user?.id) return
+    void supabase
+      .from('family_links')
+      .select('id')
+      .eq('family_id', session.user.id)
+      .eq('invite_status', 'accepted')
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => { if (data) navigate('/r', { replace: true }) })
+  }, [session?.user?.id, navigate])
 
   // 비로그인 상태에서 코드 보존 후 카카오 로그인
   useEffect(() => {
