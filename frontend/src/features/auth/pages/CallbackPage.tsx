@@ -57,8 +57,9 @@ export function CallbackPage() {
     // store에 user + kakaoProfile 저장
     // kakaoProfile은 온보딩(ProfileSetupPage/ReaderSetupPage)에서 카카오 이름·사진 표시에 사용
     setUser(session.user)
+    const kakaoName = session.user.user_metadata?.full_name ?? session.user.user_metadata?.name ?? '사용자'
     setKakaoProfile({
-      name: session.user.user_metadata?.full_name ?? session.user.user_metadata?.name ?? '사용자',
+      name: kakaoName,
       avatarUrl: session.user.user_metadata?.avatar_url ?? null,
     })
 
@@ -80,15 +81,25 @@ export function CallbackPage() {
       return
     }
 
-    // [P1 Fix] display_name이 기본값이면 온보딩 미완료 — role과 무관하게 역할 선택으로
-    // (pendingInviteCode는 ReaderSetupPage에서 처리)
+    const pendingCode = sessionStorage.getItem('pendingInviteCode')
+
+    // 신규 유저 + 초대 코드 있음 → 프로필 자동 설정 후 /join으로 바로 이동
+    if (profileData.display_name === DEFAULT_DISPLAY_NAME && pendingCode) {
+      await supabase
+        .from('profiles')
+        .update({ role: 'family', display_name: kakaoName })
+        .eq('id', session.user.id)
+      navigate(`/join?code=${pendingCode}`, { replace: true })
+      return
+    }
+
+    // 신규 유저 + 초대 코드 없음 → 온보딩
     if (profileData.display_name === DEFAULT_DISPLAY_NAME) {
       navigate('/role-select', { replace: true })
       return
     }
 
-    // 기존 사용자가 초대 링크를 통해 로그인한 경우 — /join으로 돌려보내 연결 처리
-    const pendingCode = sessionStorage.getItem('pendingInviteCode')
+    // 기존 사용자 + 초대 코드 있음 → /join으로 이동
     if (pendingCode) {
       navigate(`/join?code=${pendingCode}`, { replace: true })
       return
