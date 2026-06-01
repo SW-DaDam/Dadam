@@ -1,8 +1,9 @@
 import { type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
-import { Bell, BookMarked, BookOpen, ChevronLeft, Info, MessageCircle, Moon, Reply } from 'lucide-react'
+import { Bell, BellRing, BookMarked, BookOpen, ChevronLeft, Info, MessageCircle, Moon, Reply } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
 import { useNotificationPrefs } from '@/features/notifications/hooks/useNotificationPrefs'
+import { usePushSubscription } from '@/shared/hooks/usePushSubscription'
 
 interface NotifItem {
   id: string
@@ -62,6 +63,8 @@ const BOOK_NOTIFS: NotifItem[] = [
 export default function NotificationSettingsPage() {
   const navigate = useNavigate()
   const { prefs, loading, updatePref } = useNotificationPrefs()
+  const { supported: pushSupported, subscribed: pushSubscribed, subscribe: pushSubscribe, unsubscribe: pushUnsubscribe } = usePushSubscription()
+  const notifEnabled = !pushSupported || pushSubscribed
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -74,6 +77,22 @@ export default function NotificationSettingsPage() {
       </header>
 
       <main className="flex-1 overflow-y-auto flex flex-col gap-5 px-4 sm:px-6 py-5 w-full max-w-2xl md:max-w-none mx-auto">
+
+        {/* 푸시 알림 마스터 토글 */}
+        {pushSupported && (
+          <div className="w-full bg-[#E8820C] rounded-2xl px-5 py-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+              <BellRing size={20} className="text-white" />
+            </div>
+            <div className="flex-1 flex flex-col gap-0.5">
+              <p className="text-xl text-white">푸시 알림</p>
+              <p className="text-base text-white opacity-80">
+                {pushSubscribed ? '기기 알림이 켜져 있어요' : '꺼지면 모든 알림이 오지 않아요'}
+              </p>
+            </div>
+            <Toggle on={pushSubscribed} onChange={(v) => v ? pushSubscribe() : pushUnsubscribe()} />
+          </div>
+        )}
 
         {/* 가족 활동 섹션 */}
         <div className="flex flex-col gap-1">
@@ -89,8 +108,8 @@ export default function NotificationSettingsPage() {
                   <p className="text-sm text-[#6B7280]">{item.desc}</p>
                 </div>
                 <Toggle
-                  on={!loading && prefs[item.prefKey as keyof typeof prefs]}
-                  onChange={(v) => updatePref(item.prefKey as keyof typeof prefs, v)}
+                  on={notifEnabled && !loading && prefs[item.prefKey as keyof typeof prefs]}
+                  onChange={(v) => notifEnabled && updatePref(item.prefKey as keyof typeof prefs, v)}
                 />
               </div>
             ))}
@@ -111,8 +130,8 @@ export default function NotificationSettingsPage() {
                   <p className="text-sm text-[#6B7280]">{item.desc}</p>
                 </div>
                 <Toggle
-                  on={!loading && prefs[item.prefKey as keyof typeof prefs]}
-                  onChange={(v) => updatePref(item.prefKey as keyof typeof prefs, v)}
+                  on={notifEnabled && !loading && prefs[item.prefKey as keyof typeof prefs]}
+                  onChange={(v) => notifEnabled && updatePref(item.prefKey as keyof typeof prefs, v)}
                 />
               </div>
             ))}
