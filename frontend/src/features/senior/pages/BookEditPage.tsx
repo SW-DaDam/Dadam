@@ -254,8 +254,21 @@ export default function BookEditPage() {
     try {
       const url = new URL(chapter.photo_url)
       const storagePath = decodeURIComponent(url.pathname.split('/chapter-photos/')[1])
-      await supabase.storage.from('chapter-photos').remove([storagePath])
-      await supabase.from('chapters').update({ photo_url: null }).eq('id', chapter.id)
+
+      // DB의 photo_url을 먼저 비운다 — 실패하면 중단(파일·참조 모두 유지되어 일관 상태)
+      // (Supabase 호출은 에러 시 throw하지 않고 { error }를 반환하므로 명시적으로 확인)
+      const { error: dbErr } = await supabase.from('chapters').update({ photo_url: null }).eq('id', chapter.id)
+      if (dbErr) {
+        showToast('사진 삭제에 실패했어요')
+        return
+      }
+
+      // 스토리지 파일 삭제 — 실패해도 DB 참조는 이미 제거됨(고아 파일만 남음, 비치명)
+      const { error: storageErr } = await supabase.storage.from('chapter-photos').remove([storagePath])
+      if (storageErr) {
+        console.warn('[사진 삭제] storage 파일 제거 실패(고아 파일 가능):', storageErr)
+      }
+
       updateChapterPhotoUrl(chapter.id, null)
       showToast('사진을 삭제했어요')
     } catch {

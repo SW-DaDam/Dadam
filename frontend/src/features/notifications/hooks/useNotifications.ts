@@ -37,19 +37,24 @@ export function useNotifications() {
   }, [user?.id, setNotifications])
 
   const markAsRead = useCallback(async (id: string) => {
+    // 낙관적 변경 전 스냅샷 — DB 실패 시 원복용 (getState로 최신 상태 확보)
+    const snapshot = useNotificationsStore.getState().notifications
     markOneRead(id)
-    await supabase.from('notifications').update({ is_read: true }).eq('id', id)
-  }, [markOneRead])
+    const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', id)
+    if (error) setNotifications(snapshot)  // 실패 시 롤백 → store/DB 불일치 방지
+  }, [markOneRead, setNotifications])
 
   const markAllRead = useCallback(async () => {
     if (!user?.id) return
+    const snapshot = useNotificationsStore.getState().notifications
     storeMarkAllRead()
-    await supabase
+    const { error } = await supabase
       .from('notifications')
       .update({ is_read: true })
       .eq('recipient_id', user.id)
       .eq('is_read', false)
-  }, [user?.id, storeMarkAllRead])
+    if (error) setNotifications(snapshot)
+  }, [user?.id, storeMarkAllRead, setNotifications])
 
   useEffect(() => {
     if (!user?.id) return
@@ -85,9 +90,11 @@ export function useNotifications() {
   }, [user?.id, fetchNotifications, prependNotification, setLoading])
 
   const deleteNotification = useCallback(async (id: string) => {
+    const snapshot = useNotificationsStore.getState().notifications
     removeNotification(id)
-    await supabase.from('notifications').delete().eq('id', id)
-  }, [removeNotification])
+    const { error } = await supabase.from('notifications').delete().eq('id', id)
+    if (error) setNotifications(snapshot)  // 삭제 실패 시 롤백
+  }, [removeNotification, setNotifications])
 
   return { notifications, unreadCount, loading, markAsRead, markAllRead, deleteNotification }
 }

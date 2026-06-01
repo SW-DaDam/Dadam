@@ -298,9 +298,16 @@ export default function SeniorBookReadPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookComments])
 
+  // 토스트 자동 숨김 타이머 ref — 직전 타이머를 정리해 연속 토스트 충돌·언마운트 후 setState 방지
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    return () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current) }
+  }, [])
+
   function showToast(msg: string) {
     setToastMsg(msg)
-    setTimeout(() => setToastMsg(null), 2500)
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setToastMsg(null), 2500)
   }
 
   // ─── 이모지 반응 ───────────────────────────────────────────────────────────
@@ -347,11 +354,14 @@ export default function SeniorBookReadPage() {
   async function handleToggleReaction(commentId: string, emoji: string) {
     if (!user) return
     const current = reactions[commentId]?.find((r) => r.emoji === emoji)
-    if (current?.reacted) {
-      await supabase.from('comment_reactions').delete()
-        .eq('comment_id', commentId).eq('user_id', user.id).eq('emoji', emoji)
-    } else {
-      await supabase.from('comment_reactions').insert({ comment_id: commentId, user_id: user.id, emoji })
+    // DB 반영 결과를 확인 — 실패 시 로컬 상태를 바꾸지 않아 UI/DB 불일치를 방지
+    const { error } = current?.reacted
+      ? await supabase.from('comment_reactions').delete()
+          .eq('comment_id', commentId).eq('user_id', user.id).eq('emoji', emoji)
+      : await supabase.from('comment_reactions').insert({ comment_id: commentId, user_id: user.id, emoji })
+    if (error) {
+      showToast('반응을 반영하지 못했어요')
+      return
     }
     setReactions((prev) => ({
       ...prev,
@@ -368,11 +378,14 @@ export default function SeniorBookReadPage() {
   async function handleToggleReplyReaction(replyId: string, emoji: string) {
     if (!user) return
     const current = replyReactions[replyId]?.find((r) => r.emoji === emoji)
-    if (current?.reacted) {
-      await supabase.from('reply_reactions').delete()
-        .eq('reply_id', replyId).eq('user_id', user.id).eq('emoji', emoji)
-    } else {
-      await supabase.from('reply_reactions').insert({ reply_id: replyId, user_id: user.id, emoji })
+    // DB 반영 결과를 확인 — 실패 시 로컬 상태를 바꾸지 않아 UI/DB 불일치를 방지
+    const { error } = current?.reacted
+      ? await supabase.from('reply_reactions').delete()
+          .eq('reply_id', replyId).eq('user_id', user.id).eq('emoji', emoji)
+      : await supabase.from('reply_reactions').insert({ reply_id: replyId, user_id: user.id, emoji })
+    if (error) {
+      showToast('반응을 반영하지 못했어요')
+      return
     }
     setReplyReactions((prev) => ({
       ...prev,
