@@ -62,9 +62,13 @@ const BOOK_NOTIFS: NotifItem[] = [
 
 export default function NotificationSettingsPage() {
   const navigate = useNavigate()
-  const { prefs, loading, updatePref } = useNotificationPrefs()
+  const { prefs, loading, updatePref, disableAll, enableAll } = useNotificationPrefs()
   const { supported: pushSupported, subscribed: pushSubscribed, subscribe: pushSubscribe, unsubscribe: pushUnsubscribe } = usePushSubscription()
-  const notifEnabled = !pushSupported || pushSubscribed
+
+  async function handlePushToggle(on: boolean) {
+    if (on) { await pushSubscribe(); enableAll() }
+    else { await pushUnsubscribe(); disableAll() }
+  }
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -90,7 +94,7 @@ export default function NotificationSettingsPage() {
                 {pushSubscribed ? '기기 알림이 켜져 있어요' : '꺼지면 모든 알림이 오지 않아요'}
               </p>
             </div>
-            <Toggle on={pushSubscribed} onChange={(v) => v ? pushSubscribe() : pushUnsubscribe()} />
+            <Toggle on={pushSubscribed} onChange={handlePushToggle} />
           </div>
         )}
 
@@ -108,8 +112,8 @@ export default function NotificationSettingsPage() {
                   <p className="text-sm text-[#6B7280]">{item.desc}</p>
                 </div>
                 <Toggle
-                  on={notifEnabled && !loading && prefs[item.prefKey as keyof typeof prefs]}
-                  onChange={(v) => notifEnabled && updatePref(item.prefKey as keyof typeof prefs, v)}
+                  on={!loading && prefs[item.prefKey as keyof typeof prefs]}
+                  onChange={(v) => updatePref(item.prefKey as keyof typeof prefs, v)}
                 />
               </div>
             ))}
@@ -130,8 +134,8 @@ export default function NotificationSettingsPage() {
                   <p className="text-sm text-[#6B7280]">{item.desc}</p>
                 </div>
                 <Toggle
-                  on={notifEnabled && !loading && prefs[item.prefKey as keyof typeof prefs]}
-                  onChange={(v) => notifEnabled && updatePref(item.prefKey as keyof typeof prefs, v)}
+                  on={!loading && prefs[item.prefKey as keyof typeof prefs]}
+                  onChange={(v) => updatePref(item.prefKey as keyof typeof prefs, v)}
                 />
               </div>
             ))}
