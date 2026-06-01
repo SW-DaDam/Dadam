@@ -32,7 +32,7 @@ export default function FamilyInvitePage() {
     if (!Kakao.isInitialized()) {
       Kakao.init(import.meta.env.VITE_KAKAO_JS_KEY)
     }
-    const imageUrl = `${window.location.origin}/og-image.png`
+    const imageUrl = `${window.location.origin}/og-image-square.png`
     Kakao.Share.sendDefault({
       objectType: 'feed',
       content: {
