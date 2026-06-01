@@ -1,6 +1,6 @@
 ﻿import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { Bell, BookOpen, ChevronRight, MessageCircle, Users } from 'lucide-react'
+import { Bell, BellRing, BookOpen, ChevronRight, MessageCircle, Users } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { supabase } from '@/lib/supabase'
@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { useNotificationPrefs } from '@/features/notifications/hooks/useNotificationPrefs'
 import { useInstallPrompt } from '@/shared/hooks/useInstallPrompt'
 import IosInstallGuide from '@/shared/components/IosInstallGuide'
+import { usePushSubscription } from '@/shared/hooks/usePushSubscription'
 
 const FONT_OPTIONS: { value: FontSize; label: string }[] = [
   { value: 'small', label: '작음' },
@@ -32,6 +33,7 @@ export default function ReaderSettingsPage() {
   const { platform, install } = useInstallPrompt()
   const [showIosGuide, setShowIosGuide] = useState(false)
   const showInstallRow = platform === 'android' || platform === 'ios'
+  const { supported: pushSupported, subscribed: pushSubscribed, subscribe: pushSubscribe, unsubscribe: pushUnsubscribe } = usePushSubscription()
 
   return (
     <div className="flex flex-col h-full">
@@ -189,6 +191,19 @@ export default function ReaderSettingsPage() {
               </div>
               <Toggle on={darkModeOn} onChange={setDarkModeOn} />
             </div>
+            {/* 푸시 알림 */}
+            {pushSupported && (
+              <div className="flex items-center gap-3 px-5 py-4">
+                <div className="w-10 h-10 rounded-xl bg-[#FFF0DC] flex items-center justify-center shrink-0">
+                  <BellRing size={20} className="text-[#E8820C]" />
+                </div>
+                <div className="flex-1 flex flex-col gap-0.5 min-w-0">
+                  <p className="text-[1.125rem] text-[#1F2937]">푸시 알림</p>
+                  <p className="text-base text-[#6B7280]">댓글·답장 알림을 받아요</p>
+                </div>
+                <Toggle on={pushSubscribed} onChange={(v) => v ? pushSubscribe() : pushUnsubscribe()} />
+              </div>
+            )}
             {showInstallRow && (
               <button
                 type="button"
