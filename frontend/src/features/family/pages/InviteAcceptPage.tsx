@@ -66,8 +66,8 @@ export default function InviteAcceptPage() {
   }
 
   return (
-    <div className="min-h-dvh bg-[#FFF8F0] flex flex-col items-center justify-center px-4">
-      <div className="w-full max-w-md flex flex-col gap-6">
+    <div className="min-h-dvh bg-[#FFF8F0] overflow-y-auto">
+      <div className="w-full max-w-md mx-auto flex flex-col gap-6 px-4 py-10">
 
         {/* 헤더 */}
         <div className="flex flex-col items-center gap-3">
