@@ -36,8 +36,8 @@ export default function FamilyInvitePage() {
     Kakao.Share.sendDefault({
       objectType: 'feed',
       content: {
-        title: '다담에서 가족 초대가 왔어요 📖',
-        description: '버튼을 눌러 가족으로 연결하고 함께 이야기를 나눠요',
+        title: '가족의 이야기를 함께 읽어요 📖',
+        description: '다담에서 초대가 왔어요. 아래 버튼을 눌러 가족으로 연결하세요.',
         imageUrl,
         link: { mobileWebUrl: link, webUrl: link },
       },
