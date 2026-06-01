@@ -4,6 +4,7 @@ import { ChevronLeft, Mic, Square, Play, Pause } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { josa, toHttps } from '@/lib/utils'
+import { sendPushToUser } from '@/lib/pushNotification'
 import { useVoiceReply, formatDuration } from '@/features/senior/hooks/useVoiceReply'
 import { useContentFontSizeStore, type ContentFontSize } from '@/shared/stores/contentFontSizeStore'
 import type { Book, Chapter, Comment, Reply, Profile } from '@/types/domain'
@@ -496,6 +497,7 @@ export default function SeniorBookReadPage() {
         // 가족 → 저자에게 알림
         const { error: ne } = await supabase.from('notifications').insert({ recipient_id: book.senior_id, ...notifPayload })
         if (ne) console.error('[알림 INSERT 실패]', ne)
+        void sendPushToUser(book.senior_id, notifPayload.title, commentText.trim(), `/s/books/${bookId}`)
       } else {
         // 저자 → 연결된 가족 전체에게 알림 (family_id 중복 제거)
         const { data: links } = await supabase
@@ -509,6 +511,7 @@ export default function SeniorBookReadPage() {
             uniqueIds.map((id) => ({ recipient_id: id, ...notifPayload }))
           )
           if (ne2) console.error('[알림 INSERT 실패]', ne2)
+          uniqueIds.forEach(id => void sendPushToUser(id, notifPayload.title, commentText.trim(), `/r/books/${bookId}`))
         }
       }
 
@@ -569,14 +572,16 @@ export default function SeniorBookReadPage() {
     // 음성 답장 알림
     if (replyingToAuthorId && replyingToAuthorId !== profile.id) {
       const replierName = profile.full_name ?? profile.display_name ?? (isAuthor ? '저자' : '가족')
+      const notifTitle = `${replierName}${josa(replierName, '이', '가')} [${book.title}]에 음성 답장을 남겼어요`
       await supabase.from('notifications').insert({
         recipient_id: replyingToAuthorId,
         type: 'new_reply',
-        title: `${replierName}${josa(replierName, '이', '가')} [${book.title}]에 음성 답장을 남겼어요`,
+        title: notifTitle,
         body: textContent,
         reference_id: book.id,
         reference_type: 'book',
       })
+      void sendPushToUser(replyingToAuthorId, notifTitle, textContent)
     }
 
     handleDiscardVoice()
@@ -615,15 +620,17 @@ export default function SeniorBookReadPage() {
     // 답장 알림: 답장하기를 누른 메시지 작성자에게 발송
     if (replyingToAuthorId && replyingToAuthorId !== profile.id) {
       const replierName = profile.full_name ?? profile.display_name ?? (isAuthor ? '저자' : '가족')
+      const notifTitle = `${replierName}${josa(replierName, '이', '가')} [${book.title}]에 답장을 남겼어요`
       const { error: ne } = await supabase.from('notifications').insert({
         recipient_id: replyingToAuthorId,
         type: 'new_reply',
-        title: `${replierName}${josa(replierName, '이', '가')} [${book.title}]에 답장을 남겼어요`,
+        title: notifTitle,
         body: replyText.trim(),
         reference_id: book.id,
         reference_type: 'book',
       })
       if (ne) console.error('[대댓글 알림 INSERT 실패]', ne)
+      void sendPushToUser(replyingToAuthorId, notifTitle, replyText.trim())
     }
 
     setReplyingToId(null)
