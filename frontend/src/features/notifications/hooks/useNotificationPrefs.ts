@@ -57,5 +57,20 @@ export function useNotificationPrefs() {
     })
   }, [user?.id])
 
-  return { prefs, loading, updatePref }
+  // 푸시 알림 OFF 시 모든 알림 끄기
+  const disableAll = useCallback(() => {
+    if (!user?.id) return
+    const all_off: NotifPrefs = { new_comment: false, new_reply: false, new_book: false, book_draft: false, book_publish: false, daily_remind: false, family_comment: false }
+    setPrefs(all_off)
+    void supabase.from('profiles').update({ notification_prefs: all_off as unknown as Record<string, boolean> }).eq('id', user.id)
+  }, [user?.id])
+
+  // 푸시 알림 ON 시 기본값으로 복원
+  const enableAll = useCallback(() => {
+    if (!user?.id) return
+    setPrefs(NOTIF_DEFAULTS)
+    void supabase.from('profiles').update({ notification_prefs: NOTIF_DEFAULTS as unknown as Record<string, boolean> }).eq('id', user.id)
+  }, [user?.id])
+
+  return { prefs, loading, updatePref, disableAll, enableAll }
 }

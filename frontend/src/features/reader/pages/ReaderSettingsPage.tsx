@@ -26,7 +26,7 @@ export default function ReaderSettingsPage() {
   const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
   const avatarChar = displayName.charAt(0)
 
-  const { prefs: notifPrefs, loading: notifLoading, updatePref } = useNotificationPrefs()
+  const { prefs: notifPrefs, loading: notifLoading, updatePref, disableAll, enableAll } = useNotificationPrefs()
   const { darkMode: darkModeOn, setDarkMode: setDarkModeOn } = useThemeStore()
   const { fontSize, setFontSize } = useFontSizeStore()
   const { seniorName, relationship } = useFamilyBookshelf()
@@ -34,7 +34,10 @@ export default function ReaderSettingsPage() {
   const [showIosGuide, setShowIosGuide] = useState(false)
   const showInstallRow = platform === 'android' || platform === 'ios'
   const { supported: pushSupported, subscribed: pushSubscribed, subscribe: pushSubscribe, unsubscribe: pushUnsubscribe } = usePushSubscription()
-  const notifEnabled = !pushSupported || pushSubscribed
+  async function handlePushToggle(on: boolean) {
+    if (on) { await pushSubscribe(); enableAll() }
+    else { await pushUnsubscribe(); disableAll() }
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -120,7 +123,7 @@ export default function ReaderSettingsPage() {
                 <p className="text-[1.125rem] text-[#1F2937]">새 책 출간 알림</p>
                 <p className="text-base text-[#6B7280]">저자가 새 책을 출간하면 알려줘요</p>
               </div>
-              <Toggle on={notifEnabled && !notifLoading && notifPrefs.new_book} onChange={(v) => notifEnabled && updatePref('new_book', v)} />
+              <Toggle on={!notifLoading && notifPrefs.new_book} onChange={(v) => updatePref('new_book', v)} />
             </div>
             <div className="flex items-center gap-3 px-5 py-4">
               <div className="w-10 h-10 rounded-xl bg-[#FFF0DC] flex items-center justify-center shrink-0">
@@ -130,7 +133,7 @@ export default function ReaderSettingsPage() {
                 <p className="text-[1.125rem] text-[#1F2937]">저자 댓글 알림</p>
                 <p className="text-base text-[#6B7280]">저자가 책에 댓글을 남기면 알려줘요</p>
               </div>
-              <Toggle on={notifEnabled && !notifLoading && notifPrefs.new_comment} onChange={(v) => notifEnabled && updatePref('new_comment', v)} />
+              <Toggle on={!notifLoading && notifPrefs.new_comment} onChange={(v) => updatePref('new_comment', v)} />
             </div>
             <div className="flex items-center gap-3 px-5 py-4">
               <div className="w-10 h-10 rounded-xl bg-[#FFF0DC] flex items-center justify-center shrink-0">
@@ -140,7 +143,7 @@ export default function ReaderSettingsPage() {
                 <p className="text-[1.125rem] text-[#1F2937]">댓글 답장 알림</p>
                 <p className="text-base text-[#6B7280]">내 댓글에 저자가 답장하면 알려줘요</p>
               </div>
-              <Toggle on={notifEnabled && !notifLoading && notifPrefs.new_reply} onChange={(v) => notifEnabled && updatePref('new_reply', v)} />
+              <Toggle on={!notifLoading && notifPrefs.new_reply} onChange={(v) => updatePref('new_reply', v)} />
             </div>
             <div className="flex items-center gap-3 px-5 py-4">
               <div className="w-10 h-10 rounded-xl bg-[#F3F4F6] flex items-center justify-center shrink-0">
@@ -150,7 +153,7 @@ export default function ReaderSettingsPage() {
                 <p className="text-[1.125rem] text-[#1F2937]">다른 가족 댓글</p>
                 <p className="text-base text-[#6B7280]">다른 가족이 댓글을 남기면 알려줘요</p>
               </div>
-              <Toggle on={notifEnabled && !notifLoading && notifPrefs.family_comment} onChange={(v) => notifEnabled && updatePref('family_comment', v)} />
+              <Toggle on={!notifLoading && notifPrefs.family_comment} onChange={(v) => updatePref('family_comment', v)} />
             </div>
           </div>
         </div>
@@ -202,7 +205,7 @@ export default function ReaderSettingsPage() {
                   <p className="text-[1.125rem] text-[#1F2937]">푸시 알림</p>
                   <p className="text-base text-[#6B7280]">댓글·답장 알림을 받아요</p>
                 </div>
-                <Toggle on={pushSubscribed} onChange={(v) => v ? pushSubscribe() : pushUnsubscribe()} />
+                <Toggle on={pushSubscribed} onChange={handlePushToggle} />
               </div>
             )}
             {showInstallRow && (
