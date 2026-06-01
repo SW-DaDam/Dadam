@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router'
 import { ChevronLeft, Mic, Square, Play, Pause } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/shared/stores/authStore'
-import { josa } from '@/lib/utils'
+import { josa, toHttps } from '@/lib/utils'
 import { useVoiceReply, formatDuration } from '@/features/senior/hooks/useVoiceReply'
 import { useContentFontSizeStore, type ContentFontSize } from '@/shared/stores/contentFontSizeStore'
 import type { Book, Chapter, Comment, Reply, Profile } from '@/types/domain'
@@ -19,12 +19,12 @@ const REACTION_EMOJIS = ['❤️', '👍', '😂', '😢', '🙏'] as const
 // ─── 타입 ─────────────────────────────────────────────────────────────────────
 
 interface ReplyWithAuthor extends Reply {
-  author: Pick<Profile, 'id' | 'display_name' | 'avatar_url'> | null
+  author: Pick<Profile, 'id' | 'display_name' | 'avatar_url'> & { full_name?: string | null } | null
   relationship: string | null
 }
 
 interface CommentWithData extends Comment {
-  author: Pick<Profile, 'id' | 'display_name' | 'avatar_url'> | null
+  author: Pick<Profile, 'id' | 'display_name' | 'avatar_url'> & { full_name?: string | null } | null
   relationship: string | null
   replies: ReplyWithAuthor[]
 }
@@ -82,10 +82,10 @@ function useBookRead(bookId: string | undefined) {
     // 시니어 프로필(이름) 조회
     const { data: profileData } = await supabase
       .from('profiles')
-      .select('display_name')
+      .select('display_name, full_name')
       .eq('id', bookData.senior_id)
       .single()
-    setSeniorName(profileData?.display_name ?? '')
+    setSeniorName(profileData?.full_name ?? profileData?.display_name ?? '')
 
     // 챕터 조회 (삭제되지 않은 것만, sort_order 순)
     const { data: chaptersData } = await supabase
@@ -116,11 +116,11 @@ function useBookRead(bookId: string | undefined) {
 
     const [{ data: authorsData }, { data: familyLinksData }] = await Promise.all([
       allAuthorIds.length > 0
-        ? supabase.from('profiles').select('id, display_name, avatar_url').in('id', allAuthorIds)
+        ? supabase.from('profiles').select('id, display_name, full_name, avatar_url').in('id', allAuthorIds)
         : Promise.resolve({ data: [] }),
       allAuthorIds.length > 0
         ? supabase.from('family_links')
-            .select('family_id, relationship')
+            .select('family_id, reader_nickname, relationship')
             .eq('senior_id', bookData.senior_id)
             .in('family_id', allAuthorIds)
             .eq('invite_status', 'accepted')
@@ -128,7 +128,7 @@ function useBookRead(bookId: string | undefined) {
     ])
 
     const authorMap = new Map((authorsData ?? []).map((p) => [p.id, p]))
-    const relationshipMap = new Map((familyLinksData ?? []).map((fl) => [fl.family_id, fl.relationship as string | null]))
+    const relationshipMap = new Map((familyLinksData ?? []).map((fl) => [fl.family_id, (fl.reader_nickname ?? fl.relationship) as string | null]))
 
     setBookComments(
       (commentsData ?? []).map((comment) => {
@@ -187,6 +187,29 @@ function initial(name: string | null | undefined) {
   return name ? name[0] : '?'
 }
 
+interface AvatarProps {
+  name: string | null | undefined
+  avatarUrl?: string | null
+  size?: string        // Tailwind class e.g. 'w-9 h-9'
+  round?: 'full' | 'xl'
+  bg?: string
+  color?: string
+}
+function Avatar({ name, avatarUrl, size = 'w-9 h-9', round = 'xl', bg = '#F3F4F6', color = '#6B7280' }: AvatarProps) {
+  const src = toHttps(avatarUrl)
+  return (
+    <div
+      className={`${size} rounded-${round} flex items-center justify-center shrink-0 mt-0.5 overflow-hidden`}
+      style={{ backgroundColor: bg }}
+    >
+      {src
+        ? <img src={src} alt={name ?? ''} className="w-full h-full object-cover" />
+        : <span className="text-sm font-bold" style={{ color }}>{initial(name)}</span>
+      }
+    </div>
+  )
+}
+
 // ─── 메인 ─────────────────────────────────────────────────────────────────────
 
 export default function SeniorBookReadPage() {
@@ -196,11 +219,24 @@ export default function SeniorBookReadPage() {
   const user = useAuthStore((s) => s.user)
   const { book, seniorName, chapters, bookComments, coverImageUrl, loading, reload } = useBookRead(bookId)
 
-  // 저자 표시 이름: 로그인 유저가 책 저자일 때만 user_metadata 사용, 가족 뷰어는 seniorName
   const isAuthor = book ? user?.id === book.senior_id : false
   const kakaoName: string = isAuthor
     ? (user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? seniorName)
     : seniorName
+
+  // 독자 뷰어가 저자를 부르는 호칭 (family_links.senior_title)
+  const [seniorTitleForReader, setSeniorTitleForReader] = useState<string>('')
+  useEffect(() => {
+    if (isAuthor || !user?.id || !book?.senior_id) return
+    void supabase
+      .from('family_links')
+      .select('senior_title')
+      .eq('family_id', user.id)
+      .eq('senior_id', book.senior_id)
+      .eq('invite_status', 'accepted')
+      .maybeSingle()
+      .then(({ data }) => { if (data?.senior_title) setSeniorTitleForReader(data.senior_title) })
+  }, [isAuthor, user?.id, book?.senior_id])
 
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null)
   const [readingOpen, setReadingOpen] = useState(false)
@@ -210,6 +246,7 @@ export default function SeniorBookReadPage() {
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [editingCommentText, setEditingCommentText] = useState('')
   const [replyingToId, setReplyingToId] = useState<string | null>(null)
+  const [replyingToAuthorId, setReplyingToAuthorId] = useState<string | null>(null)
   const [replyText, setReplyText] = useState('')
   const [editingReplyId, setEditingReplyId] = useState<string | null>(null)
   const [editingReplyText, setEditingReplyText] = useState('')
@@ -445,10 +482,11 @@ export default function SeniorBookReadPage() {
         }
       }
 
-      const commenterName = profile.display_name ?? '가족'
+      const commenterName = profile.full_name ?? profile.display_name ?? '가족'
+      const bookTitle = book.title
       const notifPayload = {
         type: 'new_comment' as const,
-        title: `${commenterName}${josa(commenterName, '이', '가')} 댓글을 남겼어요`,
+        title: `${commenterName}${josa(commenterName, '이', '가')} [${bookTitle}]에 댓글을 남겼어요`,
         body: commentText.trim(),
         reference_id: bookId,
         reference_type: 'book',
@@ -459,17 +497,16 @@ export default function SeniorBookReadPage() {
         const { error: ne } = await supabase.from('notifications').insert({ recipient_id: book.senior_id, ...notifPayload })
         if (ne) console.error('[알림 INSERT 실패]', ne)
       } else {
-        // 저자 → 연결된 가족 전체에게 알림
-        const { data: links, error: le } = await supabase
+        // 저자 → 연결된 가족 전체에게 알림 (family_id 중복 제거)
+        const { data: links } = await supabase
           .from('family_links')
           .select('family_id')
           .eq('senior_id', book.senior_id)
           .eq('invite_status', 'accepted')
-        if (le) console.error('[family_links 조회 실패]', le)
-        console.log('[저자 댓글 알림 대상]', links)
-        if (links && links.length > 0) {
+        const uniqueIds = [...new Set((links ?? []).map((l) => l.family_id).filter(Boolean))] as string[]
+        if (uniqueIds.length > 0) {
           const { error: ne2 } = await supabase.from('notifications').insert(
-            links.flatMap((l) => l.family_id ? [{ recipient_id: l.family_id, ...notifPayload }] : [])
+            uniqueIds.map((id) => ({ recipient_id: id, ...notifPayload }))
           )
           if (ne2) console.error('[알림 INSERT 실패]', ne2)
         }
@@ -529,14 +566,13 @@ export default function SeniorBookReadPage() {
     const { error } = await voiceReply.uploadReply(commentId, voiceBlob, textContent)
     if (error) { showToast('답장 전달에 실패했어요'); return }
 
-    // 독자에게 알림
-    const targetComment = bookComments.find((c) => c.id === commentId)
-    if (targetComment && targetComment.author_id !== profile.id) {
-      const replierName = profile.display_name || (isAuthor ? '저자' : '가족')
+    // 음성 답장 알림
+    if (replyingToAuthorId && replyingToAuthorId !== profile.id) {
+      const replierName = profile.full_name ?? profile.display_name ?? (isAuthor ? '저자' : '가족')
       await supabase.from('notifications').insert({
-        recipient_id: targetComment.author_id,
+        recipient_id: replyingToAuthorId,
         type: 'new_reply',
-        title: `${replierName}${josa(replierName, '이', '가')} 음성 답장을 남겼어요`,
+        title: `${replierName}${josa(replierName, '이', '가')} [${book.title}]에 음성 답장을 남겼어요`,
         body: textContent,
         reference_id: book.id,
         reference_type: 'book',
@@ -545,6 +581,7 @@ export default function SeniorBookReadPage() {
 
     handleDiscardVoice()
     setReplyingToId(null)
+    setReplyingToAuthorId(null)
     showToast('음성 답장을 전달했어요')
     await reload()
   }
@@ -575,14 +612,13 @@ export default function SeniorBookReadPage() {
     })
     if (error) { showToast('답장 전달에 실패했어요'); return }
 
-    // 댓글 작성자(가족)에게 답장 알림 발송 (본인 제외)
-    const targetComment = bookComments.find((c) => c.id === commentId)
-    if (targetComment && targetComment.author_id !== profile.id) {
-      const replierName = profile.display_name || (isAuthor ? '저자' : '가족')
+    // 답장 알림: 답장하기를 누른 메시지 작성자에게 발송
+    if (replyingToAuthorId && replyingToAuthorId !== profile.id) {
+      const replierName = profile.full_name ?? profile.display_name ?? (isAuthor ? '저자' : '가족')
       const { error: ne } = await supabase.from('notifications').insert({
-        recipient_id: targetComment.author_id,
+        recipient_id: replyingToAuthorId,
         type: 'new_reply',
-        title: `${replierName}${josa(replierName, '이', '가')} 답장을 남겼어요`,
+        title: `${replierName}${josa(replierName, '이', '가')} [${book.title}]에 답장을 남겼어요`,
         body: replyText.trim(),
         reference_id: book.id,
         reference_type: 'book',
@@ -591,6 +627,7 @@ export default function SeniorBookReadPage() {
     }
 
     setReplyingToId(null)
+    setReplyingToAuthorId(null)
     setReplyText('')
     showToast('답장을 전달했어요')
     await reload()
@@ -730,32 +767,38 @@ export default function SeniorBookReadPage() {
                       {/* 댓글 */}
                       <div className="flex items-start gap-3">
                         {isCommentByAuthor ? (
-                          <div className="w-9 h-9 rounded-full bg-[#E8820C] flex items-center justify-center shrink-0 mt-0.5">
-                            <span className="text-xs font-bold text-white">{initial(seniorName)}</span>
-                          </div>
+                          <Avatar
+                            name={kakaoName}
+                            avatarUrl={comment.author?.avatar_url}
+                            round="full"
+                            bg="#E8820C"
+                            color="#ffffff"
+                          />
                         ) : (
-                          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
-                            style={{ backgroundColor: style.bg }}>
-                            <span className="text-sm font-bold" style={{ color: style.color }}>
-                              {initial(comment.author?.display_name)}
-                            </span>
-                          </div>
+                          <Avatar
+                            name={comment.author?.full_name ?? comment.author?.display_name}
+                            avatarUrl={comment.author?.avatar_url}
+                            bg={style.bg}
+                            color={style.color}
+                          />
                         )}
                         <div className="flex-1 flex flex-col gap-0.5 min-w-0">
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1.5">
                               <p className={`text-base font-bold ${isCommentByAuthor ? 'text-[#E8820C]' : 'text-[#1F2937]'}`}>
-                                {comment.author?.display_name ?? '가족'}
+                                {(comment.author?.full_name ?? comment.author?.display_name) ?? '가족'}
                               </p>
                               {isCommentByAuthor ? (
                                 <span className="text-xs text-[#E8820C] bg-[#FFF0DC] rounded-full px-2 py-0.5 leading-none">
-                                  저자
+                                  {isAuthor ? '저자' : (seniorTitleForReader || '저자')}
                                 </span>
-                              ) : comment.relationship && (
+                              ) : comment.author_id === user?.id ? (
+                                <span className="text-xs text-[#6B7280] bg-[#F3F4F6] rounded-full px-2 py-0.5 leading-none">나</span>
+                              ) : comment.relationship ? (
                                 <span className="text-xs text-[#6B7280] bg-[#F3F4F6] rounded-full px-2 py-0.5 leading-none">
                                   {comment.relationship}
                                 </span>
-                              )}
+                              ) : null}
                             </div>
                             {isOwnComment && editingCommentId !== comment.id && (
                               <div className="flex gap-3 shrink-0">
@@ -808,8 +851,8 @@ export default function SeniorBookReadPage() {
                             </p>
                             {replyingToId !== comment.id && (
                               <button type="button"
-                                onClick={() => { setReplyingToId(comment.id); setReplyText('') }}
-                                className="text-sm text-[#E8820C]">답장 쓰기</button>
+                                onClick={() => { setReplyingToId(comment.id); setReplyingToAuthorId(comment.author_id); setReplyText('') }}
+                                className="text-sm text-[#E8820C]">답장하기</button>
                             )}
                             <button
                               type="button"
@@ -927,7 +970,7 @@ export default function SeniorBookReadPage() {
                               />
                               <div className="flex gap-2 justify-end">
                                 <button type="button"
-                                  onClick={() => { setReplyingToId(null); handleDiscardVoice() }}
+                                  onClick={() => { setReplyingToId(null); setReplyingToAuthorId(null); handleDiscardVoice() }}
                                   className="text-sm text-[#6B7280] px-3 py-1.5 rounded-lg bg-[#F3F4F6] min-h-9">취소</button>
                                 <button type="button" onClick={() => handleSubmitReply(comment.id)}
                                   disabled={!replyText.trim()}
@@ -942,21 +985,25 @@ export default function SeniorBookReadPage() {
                       {comment.replies.map((reply) => {
                         const isReplyByAuthor = book ? reply.senior_id === book.senior_id : false
                         const replyStyle = avatarStyle(reply.senior_id)
-                        const replyAuthorName = reply.author?.display_name ?? (isReplyByAuthor ? seniorName : '가족')
+                        const replyAuthorName = (reply.author?.full_name ?? reply.author?.display_name) ?? (isReplyByAuthor ? seniorName : '가족')
                         const isOwnReply = profile?.id === reply.senior_id
                         return (
                         <div key={reply.id} className="ml-12 flex items-start gap-3">
                           {isReplyByAuthor ? (
-                            <div className="w-9 h-9 rounded-full bg-[#E8820C] flex items-center justify-center shrink-0 mt-0.5">
-                              <span className="text-xs font-bold text-white">{initial(seniorName)}</span>
-                            </div>
+                            <Avatar
+                              name={kakaoName}
+                              avatarUrl={reply.author?.avatar_url}
+                              round="full"
+                              bg="#E8820C"
+                              color="#ffffff"
+                            />
                           ) : (
-                            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
-                              style={{ backgroundColor: replyStyle.bg }}>
-                              <span className="text-sm font-bold" style={{ color: replyStyle.color }}>
-                                {initial(replyAuthorName)}
-                              </span>
-                            </div>
+                            <Avatar
+                              name={replyAuthorName}
+                              avatarUrl={reply.author?.avatar_url}
+                              bg={replyStyle.bg}
+                              color={replyStyle.color}
+                            />
                           )}
                           <div className="flex-1 flex flex-col gap-0.5 min-w-0">
                             <div className="flex items-center justify-between gap-2">
@@ -965,12 +1012,16 @@ export default function SeniorBookReadPage() {
                                   {replyAuthorName}
                                 </p>
                                 {isReplyByAuthor ? (
-                                  <span className="text-xs text-[#E8820C] bg-[#FFF0DC] rounded-full px-2 py-0.5 leading-none">저자</span>
-                                ) : reply.relationship && (
+                                  <span className="text-xs text-[#E8820C] bg-[#FFF0DC] rounded-full px-2 py-0.5 leading-none">
+                                    {isAuthor ? '저자' : (seniorTitleForReader || '저자')}
+                                  </span>
+                                ) : reply.senior_id === user?.id ? (
+                                  <span className="text-xs text-[#6B7280] bg-[#F3F4F6] rounded-full px-2 py-0.5 leading-none">나</span>
+                                ) : reply.relationship ? (
                                   <span className="text-xs text-[#6B7280] bg-[#F3F4F6] rounded-full px-2 py-0.5 leading-none">
                                     {reply.relationship}
                                   </span>
-                                )}
+                                ) : null}
                               </div>
                               {isOwnReply && editingReplyId !== reply.id && (
                                 <div className="flex gap-3 shrink-0">
@@ -1021,6 +1072,16 @@ export default function SeniorBookReadPage() {
                                   month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
                                 })}
                               </p>
+                              {/* 본인 답장이 아닐 때만 답장하기 버튼 표시 */}
+                              {reply.senior_id !== user?.id && replyingToId !== comment.id && (
+                                <button type="button"
+                                  onClick={() => {
+                                    setReplyingToId(comment.id)
+                                    setReplyingToAuthorId(reply.senior_id)
+                                    setReplyText('')
+                                  }}
+                                  className="text-sm text-[#E8820C]">답장하기</button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => toggleEmojiPicker(`r_${reply.id}`)}
@@ -1031,7 +1092,7 @@ export default function SeniorBookReadPage() {
                                 }`}
                               >
                                 😊+
-  </button>
+                              </button>
                             </div>
 
                             {/* 대댓글 이모지 피커 */}

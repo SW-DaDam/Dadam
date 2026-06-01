@@ -81,6 +81,11 @@ export function CallbackPage() {
       return
     }
 
+    // 로그인 시마다 카카오 이름·프사 동기화
+    void supabase.from('profiles')
+      .update({ full_name: kakaoName, avatar_url: session.user.user_metadata?.avatar_url ?? null } as never)
+      .eq('id', session.user.id)
+
     const pendingCode = sessionStorage.getItem('pendingInviteCode')
 
     // 신규 유저 + 초대 코드 있음 → 프로필 자동 설정 후 /join으로 바로 이동
