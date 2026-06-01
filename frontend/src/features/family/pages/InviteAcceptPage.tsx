@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { useInvite } from '@/features/family/hooks/useInvite'
 import { useAuth } from '@/features/auth/hooks/useAuth'
+import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 
 const RELATION_PRESETS = ['아들', '딸', '손자', '손녀', '사위', '며느리']
@@ -20,6 +21,19 @@ export default function InviteAcceptPage() {
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
 
   const finalRelation = relation === '직접입력' ? customRelation : relation
+
+  // 이미 연결된 사용자면 바로 독자 홈으로
+  useEffect(() => {
+    if (!session?.user?.id) return
+    void supabase
+      .from('family_links')
+      .select('id')
+      .eq('family_id', session.user.id)
+      .eq('invite_status', 'accepted')
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => { if (data) navigate('/r', { replace: true }) })
+  }, [session?.user?.id, navigate])
 
   // 비로그인 상태에서 코드 보존 후 카카오 로그인
   useEffect(() => {
