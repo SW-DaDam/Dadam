@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 
 export type VoiceReplyState = 'idle' | 'recording' | 'uploading'
@@ -16,6 +16,22 @@ export function useVoiceReply({ seniorId, onTranscript }: UseVoiceReplyOptions) 
   const chunksRef = useRef<Blob[]>([])
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
+
+  // 언마운트 정리: 녹음 도중 컴포넌트가 사라지면 stopRecording이 호출되지 않아
+  // 타이머·STT·마이크 스트림이 살아남는다. 마운트당 1회 등록, 언마운트 시 모두 해제.
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+      recognitionRef.current?.stop()
+      recognitionRef.current = null
+      // 마이크 하드웨어 해제 — 트랙을 멈추면 녹음 표시등도 꺼진다
+      mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop())
+      mediaRecorderRef.current = null
+    }
+  }, [])
 
   const startRecording = useCallback(async (): Promise<boolean> => {
     try {
