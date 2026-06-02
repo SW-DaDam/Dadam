@@ -496,7 +496,7 @@ export default function SeniorBookReadPage() {
         }
       }
 
-      const commenterName = profile.full_name ?? profile.display_name ?? '가족'
+      const commenterName = profile.full_name ?? profile.display_name ?? '독자'
       const bookTitle = book.title
       const notifPayload = {
         type: 'new_comment' as const,
@@ -584,7 +584,7 @@ export default function SeniorBookReadPage() {
 
     // 음성 답장 알림
     if (replyingToAuthorId && replyingToAuthorId !== profile.id) {
-      const replierName = profile.full_name ?? profile.display_name ?? (isAuthor ? '저자' : '가족')
+      const replierName = profile.full_name ?? profile.display_name ?? (isAuthor ? '저자' : '독자')
       const notifTitle = `${replierName}${josa(replierName, '이', '가')} [${book.title}]에 음성 답장을 남겼어요`
       await supabase.from('notifications').insert({
         recipient_id: replyingToAuthorId,
@@ -632,7 +632,7 @@ export default function SeniorBookReadPage() {
 
     // 답장 알림: 답장하기를 누른 메시지 작성자에게 발송
     if (replyingToAuthorId && replyingToAuthorId !== profile.id) {
-      const replierName = profile.full_name ?? profile.display_name ?? (isAuthor ? '저자' : '가족')
+      const replierName = profile.full_name ?? profile.display_name ?? (isAuthor ? '저자' : '독자')
       const notifTitle = `${replierName}${josa(replierName, '이', '가')} [${book.title}]에 답장을 남겼어요`
       const { error: ne } = await supabase.from('notifications').insert({
         recipient_id: replyingToAuthorId,

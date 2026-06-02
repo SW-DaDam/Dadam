@@ -128,7 +128,7 @@ export default function SeniorSettingsPage() {
 
         {/* 가족 섹션 */}
         <div className="flex flex-col gap-1">
-          <p className="text-base text-[#6B7280] px-1">가족</p>
+          <p className="text-base text-[#6B7280] px-1">독자</p>
           <div className="bg-white border border-[#E5E7EB] rounded-2xl divide-y divide-[#E5E7EB]">
             {/* 가족 초대하기 */}
             <button

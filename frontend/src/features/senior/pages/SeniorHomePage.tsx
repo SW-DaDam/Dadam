@@ -45,7 +45,10 @@ export default function SeniorHomePage() {
 
   // 마운트 시 인사말 선택, 탭 복귀(visibilitychange) 시 갱신
   const [greeting, setGreeting] = useState(pickGreeting)
-  const refreshGreeting = useCallback(() => setGreeting(pickGreeting()), [])
+  // 탭 복귀 시에만 갱신 — 탭을 떠날 때는 변경하지 않음
+  const refreshGreeting = useCallback(() => {
+    if (document.visibilityState === 'visible') setGreeting(pickGreeting())
+  }, [])
   useEffect(() => {
     document.addEventListener('visibilitychange', refreshGreeting)
     return () => document.removeEventListener('visibilitychange', refreshGreeting)

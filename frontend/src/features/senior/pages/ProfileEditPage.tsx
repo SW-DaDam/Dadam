@@ -91,7 +91,6 @@ export default function ProfileEditPage() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const profile = useAuthStore((s) => s.profile)
-  const setProfile = useAuthStore((s) => s.setProfile)
   const displayName: string = user?.user_metadata?.full_name ?? user?.email ?? '사용자'
   const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
 

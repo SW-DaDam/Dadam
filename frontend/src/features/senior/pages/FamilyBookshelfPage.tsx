@@ -58,7 +58,9 @@ export default function FamilyBookshelfPage() {
             </button>
             <p className="text-[1.25rem] font-bold text-[#1F2937] truncate">
               {latestDraft.title}
-              <span className="text-[1rem] font-normal text-[#6B7280]"> (편집중)</span>
+              <span className="text-[1rem] font-normal text-[#6B7280]">
+                {latestDraft.status === 'editing' ? ' (편집중)' : ' (초안 완료)'}
+              </span>
             </p>
             <div className="w-full h-2 bg-[#E5E7EB] rounded-full overflow-hidden">
               <div className="h-full bg-[#E8820C] rounded-full" style={{ width: '60%' }} />

@@ -7,8 +7,6 @@ import { setupSeniorProfile } from '../services/authService'
 import { getDbErrorMessage } from '@/lib/errorMessages'
 import StepIndicator from '../components/StepIndicator'
 
-const QUICK_NICKNAMES = ['엄마', '아빠', '할머니', '할아버지']
-
 const CURRENT_YEAR = new Date().getFullYear()
 
 // userId를 키에 포함 — 동일 브라우저에서 계정 전환 시 다른 사람 데이터가 채워지지 않도록
@@ -39,17 +37,13 @@ export default function ProfileSetupPage() {
 
   const userId = user?.id ?? ''
   const draft = loadDraft(userId)
-  const [nickname, setNickname] = useState(draft.nickname)
+  // 호칭 UI 제거 후 카카오 이름을 기본값으로 사용 — display_name 빈 문자열 방지
+  const [nickname, setNickname] = useState(draft.nickname || kakaoProfile?.name || '')
   const [gender, setGender] = useState<'male' | 'female' | null>(draft.gender)
   const [birthYear, setBirthYear] = useState(draft.birthYear)
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [avatarLoaded, setAvatarLoaded] = useState(false)
-
-  function handleQuickSelect(name: string) {
-    setNickname(name)
-    saveDraft(userId, name, gender, birthYear)
-  }
 
   function handleGenderChange(g: 'male' | 'female') {
     const next = gender === g ? null : g
