@@ -34,7 +34,7 @@ export default function ConnectedFamilyPage() {
         <button type="button" onClick={() => navigate(-1)} className="flex items-center min-h-11">
           <ChevronLeft size={22} className="text-[#6B7280]" />
         </button>
-        <h1 className="absolute left-1/2 -translate-x-1/2 text-lg sm:text-xl text-[#1F2937] font-medium whitespace-nowrap">연결된 가족</h1>
+        <h1 className="absolute left-1/2 -translate-x-1/2 text-lg sm:text-xl text-[#1F2937] font-medium whitespace-nowrap">연결된 독자</h1>
         <button
           type="button"
           onClick={() => navigate('/s/family/invite')}
@@ -72,11 +72,11 @@ export default function ConnectedFamilyPage() {
               <div className="flex flex-col gap-0.5">
                 <p className="text-[1.0625rem] text-[#1F2937]">
                   {familyMembers.length > 0
-                    ? `가족 ${familyMembers.length}명이 연결돼 있어요`
-                    : '아직 연결된 가족이 없어요'}
+                    ? `독자 ${familyMembers.length}명이 연결돼 있어요`
+                    : '아직 연결된 독자가 없어요'}
                 </p>
                 <p className="text-base text-[#6B7280]">
-                  {familyMembers.length > 0 ? '함께 책을 읽고 있어요' : '가족을 초대해보세요'}
+                  {familyMembers.length > 0 ? '함께 책을 읽고 있어요' : '독자를 초대해보세요'}
                 </p>
               </div>
             </div>
@@ -84,7 +84,7 @@ export default function ConnectedFamilyPage() {
             {/* 가족 목록 */}
             {familyMembers.length > 0 && (
               <div className="flex flex-col gap-1">
-                <p className="text-base text-[#6B7280] px-1">연결된 가족</p>
+                <p className="text-base text-[#6B7280] px-1">연결된 독자</p>
                 <div className="bg-white border border-[#E5E7EB] rounded-2xl divide-y divide-[#E5E7EB]">
                   {familyMembers.map((m, i) => {
                     const color = AVATAR_COLORS[i % AVATAR_COLORS.length]
@@ -139,7 +139,7 @@ export default function ConnectedFamilyPage() {
                 onClick={() => navigate('/s/family/invite')}
                 className="w-full bg-[#E8820C] rounded-2xl py-4 text-xl text-white font-medium min-h-14"
               >
-                가족 초대하기
+                독자 초대하기
               </button>
             )}
           </>
@@ -157,7 +157,7 @@ export default function ConnectedFamilyPage() {
             <div className="flex flex-col items-center gap-1">
               <p className="text-[1.375rem] text-[#1F2937] text-center">연결을 해제할까요?</p>
               <p className="text-[1.0625rem] text-[#6B7280] text-center">
-                {target.profile?.display_name ?? '이 가족'} 님이 책장을 볼 수 없게 돼요
+                {target.profile?.display_name ?? '이 독자'} 님이 책장을 볼 수 없게 돼요
               </p>
             </div>
             <div className="w-full flex gap-3">

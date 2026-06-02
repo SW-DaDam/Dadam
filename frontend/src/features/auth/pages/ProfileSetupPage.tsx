@@ -67,7 +67,7 @@ export default function ProfileSetupPage() {
   const isBirthYearInvalid = birthYear.length === 4 && (Number(birthYear) <= 1900 || Number(birthYear) >= CURRENT_YEAR)
 
   async function handleConfirm() {
-    if (!user || !nickname.trim() || isBirthYearInvalid) return
+    if (!user || isBirthYearInvalid) return
     setSubmitting(true)
     setErrorMessage(null)
 
@@ -213,88 +213,21 @@ export default function ProfileSetupPage() {
           </div>
         </div>
 
-        {/* 호칭 입력 카드 */}
-        <div className="w-full bg-white border-2 border-[#E8820C] rounded-2xl px-6 py-5 flex flex-col gap-4">
-          {/* 헤더 */}
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col gap-0.5">
-              <p className="text-xl text-[#1F2937]">가족이 부르는 호칭</p>
-              <p className="text-[1.0625rem] text-[#6B7280]">책장 이름으로 표시돼요</p>
-            </div>
-            <div className="bg-[#E8820C] rounded px-3 py-1">
-              <span className="text-[0.9375rem] text-white">입력 필요</span>
-            </div>
-          </div>
-
-          {/* 예시 */}
-          <div className="bg-[#FFF0DC] rounded-lg px-4 py-2">
-            <span className="text-base text-[#E8820C]">예: "엄마의 책장" "할머니의 책장"</span>
-          </div>
-
-          {/* 입력 필드 — placeholder로 직접입력 안내 */}
-          <input
-            type="text"
-            value={nickname}
-            onChange={(e) => { setNickname(e.target.value); saveDraft(userId, e.target.value, gender, birthYear) }}
-            placeholder="직접입력"
-            className="w-full h-[72px] bg-[#FFF8F0] border-2 border-[#E8820C] rounded-xl px-5 text-[1.375rem] text-[#1F2937] outline-none placeholder:text-[#E8820C]/40"
-          />
-
-          {/* 자주 쓰는 호칭 */}
-          <div className="flex flex-col gap-2">
-            <p className="text-base text-[#6B7280]">자주 쓰는 호칭</p>
-            <div className="flex gap-2 flex-wrap">
-              {QUICK_NICKNAMES.map((name) => (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => handleQuickSelect(name)}
-                  className={cn(
-                    'h-12 px-5 rounded-xl text-lg border transition-all',
-                    nickname === name
-                      ? 'bg-[#FFF0DC] border-[#E8820C] text-[#E8820C]'
-                      : 'bg-[#F3F4F6] border-[#E5E7EB] text-[#6B7280]',
-                  )}
-                >
-                  {name}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* 미리보기 카드 */}
-        <div className="w-full bg-white border border-[#E5E7EB] rounded-2xl px-6 py-5 flex flex-col gap-4">
-          <p className="text-lg text-[#1F2937]">가족에게 이렇게 보여요</p>
-          <div className="bg-[#F5E6D0] rounded-xl p-4 flex flex-col items-center gap-2">
-            <div className="flex gap-2">
-              <div className="w-[52px] h-[68px] bg-[#FFF0DC] border border-[#E8820C] rounded flex items-center justify-center">
-                <span className="text-xs text-[#E8820C]">4월</span>
-              </div>
-              <div className="w-[52px] h-[60px] bg-[#DCFCE7] border border-[#16A34A] rounded flex items-center justify-center self-end">
-                <span className="text-xs text-[#16A34A]">3월</span>
-              </div>
-            </div>
-            <p className="text-[1.375rem] text-[#1F2937]">{nickname || '엄마'}의 책장</p>
-            <p className="text-base text-[#6B7280]">{kakaoProfile?.name ?? ''} 지음</p>
-          </div>
-        </div>
 
       </main>
 
       {/* 하단 버튼 영역 */}
       <div className="w-full bg-white border-t border-[#E5E7EB] px-4 sm:px-6 md:px-8 py-5 flex flex-col items-center gap-3">
-        <p className="text-base text-[#6B7280]">호칭은 설정에서 언제든 바꿀 수 있어요</p>
         {errorMessage && (
           <p className="text-base text-red-600 text-center">{errorMessage}</p>
         )}
         <button
           type="button"
           onClick={handleConfirm}
-          disabled={!nickname.trim() || submitting || isBirthYearInvalid}
+          disabled={submitting || isBirthYearInvalid}
           className={cn(
             'w-full h-[72px] rounded-xl text-[1.375rem] text-white transition-opacity',
-            nickname.trim() && !submitting && !isBirthYearInvalid ? 'bg-[#E8820C]' : 'bg-[#E8820C] opacity-40 cursor-not-allowed',
+            !submitting && !isBirthYearInvalid ? 'bg-[#E8820C]' : 'bg-[#E8820C] opacity-40 cursor-not-allowed',
           )}
         >
           {submitting ? '저장 중…' : '저자로 시작하기'}

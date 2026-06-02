@@ -18,6 +18,8 @@ export default function FamilyBookshelfPage() {
   const latestDraft = books.find((b) => b.status === 'draft' || b.status === 'editing')
   const publishedBooks = books.filter((b) => b.status === 'published')
   const latestPublished = publishedBooks[0]
+  // 편집중인 책 카드 — X 클릭 시 세션 한정 숨김
+  const [draftDismissed, setDraftDismissed] = useState(false)
   // 최근 출간작 카드 — X 또는 확인 클릭 시 숨김
   const [latestDismissed, setLatestDismissed] = useState(false)
 
@@ -44,9 +46,20 @@ export default function FamilyBookshelfPage() {
       <main className="flex flex-col gap-4 pt-4 pb-6 w-full max-w-2xl md:max-w-none mx-auto">
 
         {/* 집필/편집 중 진행 카드 */}
-        {latestDraft && (
-          <div className="mx-4 sm:mx-6 bg-white border border-[#E5E7EB] rounded-2xl px-5 py-4 flex flex-col gap-3">
-            <p className="text-[1.25rem] font-bold text-[#1F2937]">편집중인 책</p>
+        {latestDraft && !draftDismissed && (
+          <div className="mx-4 sm:mx-6 bg-white border border-[#E5E7EB] rounded-2xl px-5 py-4 flex flex-col gap-3 relative">
+            <button
+              type="button"
+              aria-label="닫기"
+              onClick={() => setDraftDismissed(true)}
+              className="absolute -top-2 -right-2 p-1.5 rounded-full bg-white shadow-sm text-[#9CA3AF]"
+            >
+              <X size={13} />
+            </button>
+            <p className="text-[1.25rem] font-bold text-[#1F2937] truncate">
+              {latestDraft.title}
+              <span className="text-[1rem] font-normal text-[#6B7280]"> (편집중)</span>
+            </p>
             <div className="w-full h-2 bg-[#E5E7EB] rounded-full overflow-hidden">
               <div className="h-full bg-[#E8820C] rounded-full" style={{ width: '60%' }} />
             </div>

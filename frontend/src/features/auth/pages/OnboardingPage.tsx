@@ -33,8 +33,8 @@ const FEATURES = [
     ),
   },
   {
-    title: '가족과 함께 읽어요',
-    desc: '자녀·손주가 댓글로 함께해요',
+    title: '독자와 함께 읽어요',
+    desc: '가족·지인이 댓글로 함께해요',
     icon: (
       <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
         <rect width="28" height="28" rx="6" fill="#FFF0DC" />

@@ -87,8 +87,6 @@ function DeleteAccountModal({ onClose, onConfirm, deleting }: {
   )
 }
 
-const PRESETS = ['엄마', '아빠', '할머니', '할아버지', '직접 입력']
-
 export default function ProfileEditPage() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
@@ -97,39 +95,13 @@ export default function ProfileEditPage() {
   const displayName: string = user?.user_metadata?.full_name ?? user?.email ?? '사용자'
   const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
 
-  // DB에서 저장된 호칭을 초기값으로 사용, 없으면 '엄마'
-  const savedNickname = profile?.display_name ?? '엄마'
-  const initialPreset = PRESETS.includes(savedNickname) ? savedNickname : '직접 입력'
-
-  const [nickname, setNickname] = useState(savedNickname)
-  const [selected, setSelected] = useState(initialPreset)
-  const [customInput, setCustomInput] = useState(initialPreset === '직접 입력')
   // 성별/출생연도 — senior_profiles에서 마운트 후 DB 조회로 채움
   const [gender, setGender] = useState<Gender>(null)
   const [birthYear, setBirthYear] = useState('')
   const [saving, setSaving] = useState(false)
-  const [saveResult, setSaveResult] = useState<'idle' | 'success' | 'error'>('idle')
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  // 프로필이 스토어에 없으면 DB에서 직접 조회
-  useEffect(() => {
-    if (profile || !user) return
-    void supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single()
-      .then(({ data }) => {
-        if (data) {
-          setProfile(data)
-          const name = data.display_name
-          setNickname(name)
-          setSelected(PRESETS.includes(name) ? name : '직접 입력')
-          setCustomInput(!PRESETS.slice(0, -1).includes(name))
-        }
-      })
-  }, [user, profile, setProfile])
 
   // senior_profiles에서 gender, birth_date 조회 — profile과 독립 테이블이라 별도 fetch 필요
   // 의존성: user.id (string) — user 객체 자체보다 ID 문자열이 안정적
@@ -166,17 +138,6 @@ export default function ProfileEditPage() {
     birthYear.length === 4 &&
     (Number(birthYear) <= MIN_BIRTH_YEAR || Number(birthYear) >= MAX_BIRTH_YEAR)
 
-  function handlePreset(preset: string) {
-    if (preset === '직접 입력') {
-      setCustomInput(true)
-      setSelected('직접 입력')
-    } else {
-      setCustomInput(false)
-      setSelected(preset)
-      setNickname(preset)
-    }
-  }
-
   // delete-account Edge Function 호출 → 모든 데이터 삭제 후 로그인 화면으로 이동
   async function handleDeleteAccount() {
     setDeleting(true)
@@ -194,23 +155,19 @@ export default function ProfileEditPage() {
     }
   }
 
-  // 호칭(profiles.display_name) + 성별/출생연도(senior_profiles.gender, birth_date) 저장
-  // 단일 RPC update_senior_basic_info로 처리 — plpgsql 함수 본문은 한 트랜잭션이므로
-  // 두 테이블 UPDATE가 원자적으로 적용·롤백됨 (이전: 두 번 호출 → 둘째 실패 시 부분 커밋 발생)
+  // 성별/출생연도(senior_profiles.gender, birth_date) 저장 — 호칭(display_name)은 기존값 유지
   async function handleSave() {
-    if (!user || saving || !nickname.trim() || isBirthYearInvalid) return
+    if (!user || saving || isBirthYearInvalid) return
     setSaving(true)
-    setSaveResult('idle')
 
-    // 출생연도 정규화 — 4자리 유효값이면 'YYYY-01-01', 아니면 null (회원가입과 동일 규칙)
+    // 출생연도 정규화 — 4자리 유효값이면 'YYYY-01-01', 아니면 null
     const year = Number(birthYear)
     const isValidYear = birthYear.length === 4 && year > MIN_BIRTH_YEAR && year < MAX_BIRTH_YEAR
     const birthDate = isValidYear ? `${birthYear}-01-01` : null
 
-    // RPC 호출 — 실패 시 두 테이블 모두 롤백
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 자동 생성 타입에 RPC 시그니처 미반영
     const { error: rpcError } = await (supabase as any).rpc('update_senior_basic_info', {
-      p_display_name: nickname.trim(),
+      p_display_name: profile?.display_name ?? '', // 호칭 변경 없으므로 기존값 유지
       p_gender: gender,
       p_birth_date: birthDate,
     })
@@ -219,14 +176,9 @@ export default function ProfileEditPage() {
 
     if (rpcError) {
       console.error('[ProfileEditPage] update_senior_basic_info 실패', rpcError)
-      setSaveResult('error')
       return
     }
 
-    // 로컬 store 갱신 — DB 반영 확인 후에만, 기존 profile에 display_name만 머지
-    if (profile) {
-      setProfile({ ...profile, display_name: nickname.trim() })
-    }
     navigate(-1)
   }
 
@@ -337,62 +289,6 @@ export default function ProfileEditPage() {
           </div>
         </div>
 
-        {/* 호칭 필드 */}
-        <div className="flex flex-col gap-2">
-          <label className="text-base text-[#6B7280] px-1">호칭</label>
-
-          {/* 호칭 입력 */}
-          <div className="bg-white border-2 border-[#E8820C] rounded-xl px-4 py-3 flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-[#E8820C] shrink-0" />
-            {customInput ? (
-              <input
-                type="text"
-                value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
-                placeholder="호칭 입력"
-                className="flex-1 text-[1.375rem] text-[#1F2937] bg-transparent outline-none placeholder:text-[#D1D5DB]"
-                autoFocus
-              />
-            ) : (
-              <span className="flex-1 text-[1.375rem] text-[#1F2937]">{nickname}</span>
-            )}
-            <button
-              type="button"
-              onClick={() => { setNickname(''); setCustomInput(true); setSelected('직접 입력') }}
-              className="w-8 h-8 rounded-lg bg-[#E5E7EB] flex items-center justify-center shrink-0"
-            >
-              <span className="text-base text-[#6B7280]">✕</span>
-            </button>
-          </div>
-
-          {/* 미리보기 배너 */}
-          <div className="bg-[#FFF0DC] rounded-xl py-3 text-center">
-            <p className="text-[1.0625rem] text-[#E8820C]">
-              가족 책장에 &ldquo;{nickname || '호칭'}의 책장&rdquo; 으로 표시돼요
-            </p>
-          </div>
-
-          {/* 자주 쓰는 호칭 */}
-          <p className="text-base text-[#6B7280] px-1 mt-1">자주 쓰는 호칭</p>
-          <div className="flex flex-wrap gap-2">
-            {PRESETS.map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                onClick={() => handlePreset(preset)}
-                className={cn(
-                  'rounded-xl px-4 py-2 text-[1.125rem] border transition-colors',
-                  selected === preset
-                    ? 'bg-[#FFF0DC] border-[#E8820C] text-[#E8820C]'
-                    : 'bg-[#F3F4F6] border-[#E5E7EB] text-[#6B7280]',
-                )}
-              >
-                {preset}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* 계정 탈퇴 */}
         <div className="bg-[#FEF2F2] border border-[#FECACA] rounded-2xl py-4 text-center">
           <button type="button" onClick={() => setShowDeleteModal(true)}>
@@ -402,21 +298,8 @@ export default function ProfileEditPage() {
 
       </main>
 
-      {/* 하단 저장 바 */}
-      <div className="shrink-0 bg-white border-t border-[#E5E7EB] px-4 sm:px-6 pt-2 pb-4">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saving || isBirthYearInvalid}
-          className="w-full max-w-2xl md:max-w-none mx-auto block bg-[#E8820C] rounded-xl py-3 text-center disabled:opacity-50"
-        >
-          <span className="text-[1.125rem] text-white">
-            {saving ? '저장 중…' : saveResult === 'error' ? '저장 실패, 다시 시도해요' : '저장하기'}
-          </span>
-        </button>
-      </div>
 
-      {/* 계정 탈퇴 더블체크 모달 */}
+{/* 계정 탈퇴 더블체크 모달 */}
       {showDeleteModal && (
         <DeleteAccountModal
           onClose={() => setShowDeleteModal(false)}

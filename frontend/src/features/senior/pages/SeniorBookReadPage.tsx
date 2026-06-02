@@ -768,7 +768,7 @@ export default function SeniorBookReadPage() {
             {/* 댓글 섹션 — 책 단위 댓글 전체 표시 */}
             <div className="bg-white mx-3 mt-3 rounded-2xl px-5 py-5 flex flex-col gap-4">
               <p className="text-[1.125rem] font-bold text-[#1F2937]">
-                가족 댓글 {totalComments}개
+                독자 댓글 {totalComments}개
               </p>
 
               <div className="h-px bg-[#E5E7EB]" />

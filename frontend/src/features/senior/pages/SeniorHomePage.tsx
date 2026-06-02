@@ -1,10 +1,34 @@
-﻿import { useNavigate } from 'react-router'
+﻿import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router'
 import { Settings, ChevronRight } from 'lucide-react'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { NotificationBell } from '@/features/notifications/components/NotificationBell'
 import { useNotifications } from '@/features/notifications/hooks/useNotifications'
 import { useMonthlyConversationDays } from '@/features/senior/hooks/useMonthlyConversationDays'
 import { timeAgo } from '@/lib/utils'
+
+// 시간대별 인사말 — 각 시간대마다 2~3개 문구 중 랜덤 선택
+const GREETINGS: Record<'morning' | 'lunch' | 'afternoon' | 'evening' | 'night', string[]> = {
+  morning:   ['좋은 아침이에요', '오늘 아침도 건강하시죠?', '활기찬 아침이에요'],
+  lunch:     ['점심은 드셨나요?', '오늘 점심은 뭐 드셨어요?', '맛있는 점심 드셨나요?'],
+  afternoon: ['오후에 잠깐 쉬어가세요', '오늘 오후도 평안하시죠?', '오늘 하루 어떻게 보내세요?'],
+  evening:   ['오늘 하루는 어떠셨나요?', '저녁은 드셨나요?', '오늘도 수고 많으셨어요'],
+  night:     ['이 늦은 시간에 오셨군요', '오늘도 편안한 밤 되세요', '좋은 꿈 꾸세요'],
+}
+
+function getTimePeriod(): keyof typeof GREETINGS {
+  const h = new Date().getHours()
+  if (h >= 5  && h < 11) return 'morning'
+  if (h >= 11 && h < 14) return 'lunch'
+  if (h >= 14 && h < 18) return 'afternoon'
+  if (h >= 18 && h < 22) return 'evening'
+  return 'night'
+}
+
+function pickGreeting(): string {
+  const pool = GREETINGS[getTimePeriod()]
+  return pool[Math.floor(Math.random() * pool.length)]
+}
 
 function todayLabel() {
   return new Date().toLocaleDateString('ko-KR', {
@@ -18,6 +42,14 @@ export default function SeniorHomePage() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const displayName: string = user?.user_metadata?.full_name ?? user?.email ?? '사용자'
+
+  // 마운트 시 인사말 선택, 탭 복귀(visibilitychange) 시 갱신
+  const [greeting, setGreeting] = useState(pickGreeting)
+  const refreshGreeting = useCallback(() => setGreeting(pickGreeting()), [])
+  useEffect(() => {
+    document.addEventListener('visibilitychange', refreshGreeting)
+    return () => document.removeEventListener('visibilitychange', refreshGreeting)
+  }, [refreshGreeting])
 
   // 이번 달 대화 일수 DB에서 조회
   const { days, remaining, total } = useMonthlyConversationDays(user?.id ?? '')
@@ -56,7 +88,7 @@ export default function SeniorHomePage() {
             <circle cx="156" cy="125" r="9" fill="#E8820C" />
           </svg>
           <div className="flex-1 bg-white rounded-xl px-4 py-3 flex flex-col gap-1">
-            <p className="text-[1.0625rem] text-[#1F2937]">좋은 아침이에요, {displayName} 님 :)</p>
+            <p className="text-[1.0625rem] text-[#1F2937]" data-testid="greeting-text">{greeting}, {displayName} 님 :)</p>
             <p className="text-base text-[#6B7280]">오늘도 이야기 들려주세요</p>
           </div>
         </div>

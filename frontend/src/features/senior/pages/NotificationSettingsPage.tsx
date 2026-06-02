@@ -20,8 +20,8 @@ const FAMILY_NOTIFS: NotifItem[] = [
     prefKey: 'new_comment',
     icon: <MessageCircle size={20} className="text-[#E8820C]" />,
     iconBg: 'bg-[#FFF0DC]',
-    title: '가족이 댓글을 달았을 때',
-    desc: '자녀·손주가 내 책에 댓글을 남기면',
+    title: '독자가 댓글을 달았을 때',
+    desc: '독자가 내 책에 댓글을 남기면',
   },
   {
     id: 'reply',
@@ -47,8 +47,8 @@ const BOOK_NOTIFS: NotifItem[] = [
     prefKey: 'book_publish',
     icon: <BookMarked size={20} className="text-[#E8820C]" />,
     iconBg: 'bg-[#FFF0DC]',
-    title: '책이 가족 책장에 출간됐을 때',
-    desc: '편집을 마친 책이 가족에게 공개되면',
+    title: '책이 독자 책장에 출간됐을 때',
+    desc: '편집을 마친 책이 독자에게 공개되면',
   },
   {
     id: 'remind',
@@ -100,7 +100,7 @@ export default function NotificationSettingsPage() {
 
         {/* 가족 활동 섹션 */}
         <div className="flex flex-col gap-1">
-          <p className="text-base text-[#6B7280] px-1">가족 활동</p>
+          <p className="text-base text-[#6B7280] px-1">독자 활동</p>
           <div className="bg-white border border-[#E5E7EB] rounded-2xl divide-y divide-[#E5E7EB]">
             {FAMILY_NOTIFS.map((item) => (
               <div key={item.id} className="flex items-center gap-3 px-5 py-4">
