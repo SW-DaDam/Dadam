@@ -1,0 +1,103 @@
+// 가족 → 독자 텍스트 변경 검증 테스트
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
+import SeniorSettingsPage from './SeniorSettingsPage'
+import NotificationSettingsPage from './NotificationSettingsPage'
+
+// --- SeniorSettingsPage 공통 mock ---
+const mockUseAuthStore = vi.fn()
+vi.mock('@/shared/stores/authStore', () => ({
+  useAuthStore: (sel: (s: unknown) => unknown) => mockUseAuthStore(sel),
+}))
+vi.mock('@/shared/stores/themeStore', () => ({
+  useThemeStore: () => ({ darkMode: false, setDarkMode: vi.fn() }),
+}))
+vi.mock('@/shared/stores/fontSizeStore', () => ({
+  useFontSizeStore: () => ({ fontSize: 'medium', setFontSize: vi.fn() }),
+}))
+vi.mock('@/features/memory/hooks/useMemory', () => ({
+  useMemory: () => ({ items: [] }),
+}))
+vi.mock('@/features/family/hooks/useInvite', () => ({
+  useInvite: () => ({ familyMembers: [], inviteCode: null }),
+}))
+vi.mock('@/shared/hooks/useInstallPrompt', () => ({
+  useInstallPrompt: () => ({ platform: null, install: vi.fn() }),
+}))
+vi.mock('@/shared/hooks/usePushSubscription', () => ({
+  usePushSubscription: () => ({
+    supported: false, subscribed: false,
+    subscribe: vi.fn(), unsubscribe: vi.fn(),
+  }),
+}))
+vi.mock('@/lib/supabase', () => ({
+  supabase: {
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          single: vi.fn(() => Promise.resolve({ data: null, error: null })),
+        })),
+      })),
+    })),
+  },
+}))
+vi.mock('@/features/notifications/hooks/useNotificationPrefs', () => ({
+  useNotificationPrefs: () => ({
+    prefs: { family_comment: true, reply_to_comment: true, book_draft_ready: true, book_published: true, no_chat_today: true },
+    loading: false,
+    updatePref: vi.fn(),
+  }),
+}))
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  mockUseAuthStore.mockImplementation((sel) =>
+    sel({
+      user: { id: 'u1', user_metadata: { full_name: '권오인' } },
+      profile: { display_name: '아빠' },
+      setProfile: vi.fn(),
+    }),
+  )
+})
+
+// ── SeniorSettingsPage ──────────────────────────────
+describe('SeniorSettingsPage — 가족→독자 텍스트', () => {
+  it('"독자 초대하기" 가 표시된다', () => {
+    render(<MemoryRouter><SeniorSettingsPage /></MemoryRouter>)
+    expect(screen.getByText('독자 초대하기')).toBeTruthy()
+  })
+
+  it('"가족 초대하기" 가 표시되지 않는다', () => {
+    render(<MemoryRouter><SeniorSettingsPage /></MemoryRouter>)
+    expect(screen.queryByText('가족 초대하기')).toBeNull()
+  })
+
+  it('"연결된 독자" 가 표시된다', () => {
+    render(<MemoryRouter><SeniorSettingsPage /></MemoryRouter>)
+    expect(screen.getByText('연결된 독자')).toBeTruthy()
+  })
+
+  it('"카카오 링크로 가족, 지인 초대" 서브텍스트가 표시된다', () => {
+    render(<MemoryRouter><SeniorSettingsPage /></MemoryRouter>)
+    expect(screen.getByText('카카오 링크로 가족, 지인 초대')).toBeTruthy()
+  })
+})
+
+// ── NotificationSettingsPage ────────────────────────
+describe('NotificationSettingsPage — 가족→독자 텍스트', () => {
+  it('"독자가 댓글을 달았을 때" 가 표시된다', () => {
+    render(<MemoryRouter><NotificationSettingsPage /></MemoryRouter>)
+    expect(screen.getByText('독자가 댓글을 달았을 때')).toBeTruthy()
+  })
+
+  it('"독자 활동" 섹션 헤더가 표시된다', () => {
+    render(<MemoryRouter><NotificationSettingsPage /></MemoryRouter>)
+    expect(screen.getByText('독자 활동')).toBeTruthy()
+  })
+
+  it('"책이 독자 책장에 출간됐을 때" 가 표시된다', () => {
+    render(<MemoryRouter><NotificationSettingsPage /></MemoryRouter>)
+    expect(screen.getByText('책이 독자 책장에 출간됐을 때')).toBeTruthy()
+  })
+})

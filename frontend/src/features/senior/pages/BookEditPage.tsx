@@ -727,7 +727,7 @@ export default function BookEditPage() {
           <div className="relative bg-white rounded-2xl w-full max-w-sm p-6 flex flex-col gap-4 z-10">
             <p className="text-[1.375rem] font-bold text-[#1F2937] text-center">출간할까요?</p>
             <p className="text-[1.125rem] text-[#6B7280] text-center">출간 후에는 취소할 수 없어요.</p>
-            <p className="text-[1.0625rem] text-[#6B7280] text-center">가족에게 알림이 전송돼요.</p>
+            <p className="text-[1.0625rem] text-[#6B7280] text-center">독자에게 알림이 전송돼요.</p>
             <div className="flex gap-3">
               <button type="button" onClick={() => setPublishConfirmOpen(false)}
                 className="flex-1 bg-[#F3F4F6] rounded-xl py-3 text-center min-h-11">
@@ -857,7 +857,7 @@ function Step3AuthorNote({
       <main className="flex-1 overflow-y-auto w-full max-w-2xl md:max-w-none mx-auto px-4 sm:px-6 py-6 flex flex-col gap-4">
         <div className="flex flex-col items-center gap-2 text-center">
           <p className="text-[1.5rem] text-[#1F2937]">작가의 말</p>
-          <p className="text-[1.125rem] text-[#6B7280]">책의 맨 앞에 실려요. 독자(가족)에게 전하는 한마디예요</p>
+          <p className="text-[1.125rem] text-[#6B7280]">책의 맨 앞에 실려요. 독자에게 전하는 한마디예요</p>
         </div>
 
         <div className="bg-[#FFF0DC] rounded-2xl px-4 py-4 flex items-start gap-3">
@@ -865,7 +865,7 @@ function Step3AuthorNote({
             <span className="text-sm text-white font-medium">AI</span>
           </div>
           <div className="flex-1 bg-white rounded-xl px-4 py-3">
-            <p className="text-base text-[#1F2937]">"이 책을 쓰면서 어떤 마음이셨나요? 이 책을 읽을 가족에게 전하고 싶은 말을 써주세요."</p>
+            <p className="text-base text-[#1F2937]">"이 책을 쓰면서 어떤 마음이셨나요? 이 책을 읽을 독자에게 전하고 싶은 말을 써주세요."</p>
           </div>
         </div>
 
@@ -910,7 +910,7 @@ function Step3AuthorNote({
             value={authorNote}
             onChange={e => onChangeAuthorNote(e.target.value.slice(0, MAX))}
             rows={5}
-            placeholder="가족에게 전하고 싶은 말을 입력해주세요"
+            placeholder="독자에게 전하고 싶은 말을 입력해주세요"
             className="w-full bg-[#FFF8F0] border border-[#E5E7EB] rounded-xl px-4 py-3 text-[1.0625rem] text-[#1F2937] resize-none outline-none focus:border-[#E8820C]"
           />
           <p className="text-right text-sm text-[#9CA3AF]">{authorNote.length} / {MAX}</p>
@@ -1041,9 +1041,9 @@ function Step4Published({
           <p className="text-[1.25rem] text-[#374151]">
             소중한 이야기 <span className="font-bold" style={{ color: accent }}>{chapterCount}편</span>이
           </p>
-          <p className="text-[1.25rem] text-[#374151]">가족의 책장에 올라갔어요</p>
+          <p className="text-[1.25rem] text-[#374151]">독자의 책장에 올라갔어요</p>
           <p className="text-[1.0625rem] text-[#9CA3AF] mt-1">
-            이 이야기는 가족과 함께 영원히 남을 거예요 ✨
+            이 이야기는 독자와 함께 영원히 남을 거예요 ✨
           </p>
         </div>
 
@@ -1054,8 +1054,8 @@ function Step4Published({
             <Check size={20} className="text-white" strokeWidth={3} />
           </div>
           <div>
-            <p className="text-[1.125rem] font-medium text-[#1F2937]">가족에게 알림을 보냈어요</p>
-            <p className="text-[0.9375rem] text-[#6B7280]">연결된 가족 모두가 곧 읽을 거예요</p>
+            <p className="text-[1.125rem] font-medium text-[#1F2937]">독자에게 알림을 보냈어요</p>
+            <p className="text-[0.9375rem] text-[#6B7280]">연결된 독자 모두가 곧 읽을 거예요</p>
           </div>
         </div>
 

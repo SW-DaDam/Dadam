@@ -88,7 +88,7 @@ export default function InviteAcceptPage() {
           <div className="w-16 h-16 rounded-full bg-[#E8820C] flex items-center justify-center">
             <span className="text-2xl text-white font-bold">AI</span>
           </div>
-          <h1 className="text-2xl font-bold text-[#1F2937] text-center">가족으로 연결하기</h1>
+          <h1 className="text-2xl font-bold text-[#1F2937] text-center">독자로 연결하기</h1>
           <p className="text-lg text-[#6B7280] text-center">호칭을 정하고 연결해요</p>
         </div>
 
@@ -206,7 +206,7 @@ export default function InviteAcceptPage() {
               disabled={loading || !code || !seniorTitle || !readerNickname}
               className="w-full bg-[#E8820C] disabled:bg-[#E5E7EB] rounded-2xl py-4 text-xl text-white font-medium min-h-14 transition-colors"
             >
-              {loading ? '연결 중…' : session ? '가족으로 연결하기' : '카카오로 로그인 후 연결하기'}
+              {loading ? '연결 중…' : session ? '독자로 연결하기' : '카카오로 로그인 후 연결하기'}
             </button>
           </>
         )}

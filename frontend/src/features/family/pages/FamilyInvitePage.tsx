@@ -36,8 +36,8 @@ export default function FamilyInvitePage() {
     Kakao.Share.sendDefault({
       objectType: 'feed',
       content: {
-        title: '가족의 이야기를 함께 읽어요 📖',
-        description: '다담에서 초대가 왔어요. 아래 버튼을 눌러 가족으로 연결하세요.',
+        title: '소중한 이야기를 함께 읽어요 📖',
+        description: '다담에서 초대가 왔어요. 아래 버튼을 눌러 독자로 연결하세요.',
         imageUrl,
         link: { mobileWebUrl: link, webUrl: link },
       },
@@ -57,7 +57,7 @@ export default function FamilyInvitePage() {
         <button type="button" onClick={() => navigate(-1)} className="flex items-center min-h-11">
           <ChevronLeft size={22} className="text-[#6B7280]" />
         </button>
-        <h1 className="absolute left-1/2 -translate-x-1/2 text-lg sm:text-xl text-[#1F2937] font-medium whitespace-nowrap">가족 초대하기</h1>
+        <h1 className="absolute left-1/2 -translate-x-1/2 text-lg sm:text-xl text-[#1F2937] font-medium whitespace-nowrap">독자 초대하기</h1>
       </header>
 
       <main className="flex-1 overflow-y-auto flex flex-col gap-4 px-4 sm:px-6 py-5 w-full max-w-2xl md:max-w-none mx-auto">
@@ -67,7 +67,7 @@ export default function FamilyInvitePage() {
           <div className="w-9 h-9 rounded-full bg-[#E8820C] flex items-center justify-center shrink-0 text-white text-sm font-bold">AI</div>
           <div className="flex flex-col gap-0.5">
             <p className="text-[1.0625rem] text-[#1F2937]">카카오톡으로 초대장을 보내요</p>
-            <p className="text-base text-[#6B7280]">가족이 링크를 누르면 바로 연결돼요</p>
+            <p className="text-base text-[#6B7280]">독자가 링크를 누르면 바로 연결돼요</p>
           </div>
         </div>
 
@@ -132,7 +132,7 @@ export default function FamilyInvitePage() {
             )}
           </div>
           <div className="flex flex-col gap-0.5 shrink-0">
-            <p className="text-sm text-[#6B7280]">코드를 알려주면 가족이</p>
+            <p className="text-sm text-[#6B7280]">코드를 알려주면 독자가</p>
             <p className="text-sm text-[#6B7280]">직접 입력해서 연결해요</p>
           </div>
         </div>

@@ -82,6 +82,26 @@ describe('AiVoiceSettingsPage — 기본 렌더링', () => {
   })
 })
 
+describe('AiVoiceSettingsPage — 보이스 카드 해시태그', () => {
+  it('여성 탭에서 유나 카드에 해시태그가 표시된다', () => {
+    renderPage()
+    // 유나 카드: #활기찬 #싹싹한
+    expect(screen.getByText('#활기찬 #싹싹한')).toBeTruthy()
+  })
+
+  it('남성 탭에서 민상 카드에 해시태그가 표시된다', () => {
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: '남성' }))
+    expect(screen.getByText('#신뢰가는 #자분한')).toBeTruthy()
+  })
+
+  it('남성 탭에서 시윤 카드에 #쓸쓸한 태그가 표시된다', () => {
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: '남성' }))
+    expect(screen.getByText('#신뢰가는 #쓸쓸한')).toBeTruthy()
+  })
+})
+
 describe('AiVoiceSettingsPage — 성별 탭 + voice 카드', () => {
   it('여성/남성 탭 버튼이 렌더링된다', () => {
     renderPage()
