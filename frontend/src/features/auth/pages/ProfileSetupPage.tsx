@@ -38,7 +38,7 @@ export default function ProfileSetupPage() {
   const userId = user?.id ?? ''
   const draft = loadDraft(userId)
   // 호칭 UI 제거 후 카카오 이름을 기본값으로 사용 — display_name 빈 문자열 방지
-  const [nickname, setNickname] = useState(draft.nickname || kakaoProfile?.name || '')
+  const nickname = draft.nickname || kakaoProfile?.name || ''
   const [gender, setGender] = useState<'male' | 'female' | null>(draft.gender)
   const [birthYear, setBirthYear] = useState(draft.birthYear)
   const [submitting, setSubmitting] = useState(false)

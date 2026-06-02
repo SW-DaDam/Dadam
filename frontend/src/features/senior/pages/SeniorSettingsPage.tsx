@@ -30,8 +30,6 @@ export default function SeniorSettingsPage() {
   const displayName: string = user?.user_metadata?.full_name ?? user?.email ?? '사용자'
   const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
   const avatarChar = displayName.charAt(0)
-  // DB에서 저장된 호칭 사용, 없으면 프로필 로드 전 기본값
-  const nickname: string = profile?.display_name ?? '...'
 
   // 스토어에 profile이 없을 때 DB에서 직접 조회
   useEffect(() => {
