@@ -1,6 +1,6 @@
 ﻿import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { Bell, BellRing, BookOpen, ChevronRight, MessageCircle, Users } from 'lucide-react'
+import { BellRing, BookOpen, ChevronRight } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { supabase } from '@/lib/supabase'
@@ -114,7 +114,7 @@ export default function ReaderSettingsPage() {
         {/* 알림 설정 */}
         <div className="flex flex-col gap-1">
           <p className="text-base text-[#6B7280] px-1">알림</p>
-          <div className="bg-white border border-[#E5E7EB] rounded-2xl divide-y divide-[#E5E7EB]">
+          <div className="bg-white border border-[#E5E7EB] rounded-2xl">
             <div className="flex items-center gap-3 px-5 py-4">
               <div className="w-10 h-10 rounded-xl bg-[#FFF0DC] flex items-center justify-center shrink-0">
                 <BookOpen size={20} className="text-[#E8820C]" />
@@ -124,36 +124,6 @@ export default function ReaderSettingsPage() {
                 <p className="text-base text-[#6B7280]">저자가 새 책을 출간하면 알려줘요</p>
               </div>
               <Toggle on={!notifLoading && notifPrefs.new_book} onChange={(v) => updatePref('new_book', v)} />
-            </div>
-            <div className="flex items-center gap-3 px-5 py-4">
-              <div className="w-10 h-10 rounded-xl bg-[#FFF0DC] flex items-center justify-center shrink-0">
-                <MessageCircle size={20} className="text-[#E8820C]" />
-              </div>
-              <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                <p className="text-[1.125rem] text-[#1F2937]">저자 댓글 알림</p>
-                <p className="text-base text-[#6B7280]">저자가 책에 댓글을 남기면 알려줘요</p>
-              </div>
-              <Toggle on={!notifLoading && notifPrefs.new_comment} onChange={(v) => updatePref('new_comment', v)} />
-            </div>
-            <div className="flex items-center gap-3 px-5 py-4">
-              <div className="w-10 h-10 rounded-xl bg-[#FFF0DC] flex items-center justify-center shrink-0">
-                <Bell size={20} className="text-[#E8820C]" />
-              </div>
-              <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                <p className="text-[1.125rem] text-[#1F2937]">댓글 답장 알림</p>
-                <p className="text-base text-[#6B7280]">내 댓글에 저자가 답장하면 알려줘요</p>
-              </div>
-              <Toggle on={!notifLoading && notifPrefs.new_reply} onChange={(v) => updatePref('new_reply', v)} />
-            </div>
-            <div className="flex items-center gap-3 px-5 py-4">
-              <div className="w-10 h-10 rounded-xl bg-[#F3F4F6] flex items-center justify-center shrink-0">
-                <Users size={20} className="text-[#9CA3AF]" />
-              </div>
-              <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                <p className="text-[1.125rem] text-[#1F2937]">다른 가족 댓글</p>
-                <p className="text-base text-[#6B7280]">다른 가족이 댓글을 남기면 알려줘요</p>
-              </div>
-              <Toggle on={!notifLoading && notifPrefs.family_comment} onChange={(v) => updatePref('family_comment', v)} />
             </div>
           </div>
         </div>
