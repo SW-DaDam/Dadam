@@ -28,8 +28,8 @@ const BOOK_NOTIFS: NotifItem[] = [
     prefKey: 'book_publish',
     icon: <BookMarked size={20} className="text-[#E8820C]" />,
     iconBg: 'bg-[#FFF0DC]',
-    title: '책이 가족 책장에 출간됐을 때',
-    desc: '편집을 마친 책이 가족에게 공개되면',
+    title: '책이 독자 책장에 출간됐을 때',
+    desc: '편집을 마친 책이 독자에게 공개되면',
   },
 ]
 

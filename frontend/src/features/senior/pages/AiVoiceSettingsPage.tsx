@@ -28,13 +28,13 @@ const SPEECH_STYLE_META: Record<SpeechStyle, { label: string; desc: string; exam
 }
 
 // 화자 메타데이터 — 이름과 성별만 관리 (PRO 구분 표시 없음)
-const VOICE_META: Record<TtsVoice, { label: string; gender: '여성' | '남성' }> = {
-  nyuna:    { label: '유나',  gender: '여성' },
-  noyj:     { label: '봄달',  gender: '여성' },
-  vara:     { label: '아라',  gender: '여성' },
-  nminsang: { label: '민상',  gender: '남성' },
-  nsiyoon:  { label: '시윤',  gender: '남성' },
-  vian:     { label: '이안',  gender: '남성' },
+const VOICE_META: Record<TtsVoice, { label: string; gender: '여성' | '남성'; tags: string }> = {
+  nyuna:    { label: '유나',  gender: '여성', tags: '#활기찬 #싹싹한' },
+  noyj:     { label: '봄달',  gender: '여성', tags: '#자분한 #친절한' },
+  vara:     { label: '아라',  gender: '여성', tags: '#활기찬 #자분한' },
+  nminsang: { label: '민상',  gender: '남성', tags: '#신뢰가는 #자분한' },
+  nsiyoon:  { label: '시윤',  gender: '남성', tags: '#신뢰가는 #쓸쓸한' },
+  vian:     { label: '이안',  gender: '남성', tags: '#활기찬 #싹싹한' },
 }
 
 const FEMALE_VOICES: TtsVoice[] = ['nyuna', 'noyj', 'vara']
@@ -209,7 +209,7 @@ export default function AiVoiceSettingsPage() {
                     type="button"
                     onClick={() => setPendingVoice(voice)}
                     className={cn(
-                      'flex flex-col items-center justify-center py-3 rounded-xl border-2 transition-colors relative',
+                      'flex flex-col items-center justify-center py-4 px-2 rounded-xl border-2 transition-colors relative gap-1',
                       isSelected
                         ? 'border-[#E8820C] bg-[#FFFAF5]'
                         : 'border-[#E5E7EB] bg-[#F9FAFB]',
@@ -225,6 +225,9 @@ export default function AiVoiceSettingsPage() {
                       isSelected ? 'text-[#E8820C]' : 'text-[#1F2937]',
                     )}>
                       {VOICE_META[voice].label}
+                    </p>
+                    <p className="text-[11px] text-[#9CA3AF] leading-tight text-center">
+                      {VOICE_META[voice].tags}
                     </p>
                   </button>
                 )

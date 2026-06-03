@@ -594,8 +594,8 @@ function DraftBookCard({
   return (
     <div className="bg-white rounded-2xl overflow-hidden" style={{ border: `2px solid ${accentColor}` }}>
       <div className="flex items-stretch gap-4 px-5 py-4">
-        {/* 책 표지 썸네일 — 단편은 날짜·챕터 없으므로 더 낮은 min-h 사용 */}
-        <div className={`relative w-[64px] shrink-0 ${isShort ? 'min-h-[76px]' : 'min-h-[96px]'}`}>
+        {/* 책 표지 썸네일 — 월간·단편 동일 높이로 통일 */}
+        <div className="relative w-[64px] shrink-0 min-h-[88px]">
           <div
             className="absolute inset-0 rounded-lg flex flex-col items-center justify-center"
             style={{ backgroundColor: palette.bg, border: `1.5px solid ${palette.border}` }}
@@ -630,13 +630,16 @@ function DraftBookCard({
                 <span className="text-xs" style={{ color: accentColor }}>{label}</span>
               </span>
             </div>
-            {/* 단편은 날짜·챕터 수 미표시 */}
-            {!isShort && (
-              <>
-                <p className="text-base text-[#6B7280]">{book.year}년 {book.month}월</p>
-                <p className="text-base text-[#6B7280]">챕터 {book.chapterCount}개</p>
-              </>
-            )}
+            {/* 단편: 초안 완료 안내 문구 / 월간: 날짜·챕터 수 표시 */}
+            {isShort
+              ? <p className="text-sm text-[#9CA3AF]">초안 작성이 완료되었어요</p>
+              : (
+                <>
+                  <p className="text-base text-[#6B7280]">{book.year}년 {book.month}월</p>
+                  <p className="text-base text-[#6B7280]">챕터 {book.chapterCount}개</p>
+                </>
+              )
+            }
           </div>
         </div>
       </div>

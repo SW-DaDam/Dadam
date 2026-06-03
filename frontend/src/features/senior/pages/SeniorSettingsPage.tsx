@@ -30,8 +30,6 @@ export default function SeniorSettingsPage() {
   const displayName: string = user?.user_metadata?.full_name ?? user?.email ?? '사용자'
   const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
   const avatarChar = displayName.charAt(0)
-  // DB에서 저장된 호칭 사용, 없으면 프로필 로드 전 기본값
-  const nickname: string = profile?.display_name ?? '...'
 
   // 스토어에 profile이 없을 때 DB에서 직접 조회
   useEffect(() => {
@@ -75,7 +73,7 @@ export default function SeniorSettingsPage() {
           </div>
           <div className="flex-1 flex flex-col gap-0.5">
             <p className="text-[1.375rem] text-[#1F2937]">{displayName}</p>
-            <p className="text-[1.0625rem] text-[#6B7280]">호칭: {nickname} · 저자</p>
+            <p className="text-[1.0625rem] text-[#6B7280]">저자</p>
           </div>
           <button
             type="button"
@@ -128,7 +126,7 @@ export default function SeniorSettingsPage() {
 
         {/* 가족 섹션 */}
         <div className="flex flex-col gap-1">
-          <p className="text-base text-[#6B7280] px-1">가족</p>
+          <p className="text-base text-[#6B7280] px-1">독자</p>
           <div className="bg-white border border-[#E5E7EB] rounded-2xl divide-y divide-[#E5E7EB]">
             {/* 가족 초대하기 */}
             <button
@@ -140,8 +138,8 @@ export default function SeniorSettingsPage() {
                 ＋
               </div>
               <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                <p className="text-[1.125rem] text-[#1F2937]">가족 초대하기</p>
-                <p className="text-base text-[#6B7280]">카카오 링크로 자녀·손주 초대</p>
+                <p className="text-[1.125rem] text-[#1F2937]">독자 초대하기</p>
+                <p className="text-base text-[#6B7280]">카카오 링크로 가족, 지인 초대</p>
               </div>
               <span className="bg-[#E8820C] rounded-lg px-3 py-1.5 text-sm text-white shrink-0">링크 공유</span>
               <ChevronRight size={20} className="text-[#D1D5DB] shrink-0" />
@@ -156,11 +154,11 @@ export default function SeniorSettingsPage() {
                 ♥
               </div>
               <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                <p className="text-[1.125rem] text-[#1F2937]">연결된 가족</p>
+                <p className="text-[1.125rem] text-[#1F2937]">연결된 독자</p>
                 <p className="text-base text-[#6B7280]">
                   {familyMembers.length === 0
-                    ? '아직 연결된 가족이 없어요'
-                    : familyMembers.slice(0, 2).map(m => m.profile?.display_name ?? '가족').join(', ')
+                    ? '아직 연결된 독자가 없어요'
+                    : familyMembers.slice(0, 2).map(m => m.profile?.display_name ?? '독자').join(', ')
                       + (familyMembers.length > 2 ? ` 외 ${familyMembers.length - 2}명` : '')}
                 </p>
               </div>

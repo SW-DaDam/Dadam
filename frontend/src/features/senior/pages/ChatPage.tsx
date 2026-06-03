@@ -42,9 +42,10 @@ export default function ChatPage() {
   }, [state, startListening, stopListening])
 
   const handleTextSend = useCallback(async () => {
-    if (!textInput.trim()) return
-    await sendTextMessage(textInput)
-    setTextInput('')
+    const text = textInput.trim()
+    if (!text) return
+    setTextInput('') // AI 응답 완료 전에 즉시 초기화
+    await sendTextMessage(text)
   }, [textInput, sendTextMessage])
 
   const handleTextKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -107,6 +108,7 @@ export default function ChatPage() {
         />
         <button
           type="button"
+          aria-label="전송"
           onClick={() => void handleTextSend()}
           disabled={!textInput.trim() || state === 'processing' || state === 'listening'}
           className="flex items-center justify-center w-11 h-11 rounded-xl bg-[#E8820C] text-white disabled:opacity-40 shrink-0"

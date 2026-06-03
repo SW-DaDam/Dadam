@@ -111,7 +111,6 @@ export default function RoleSelectPage() {
             {[
               '매일 AI와 대화하고 이야기 남기기',
               '매달 내 이야기로 책 만들기',
-              '가족에게 내 책 선물하기',
             ].map((text) => (
               <li key={text} className="flex items-center gap-3">
                 <span className={cn('w-2.5 h-2.5 rounded-full shrink-0 transition-colors', selected === 'senior' ? 'bg-[#E8820C]' : 'bg-[#9CA3AF]')} />
@@ -135,11 +134,11 @@ export default function RoleSelectPage() {
           <ReaderAvatar selected={selected === 'family'} />
           <div className="flex flex-col items-center gap-1">
             <p className={cn('text-2xl leading-snug transition-colors', selected === 'family' ? 'text-[#E8820C]' : 'text-[#6B7280]')}>독자로 시작하기</p>
-            <p className={cn('text-lg leading-[22px] transition-colors', selected === 'family' ? 'text-[#E8820C]' : 'text-[#9CA3AF]')}>자녀 · 손주 · 가족</p>
+            <p className={cn('text-lg leading-[22px] transition-colors', selected === 'family' ? 'text-[#E8820C]' : 'text-[#9CA3AF]')}>가족 · 지인</p>
           </div>
           <ul className="flex flex-col gap-2 w-full">
             {[
-              '가족의 책 읽기',
+              '저자가 작성한 책 읽기',
               '댓글·사진 남기고 함께 소통하기',
             ].map((text) => (
               <li key={text} className="flex items-center gap-3">
