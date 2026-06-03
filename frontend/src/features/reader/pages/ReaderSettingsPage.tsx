@@ -1,6 +1,6 @@
 ﻿import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { Bell, BellRing, BookOpen, ChevronRight, MessageCircle, Users } from 'lucide-react'
+import { BellRing, BookOpen, ChevronRight, Users } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { supabase } from '@/lib/supabase'
@@ -126,26 +126,6 @@ export default function ReaderSettingsPage() {
               <Toggle on={!notifLoading && notifPrefs.new_book} onChange={(v) => updatePref('new_book', v)} />
             </div>
             <div className="flex items-center gap-3 px-5 py-4">
-              <div className="w-10 h-10 rounded-xl bg-[#FFF0DC] flex items-center justify-center shrink-0">
-                <MessageCircle size={20} className="text-[#E8820C]" />
-              </div>
-              <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                <p className="text-[1.125rem] text-[#1F2937]">저자 댓글 알림</p>
-                <p className="text-base text-[#6B7280]">저자가 책에 댓글을 남기면 알려줘요</p>
-              </div>
-              <Toggle on={!notifLoading && notifPrefs.new_comment} onChange={(v) => updatePref('new_comment', v)} />
-            </div>
-            <div className="flex items-center gap-3 px-5 py-4">
-              <div className="w-10 h-10 rounded-xl bg-[#FFF0DC] flex items-center justify-center shrink-0">
-                <Bell size={20} className="text-[#E8820C]" />
-              </div>
-              <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                <p className="text-[1.125rem] text-[#1F2937]">댓글 답장 알림</p>
-                <p className="text-base text-[#6B7280]">내 댓글에 저자가 답장하면 알려줘요</p>
-              </div>
-              <Toggle on={!notifLoading && notifPrefs.new_reply} onChange={(v) => updatePref('new_reply', v)} />
-            </div>
-            <div className="flex items-center gap-3 px-5 py-4">
               <div className="w-10 h-10 rounded-xl bg-[#F3F4F6] flex items-center justify-center shrink-0">
                 <Users size={20} className="text-[#9CA3AF]" />
               </div>
@@ -158,9 +138,9 @@ export default function ReaderSettingsPage() {
           </div>
         </div>
 
-        {/* 화면 설정 */}
+        {/* 설정 */}
         <div className="flex flex-col gap-1">
-          <p className="text-base text-[#6B7280] px-1">화면 설정</p>
+          <p className="text-base text-[#6B7280] px-1">설정</p>
           <div className="bg-white border border-[#E5E7EB] rounded-2xl divide-y divide-[#E5E7EB]">
             <div className="flex items-center gap-3 px-5 py-4">
               <div className="w-10 h-10 rounded-xl bg-[#F3F4F6] flex items-center justify-center shrink-0 text-lg text-[#6B7280] font-medium">
@@ -195,7 +175,6 @@ export default function ReaderSettingsPage() {
               </div>
               <Toggle on={darkModeOn} onChange={setDarkModeOn} />
             </div>
-            {/* 푸시 알림 */}
             {pushSupported && (
               <div className="flex items-center gap-3 px-5 py-4">
                 <div className="w-10 h-10 rounded-xl bg-[#FFF0DC] flex items-center justify-center shrink-0">
@@ -208,7 +187,14 @@ export default function ReaderSettingsPage() {
                 <Toggle on={pushSubscribed} onChange={handlePushToggle} />
               </div>
             )}
-            {showInstallRow && (
+          </div>
+        </div>
+
+        {/* 기타 */}
+        {showInstallRow && (
+          <div className="flex flex-col gap-1">
+            <p className="text-base text-[#6B7280] px-1">기타</p>
+            <div className="bg-white border border-[#E5E7EB] rounded-2xl">
               <button
                 type="button"
                 onClick={platform === 'ios' ? () => setShowIosGuide(true) : install}
@@ -225,9 +211,9 @@ export default function ReaderSettingsPage() {
                 </div>
                 {platform === 'ios' && <ChevronRight size={20} className="text-[#D1D5DB] shrink-0" />}
               </button>
-            )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* 로그아웃 */}
         <div className="bg-white border border-[#E5E7EB] rounded-2xl">
