@@ -172,9 +172,9 @@ export default function SeniorSettingsPage() {
           </div>
         </div>
 
-        {/* 화면 설정 섹션 */}
+        {/* 설정 섹션 */}
         <div className="flex flex-col gap-1">
-          <p className="text-base text-[#6B7280] px-1">화면 설정</p>
+          <p className="text-base text-[#6B7280] px-1">설정</p>
           <div className="bg-white border border-[#E5E7EB] rounded-2xl divide-y divide-[#E5E7EB]">
             {/* 글씨 크기 */}
             <div className="flex items-center gap-3 px-5 py-4">
@@ -202,6 +202,17 @@ export default function SeniorSettingsPage() {
                 </div>
               </div>
             </div>
+            {/* 다크 모드 */}
+            <div className="flex items-center gap-3 px-5 py-4">
+              <div className="w-10 h-10 rounded-xl bg-[#F3F4F6] flex items-center justify-center shrink-0 text-lg text-[#6B7280]">
+                ◑
+              </div>
+              <div className="flex-1 flex flex-col gap-0.5">
+                <p className="text-[1.125rem] text-[#1F2937]">다크 모드</p>
+                <p className="text-base text-[#6B7280]">어두운 화면으로 보기</p>
+              </div>
+              <Toggle on={darkMode} onChange={setDarkMode} />
+            </div>
             {/* 푸시 알림 */}
             {pushSupported && (
               <div className="flex items-center gap-3 px-5 py-4">
@@ -215,19 +226,29 @@ export default function SeniorSettingsPage() {
                 <Toggle on={pushSubscribed} onChange={(v) => v ? pushSubscribe() : pushUnsubscribe()} />
               </div>
             )}
-            {/* 다크 모드 */}
-            <div className="flex items-center gap-3 px-5 py-4">
-              <div className="w-10 h-10 rounded-xl bg-[#F3F4F6] flex items-center justify-center shrink-0 text-lg text-[#6B7280]">
-                ◑
+            {/* 알림 설정 */}
+            <button
+              type="button"
+              onClick={() => navigate('/s/settings/notifications')}
+              className="w-full flex items-center gap-3 px-5 py-4 text-left"
+            >
+              <div className="w-10 h-10 rounded-xl bg-[#F3F4F6] flex items-center justify-center shrink-0">
+                <Bell size={20} className="text-[#6B7280]" />
               </div>
               <div className="flex-1 flex flex-col gap-0.5">
-                <p className="text-[1.125rem] text-[#1F2937]">다크 모드</p>
-                <p className="text-base text-[#6B7280]">어두운 화면으로 보기</p>
+                <p className="text-[1.125rem] text-[#1F2937]">알림 설정</p>
+                <p className="text-base text-[#6B7280]">책 출간 알림</p>
               </div>
-              <Toggle on={darkMode} onChange={setDarkMode} />
-            </div>
-            {/* 홈화면 추가 */}
-            {showInstallRow && (
+              <ChevronRight size={20} className="text-[#D1D5DB] shrink-0" />
+            </button>
+          </div>
+        </div>
+
+        {/* 기타 섹션 */}
+        {showInstallRow && (
+          <div className="flex flex-col gap-1">
+            <p className="text-base text-[#6B7280] px-1">기타</p>
+            <div className="bg-white border border-[#E5E7EB] rounded-2xl">
               <button
                 type="button"
                 onClick={platform === 'ios' ? () => setShowIosGuide(true) : install}
@@ -244,30 +265,9 @@ export default function SeniorSettingsPage() {
                 </div>
                 {platform === 'ios' && <ChevronRight size={20} className="text-[#D1D5DB] shrink-0" />}
               </button>
-            )}
+            </div>
           </div>
-        </div>
-
-        {/* 기타 섹션 */}
-        <div className="flex flex-col gap-1">
-          <p className="text-base text-[#6B7280] px-1">기타</p>
-          <div className="bg-white border border-[#E5E7EB] rounded-2xl">
-            <button
-              type="button"
-              onClick={() => navigate('/s/settings/notifications')}
-              className="w-full flex items-center gap-3 px-5 py-4 text-left"
-            >
-              <div className="w-10 h-10 rounded-xl bg-[#F3F4F6] flex items-center justify-center shrink-0">
-                <Bell size={20} className="text-[#6B7280]" />
-              </div>
-              <div className="flex-1 flex flex-col gap-0.5">
-                <p className="text-[1.125rem] text-[#1F2937]">알림 설정</p>
-                <p className="text-base text-[#6B7280]">댓글, 가족 활동 알림</p>
-              </div>
-              <ChevronRight size={20} className="text-[#D1D5DB] shrink-0" />
-            </button>
-          </div>
-        </div>
+        )}
 
         {/* 로그아웃 */}
         <div className="bg-white border border-[#E5E7EB] rounded-2xl">
