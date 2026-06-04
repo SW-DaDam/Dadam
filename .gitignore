@@ -8,24 +8,11 @@ node_modules
 .env*.local
 supabase/functions/.env
 
-# 개발 전용 문서 (main 브랜치에 포함하지 않음)
-CLAUDE.md
-docs/
-tasks/
-
-# ML 실험 · 파인튜닝 (프로덕션과 무관)
-prompt/
-whisper/
-
-# 프론트 개발 도구
-frontend/design.md
-frontend/scripts/
-
-# Supabase 개발 전용 스크립트
-supabase/bookshelf_seed.sql
-supabase/999_rollback.sql
-
-# Vercel 로컬 캐시
+# 로드맵 (로컬 전용)
+docs/work/ROADMAP*.md
+docs/roadmap/
+docs/superpowers/
+docs/task/
 .vercel
 
 # 로컬 도구 (Playwright MCP 스냅샷, VS Code 설정)
