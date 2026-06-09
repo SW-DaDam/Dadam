@@ -36,7 +36,7 @@ const BOOK_NOTIFS: NotifItem[] = [
 export default function NotificationSettingsPage() {
   const navigate = useNavigate()
   const { prefs, loading, updatePref, disableAll, enableAll } = useNotificationPrefs()
-  const { supported: pushSupported, subscribed: pushSubscribed, subscribe: pushSubscribe, unsubscribe: pushUnsubscribe } = usePushSubscription()
+  const { supported: pushSupported, subscribed: pushSubscribed, loading: pushLoading, subscribe: pushSubscribe, unsubscribe: pushUnsubscribe } = usePushSubscription()
 
   async function handlePushToggle(on: boolean) {
     if (on) { await pushSubscribe(); enableAll() }
@@ -67,7 +67,7 @@ export default function NotificationSettingsPage() {
                 {pushSubscribed ? '기기 알림이 켜져 있어요' : '꺼지면 모든 알림이 오지 않아요'}
               </p>
             </div>
-            <Toggle on={pushSubscribed} onChange={handlePushToggle} />
+            <Toggle on={pushSubscribed} onChange={handlePushToggle} disabled={pushLoading} />
           </div>
         )}
 

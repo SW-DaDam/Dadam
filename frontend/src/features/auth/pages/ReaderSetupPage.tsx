@@ -47,6 +47,11 @@ export default function ReaderSetupPage() {
     if (!user || !code.trim()) return
     const st = seniorTitle.trim() || '저자'
     const rn = readerNickname.trim() || '가족'
+
+    // family_links FK(→ profiles) 위반 방지: 코드 확인 전 profiles 행 보장
+    const displayName = kakaoProfile?.name ?? '사용자'
+    await setupFamilyProfile(user.id, displayName)
+
     const result = await acceptInviteCode(code.trim(), user.id, st, rn)
     if (result.ok) {
       setInviteStatus('linked')

@@ -1,11 +1,10 @@
 ﻿import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { Bell, BellRing, ChevronRight } from 'lucide-react'
+import { BellRing, ChevronRight } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { useInstallPrompt } from '@/shared/hooks/useInstallPrompt'
 import IosInstallGuide from '@/shared/components/IosInstallGuide'
-import { usePushSubscription } from '@/shared/hooks/usePushSubscription'
 import { useThemeStore } from '@/shared/stores/themeStore'
 import { useFontSizeStore, type FontSize } from '@/shared/stores/fontSizeStore'
 import { useMemory } from '@/features/memory/hooks/useMemory'
@@ -47,7 +46,6 @@ export default function SeniorSettingsPage() {
   const { platform, install } = useInstallPrompt()
   const [showIosGuide, setShowIosGuide] = useState(false)
   const showInstallRow = platform === 'android' || platform === 'ios'
-  const { supported: pushSupported, subscribed: pushSubscribed, subscribe: pushSubscribe, unsubscribe: pushUnsubscribe } = usePushSubscription()
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -211,31 +209,18 @@ export default function SeniorSettingsPage() {
               </div>
               <Toggle on={darkMode} onChange={setDarkMode} />
             </div>
-            {/* 푸시 알림 */}
-            {pushSupported && (
-              <div className="flex items-center gap-3 px-5 py-4">
-                <div className="w-10 h-10 rounded-xl bg-[#FFF0DC] flex items-center justify-center shrink-0">
-                  <BellRing size={20} className="text-[#E8820C]" />
-                </div>
-                <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                  <p className="text-[1.125rem] text-[#1F2937]">푸시 알림</p>
-                  <p className="text-base text-[#6B7280]">댓글·답장 알림을 받아요</p>
-                </div>
-                <Toggle on={pushSubscribed} onChange={(v) => v ? pushSubscribe() : pushUnsubscribe()} />
-              </div>
-            )}
             {/* 알림 설정 */}
             <button
               type="button"
               onClick={() => navigate('/s/settings/notifications')}
               className="w-full flex items-center gap-3 px-5 py-4 text-left"
             >
-              <div className="w-10 h-10 rounded-xl bg-[#F3F4F6] flex items-center justify-center shrink-0">
-                <Bell size={20} className="text-[#6B7280]" />
+              <div className="w-10 h-10 rounded-xl bg-[#FFF0DC] flex items-center justify-center shrink-0">
+                <BellRing size={20} className="text-[#E8820C]" />
               </div>
               <div className="flex-1 flex flex-col gap-0.5">
                 <p className="text-[1.125rem] text-[#1F2937]">알림 설정</p>
-                <p className="text-base text-[#6B7280]">책 출간 알림</p>
+                <p className="text-base text-[#6B7280]">푸시 알림, 책 출간 알림</p>
               </div>
               <ChevronRight size={20} className="text-[#D1D5DB] shrink-0" />
             </button>

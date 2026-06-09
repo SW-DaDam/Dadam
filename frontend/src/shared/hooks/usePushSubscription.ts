@@ -25,10 +25,13 @@ export function usePushSubscription() {
   async function subscribe() {
     if (!user?.id || !supported) return
     setLoading(true)
+    setSubscribed(true) // 낙관적 업데이트
     try {
       const permission = await Notification.requestPermission()
-      if (permission !== 'granted') return
-
+      if (permission !== 'granted') {
+        setSubscribed(false)
+        return
+      }
       const reg = await navigator.serviceWorker.ready
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
@@ -41,7 +44,8 @@ export function usePushSubscription() {
         p256dh: keys.p256dh,
         auth: keys.auth,
       }, { onConflict: 'user_id,endpoint' })
-      setSubscribed(true)
+    } catch {
+      setSubscribed(false) // 실패 시 롤백
     } finally {
       setLoading(false)
     }
@@ -50,6 +54,7 @@ export function usePushSubscription() {
   async function unsubscribe() {
     if (!user?.id || !supported) return
     setLoading(true)
+    setSubscribed(false) // 낙관적 업데이트
     try {
       const reg = await navigator.serviceWorker.ready
       const sub = await reg.pushManager.getSubscription()
@@ -57,7 +62,8 @@ export function usePushSubscription() {
         await sub.unsubscribe()
         await supabase.from('push_subscriptions').delete().eq('user_id', user.id).eq('endpoint', sub.endpoint)
       }
-      setSubscribed(false)
+    } catch {
+      setSubscribed(true) // 실패 시 롤백
     } finally {
       setLoading(false)
     }

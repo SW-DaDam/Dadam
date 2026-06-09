@@ -107,6 +107,11 @@ export function useInvite(): UseInviteReturn {
   ): Promise<{ ok: boolean; message: string }> {
     if (!user) return { ok: false, message: '로그인이 필요해요' }
 
+    // family_links FK(→ profiles) 위반 방지: 기존 profiles 행 유지, 없으면 생성
+    await supabase
+      .from('profiles')
+      .upsert({ id: user.id, role: 'family', display_name: '사용자' }, { ignoreDuplicates: true })
+
     const { data: link, error: findErr } = await supabase
       .from('family_links')
       .select('*')
