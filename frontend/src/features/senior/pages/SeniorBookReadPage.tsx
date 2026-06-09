@@ -476,13 +476,14 @@ export default function SeniorBookReadPage() {
 
   // 댓글 전송 — 댓글은 책 단위로 저장, 어르신에게 알림 발송 (F-15)
   async function handleSubmitComment() {
-    if (!commentText.trim() || !bookId || !profile || !book) return
+    if ((!commentText.trim() && !commentVoiceBlob) || !bookId || !profile || !book) return
+    const commentContent = commentText.trim() || '(음성 댓글)'
     setSubmitting(true)
     try {
       const { data: commentData, error } = await supabase.from('comments').insert({
         book_id: bookId,
         author_id: profile.id,
-        content: commentText.trim(),
+        content: commentContent,
       }).select('id').single()
       if (error || !commentData) throw error ?? new Error('INSERT 실패')
 
@@ -514,7 +515,7 @@ export default function SeniorBookReadPage() {
       const notifPayload = {
         type: 'new_comment' as const,
         title: `${commenterName}${josa(commenterName, '이', '가')} [${bookTitle}]에 댓글을 남겼어요`,
-        body: commentText.trim(),
+        body: commentContent,
         reference_id: bookId,
         reference_type: 'book',
       }
@@ -523,7 +524,7 @@ export default function SeniorBookReadPage() {
         // 가족 → 저자에게 알림
         const { error: ne } = await supabase.from('notifications').insert({ recipient_id: book.senior_id, ...notifPayload })
         if (ne) console.error('[알림 INSERT 실패]', ne)
-        void sendPushToUser(book.senior_id, notifPayload.title, commentText.trim(), `/s/books/${bookId}`)
+        void sendPushToUser(book.senior_id, notifPayload.title, commentContent, `/s/books/${bookId}`)
       } else {
         // 저자 → 연결된 가족 전체에게 알림 (family_id 중복 제거)
         const { data: links } = await supabase
@@ -537,7 +538,7 @@ export default function SeniorBookReadPage() {
             uniqueIds.map((id) => ({ recipient_id: id, ...notifPayload }))
           )
           if (ne2) console.error('[알림 INSERT 실패]', ne2)
-          uniqueIds.forEach(id => void sendPushToUser(id, notifPayload.title, commentText.trim(), `/r/books/${bookId}`))
+          uniqueIds.forEach(id => void sendPushToUser(id, notifPayload.title, commentContent, `/r/books/${bookId}`))
         }
       }
 
@@ -1190,7 +1191,7 @@ export default function SeniorBookReadPage() {
                 />
                 <button type="button"
                   onClick={handleSubmitComment}
-                  disabled={submitting || !commentText.trim()}
+                  disabled={submitting || (!commentText.trim() && !commentVoiceBlob)}
                   className="w-full bg-[#E8820C] rounded-xl py-3 min-h-11 disabled:opacity-50">
                   <span className="text-[1.125rem] text-white">
                     {submitting ? '전달 중…' : '전달하기'}
