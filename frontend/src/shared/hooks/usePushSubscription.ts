@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/shared/stores/authStore'
 
-const SERVICE_WORKER_TIMEOUT_MS = 5000
+const SERVICE_WORKER_TIMEOUT_MS = 15000
 
 function urlBase64ToUint8Array(base64: string): Uint8Array {
   const pad = base64.length % 4 === 0 ? '' : '='.repeat(4 - base64.length % 4)
@@ -11,18 +11,38 @@ function urlBase64ToUint8Array(base64: string): Uint8Array {
 }
 
 async function getReadyServiceWorker(): Promise<ServiceWorkerRegistration> {
-  const existing = await navigator.serviceWorker.getRegistration()
-  if (existing?.active) return existing
+  const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
+  if (registration.active) return registration
 
-  return Promise.race([
-    navigator.serviceWorker.ready,
-    new Promise<never>((_, reject) => {
-      window.setTimeout(
-        () => reject(new Error('서비스 워커를 준비하지 못했어요')),
-        SERVICE_WORKER_TIMEOUT_MS,
-      )
-    }),
-  ])
+  const pendingWorker = registration.installing ?? registration.waiting
+  if (!pendingWorker) {
+    throw new Error('서비스 워커를 활성화하지 못했어요')
+  }
+  const worker = pendingWorker
+
+  await new Promise<void>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      worker.removeEventListener('statechange', handleStateChange)
+      reject(new Error('서비스 워커 활성화 시간이 초과됐어요'))
+    }, SERVICE_WORKER_TIMEOUT_MS)
+
+    function handleStateChange() {
+      if (worker.state === 'activated') {
+        window.clearTimeout(timeoutId)
+        worker.removeEventListener('statechange', handleStateChange)
+        resolve()
+      } else if (worker.state === 'redundant') {
+        window.clearTimeout(timeoutId)
+        worker.removeEventListener('statechange', handleStateChange)
+        reject(new Error('서비스 워커를 활성화하지 못했어요'))
+      }
+    }
+
+    worker.addEventListener('statechange', handleStateChange)
+    handleStateChange()
+  })
+
+  return registration
 }
 
 export function usePushSubscription() {
