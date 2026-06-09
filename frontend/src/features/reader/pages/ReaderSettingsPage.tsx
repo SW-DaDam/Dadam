@@ -1,6 +1,6 @@
 ﻿import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { BellRing, BookOpen, ChevronRight, Users } from 'lucide-react'
+import { BellRing, ChevronRight } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { supabase } from '@/lib/supabase'
@@ -8,10 +8,8 @@ import { useThemeStore } from '@/shared/stores/themeStore'
 import { useFontSizeStore, type FontSize } from '@/shared/stores/fontSizeStore'
 import { useFamilyBookshelf } from '@/features/bookshelf/hooks/useFamilyBookshelf'
 import { cn } from '@/lib/utils'
-import { useNotificationPrefs } from '@/features/notifications/hooks/useNotificationPrefs'
 import { useInstallPrompt } from '@/shared/hooks/useInstallPrompt'
 import IosInstallGuide from '@/shared/components/IosInstallGuide'
-import { usePushSubscription } from '@/shared/hooks/usePushSubscription'
 
 const FONT_OPTIONS: { value: FontSize; label: string }[] = [
   { value: 'small', label: '작음' },
@@ -26,18 +24,12 @@ export default function ReaderSettingsPage() {
   const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
   const avatarChar = displayName.charAt(0)
 
-  const { prefs: notifPrefs, loading: notifLoading, updatePref, disableAll, enableAll } = useNotificationPrefs()
   const { darkMode: darkModeOn, setDarkMode: setDarkModeOn } = useThemeStore()
   const { fontSize, setFontSize } = useFontSizeStore()
   const { seniorName, relationship } = useFamilyBookshelf()
   const { platform, install } = useInstallPrompt()
   const [showIosGuide, setShowIosGuide] = useState(false)
   const showInstallRow = platform === 'android' || platform === 'ios'
-  const { supported: pushSupported, subscribed: pushSubscribed, subscribe: pushSubscribe, unsubscribe: pushUnsubscribe } = usePushSubscription()
-  async function handlePushToggle(on: boolean) {
-    if (on) { await pushSubscribe(); enableAll() }
-    else { await pushUnsubscribe(); disableAll() }
-  }
 
   return (
     <div className="flex flex-col h-full">
@@ -111,33 +103,6 @@ export default function ReaderSettingsPage() {
           </div>
         </div>
 
-        {/* 알림 설정 */}
-        <div className="flex flex-col gap-1">
-          <p className="text-base text-[#6B7280] px-1">알림</p>
-          <div className="bg-white border border-[#E5E7EB] rounded-2xl divide-y divide-[#E5E7EB]">
-            <div className="flex items-center gap-3 px-5 py-4">
-              <div className="w-10 h-10 rounded-xl bg-[#FFF0DC] flex items-center justify-center shrink-0">
-                <BookOpen size={20} className="text-[#E8820C]" />
-              </div>
-              <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                <p className="text-[1.125rem] text-[#1F2937]">새 책 출간 알림</p>
-                <p className="text-base text-[#6B7280]">저자가 새 책을 출간하면 알려줘요</p>
-              </div>
-              <Toggle on={!notifLoading && notifPrefs.new_book} onChange={(v) => updatePref('new_book', v)} />
-            </div>
-            <div className="flex items-center gap-3 px-5 py-4">
-              <div className="w-10 h-10 rounded-xl bg-[#F3F4F6] flex items-center justify-center shrink-0">
-                <Users size={20} className="text-[#9CA3AF]" />
-              </div>
-              <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                <p className="text-[1.125rem] text-[#1F2937]">다른 가족 댓글</p>
-                <p className="text-base text-[#6B7280]">다른 가족이 댓글을 남기면 알려줘요</p>
-              </div>
-              <Toggle on={!notifLoading && notifPrefs.family_comment} onChange={(v) => updatePref('family_comment', v)} />
-            </div>
-          </div>
-        </div>
-
         {/* 설정 */}
         <div className="flex flex-col gap-1">
           <p className="text-base text-[#6B7280] px-1">설정</p>
@@ -175,18 +140,21 @@ export default function ReaderSettingsPage() {
               </div>
               <Toggle on={darkModeOn} onChange={setDarkModeOn} />
             </div>
-            {pushSupported && (
-              <div className="flex items-center gap-3 px-5 py-4">
-                <div className="w-10 h-10 rounded-xl bg-[#FFF0DC] flex items-center justify-center shrink-0">
-                  <BellRing size={20} className="text-[#E8820C]" />
-                </div>
-                <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                  <p className="text-[1.125rem] text-[#1F2937]">푸시 알림</p>
-                  <p className="text-base text-[#6B7280]">댓글·답장 알림을 받아요</p>
-                </div>
-                <Toggle on={pushSubscribed} onChange={handlePushToggle} />
+            {/* 알림 설정 */}
+            <button
+              type="button"
+              onClick={() => navigate('/r/settings/notifications')}
+              className="w-full flex items-center gap-3 px-5 py-4 text-left"
+            >
+              <div className="w-10 h-10 rounded-xl bg-[#FFF0DC] flex items-center justify-center shrink-0">
+                <BellRing size={20} className="text-[#E8820C]" />
               </div>
-            )}
+              <div className="flex-1 flex flex-col gap-0.5">
+                <p className="text-[1.125rem] text-[#1F2937]">알림 설정</p>
+                <p className="text-base text-[#6B7280]">푸시 알림, 책 출간·댓글 알림</p>
+              </div>
+              <ChevronRight size={20} className="text-[#D1D5DB] shrink-0" />
+            </button>
           </div>
         </div>
 

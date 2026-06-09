@@ -34,6 +34,7 @@ const ReaderHomePage = lazy(() => import('@/features/reader/pages/ReaderHomePage
 const BookReadPage = lazy(() => import('@/features/reader/pages/BookReadPage'))
 const ReaderSettingsPage = lazy(() => import('@/features/reader/pages/ReaderSettingsPage'))
 const ReaderNotificationPage = lazy(() => import('@/features/reader/pages/ReaderNotificationPage'))
+const ReaderNotificationSettingsPage = lazy(() => import('@/features/reader/pages/ReaderNotificationSettingsPage'))
 const ReaderProfileEditPage = lazy(() => import('@/features/reader/pages/ReaderProfileEditPage'))
 
 // 공통
@@ -138,6 +139,7 @@ export const router = createBrowserRouter([
               { path: 'books/:bookId', element: withSuspense(<BookReadPage />) },
               { path: 'settings', element: withSuspense(<ReaderSettingsPage />) },
               { path: 'settings/profile', element: withSuspense(<ReaderProfileEditPage />) },
+              { path: 'settings/notifications', element: withSuspense(<ReaderNotificationSettingsPage />) },
               { path: 'notifications', element: withSuspense(<ReaderNotificationPage />) },
               { path: 'family/invite', element: withSuspense(<FamilyInvitePage />) },
               { path: 'family/members', element: withSuspense(<ConnectedFamilyPage />) },
