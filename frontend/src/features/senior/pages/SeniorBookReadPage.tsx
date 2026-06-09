@@ -487,12 +487,25 @@ export default function SeniorBookReadPage() {
       if (error || !commentData) throw error ?? new Error('INSERT 실패')
 
       if (commentVoiceBlob) {
-        const path = `comments/${profile.id}/${commentData.id}.webm`
+        const extension = commentVoiceBlob.type.includes('mp4') ? 'mp4' : 'webm'
+        const contentType = commentVoiceBlob.type || 'audio/webm'
+        const path = `comments/${profile.id}/${commentData.id}.${extension}`
         const { error: uploadError } = await supabase.storage
           .from('reply-audio')
-          .upload(path, commentVoiceBlob, { contentType: 'audio/webm', upsert: false })
-        if (!uploadError) {
-          await supabase.from('comments').update({ audio_url: path }).eq('id', commentData.id)
+          .upload(path, commentVoiceBlob, { contentType, upsert: false })
+        if (uploadError) {
+          await supabase.from('comments').delete().eq('id', commentData.id)
+          throw uploadError
+        }
+
+        const { error: audioUrlError } = await supabase
+          .from('comments')
+          .update({ audio_url: path })
+          .eq('id', commentData.id)
+        if (audioUrlError) {
+          await supabase.storage.from('reply-audio').remove([path])
+          await supabase.from('comments').delete().eq('id', commentData.id)
+          throw audioUrlError
         }
       }
 
@@ -1203,22 +1216,9 @@ export default function SeniorBookReadPage() {
                 ) : commentVoiceBlob && commentPreviewUrl ? (
                   <>
                     <audio src={commentPreviewUrl} controls className="w-full h-10 rounded-xl" />
-                    <textarea
-                      value={commentText}
-                      onChange={(e) => setCommentText(e.target.value)}
-                      rows={2}
-                      placeholder="내용을 확인하거나 직접 입력하세요"
-                      className="w-full bg-[#FFF8F0] border border-[#E8820C] rounded-xl px-3 py-2 text-[1.0625rem] text-[#1F2937] placeholder-[#D1D5DB] outline-none resize-none"
-                    />
-                    <div className="flex gap-2 justify-end">
+                    <div className="flex justify-end">
                       <button type="button" onClick={handleDiscardCommentVoice}
                         className="text-sm text-[#6B7280] px-3 py-1.5 rounded-lg bg-[#F3F4F6] min-h-9">다시 녹음</button>
-                      <button type="button"
-                        onClick={handleSubmitComment}
-                        disabled={submitting}
-                        className="text-sm text-white px-3 py-1.5 rounded-lg bg-[#E8820C] min-h-9 disabled:opacity-50">
-                        {submitting ? '전달 중…' : '전달'}
-                      </button>
                     </div>
                   </>
                 ) : (
