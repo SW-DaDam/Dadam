@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { useBookEdit } from '@/features/bookshelf/hooks/useBookEdit'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { supabase } from '@/lib/supabase'
+import { sendPushToUser } from '@/lib/pushNotification'
 import type { Chapter, CoverImage } from '@/types/domain'
 
 // ─── 상수 ────────────────────────────────────────────────────────
@@ -278,6 +279,53 @@ export default function BookEditPage() {
 
   // ─── 출간 ────────────────────────────────────────────────────────
 
+  async function sendPublishPushNotifications() {
+    if (!bookId || !book) return
+
+    const { data: links, error: linksError } = await supabase
+      .from('family_links')
+      .select('family_id')
+      .eq('senior_id', book.senior_id)
+      .eq('invite_status', 'accepted')
+
+    if (linksError) throw linksError
+
+    const familyIds = [...new Set(
+      (links ?? []).map((link) => link.family_id).filter(Boolean),
+    )] as string[]
+    if (familyIds.length === 0) return
+
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, notification_prefs')
+      .in('id', familyIds)
+
+    if (profilesError) throw profilesError
+
+    const recipients = (profiles ?? []).filter((profile) => {
+      const prefs = profile.notification_prefs as { new_book?: boolean } | null
+      return prefs?.new_book !== false
+    })
+
+    const title = `${book.title} 책이 출간됐어요`
+    const results = await Promise.allSettled(
+      recipients.map((profile) =>
+        sendPushToUser(
+          profile.id,
+          title,
+          '새로운 이야기를 읽어보세요',
+          `/r/books/${bookId}`,
+        ),
+      ),
+    )
+
+    results.forEach((result) => {
+      if (result.status === 'rejected') {
+        console.error('[책 출간 푸시 실패]', result.reason)
+      }
+    })
+  }
+
   async function handlePublish() {
     setPublishConfirmOpen(false)
     setPublishing(true)
@@ -288,6 +336,9 @@ export default function BookEditPage() {
       if (!isMock && bookId) {
         // dedication 파라미터에 작가의 말 저장 (DB 컬럼명 유지)
         await publishBook(authorNote.trim())
+        void sendPublishPushNotifications().catch((error) => {
+          console.error('[책 출간 푸시 준비 실패]', error)
+        })
       }
       setPublished(true)
       setCurrentStep(isShortBook ? 3 : 4)
