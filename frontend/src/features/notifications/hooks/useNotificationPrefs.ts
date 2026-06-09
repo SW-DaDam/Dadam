@@ -65,11 +65,12 @@ export function useNotificationPrefs() {
     void supabase.from('profiles').update({ notification_prefs: all_off as unknown as Record<string, boolean> }).eq('id', user.id)
   }, [user?.id])
 
-  // 푸시 알림 ON 시 기본값으로 복원
+  // 푸시 알림 ON 시 모든 알림 켜기 (daily_remind는 opt-in 항목이라 제외)
   const enableAll = useCallback(() => {
     if (!user?.id) return
-    setPrefs(NOTIF_DEFAULTS)
-    void supabase.from('profiles').update({ notification_prefs: NOTIF_DEFAULTS as unknown as Record<string, boolean> }).eq('id', user.id)
+    const all_on: NotifPrefs = { new_comment: true, new_reply: true, new_book: true, book_draft: true, book_publish: true, daily_remind: false, family_comment: true }
+    setPrefs(all_on)
+    void supabase.from('profiles').update({ notification_prefs: all_on as unknown as Record<string, boolean> }).eq('id', user.id)
   }, [user?.id])
 
   return { prefs, loading, updatePref, disableAll, enableAll }

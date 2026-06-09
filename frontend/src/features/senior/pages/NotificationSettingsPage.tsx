@@ -87,6 +87,7 @@ export default function NotificationSettingsPage() {
                 <Toggle
                   on={!loading && prefs[item.prefKey as keyof typeof prefs]}
                   onChange={(v) => updatePref(item.prefKey as keyof typeof prefs, v)}
+                  disabled={!pushSubscribed || loading}
                 />
               </div>
             ))}
