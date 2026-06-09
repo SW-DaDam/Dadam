@@ -36,11 +36,21 @@ const NOTIF_ITEMS: NotifItem[] = [
 export default function ReaderNotificationSettingsPage() {
   const navigate = useNavigate()
   const { prefs, loading, updatePref, disableAll, enableAll } = useNotificationPrefs()
-  const { supported: pushSupported, subscribed: pushSubscribed, loading: pushLoading, subscribe: pushSubscribe, unsubscribe: pushUnsubscribe } = usePushSubscription()
+  const {
+    supported: pushSupported,
+    subscribed: pushSubscribed,
+    loading: pushLoading,
+    error: pushError,
+    subscribe: pushSubscribe,
+    unsubscribe: pushUnsubscribe,
+  } = usePushSubscription()
 
   async function handlePushToggle(on: boolean) {
-    if (on) { await pushSubscribe(); enableAll() }
-    else { await pushUnsubscribe(); disableAll() }
+    if (on) {
+      if (await pushSubscribe()) enableAll()
+    } else if (await pushUnsubscribe()) {
+      disableAll()
+    }
   }
 
   return (
@@ -69,6 +79,9 @@ export default function ReaderNotificationSettingsPage() {
             </div>
             <Toggle on={pushSubscribed} onChange={handlePushToggle} disabled={pushLoading} />
           </div>
+        )}
+        {pushError && (
+          <p role="alert" className="text-sm text-red-600 px-1">{pushError}</p>
         )}
 
         {/* 알림 항목 */}
