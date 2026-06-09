@@ -28,6 +28,14 @@ const DEFAULT_TTS_SPEED: TtsSpeed = 'normal'
 // 문장 단위 TTS 조기 요청 최소 글자수 — 너무 짧은 segment는 다음 문장과 합산
 const MIN_TTS_SEGMENT_LENGTH = 15
 
+// ── 침묵 감지(VAD)·무음 가드 상수 (MediaRecorder 경로 전용) ──
+// RMS(음량, 0~1) 기준. 실기기 실측으로 미세 조정 가능.
+const SPEECH_RMS_THRESHOLD = 0.04   // 이 값을 한 번이라도 넘으면 '발화 시작'으로 판정
+const SILENCE_DURATION_MS = 1800    // 발화 후 무음이 이만큼 지속되면 자동 종료·전송
+const MAX_RECORDING_MS = 30000      // 최대 녹음 시간 (자동 종료 안전장치)
+const MIN_RECORDING_MS = 600        // 이보다 짧은 녹음은 무음으로 간주 (환각 방지)
+const VAD_TICK_MS = 100             // 음량 체크 주기
+
 // STT 지원 여부: MediaRecorder 또는 Web Speech API 중 하나라도 지원하면 true
 const isSttSupported =
   typeof window !== 'undefined' &&
@@ -62,6 +70,7 @@ export interface UseVoiceChatReturn {
   stopListening: () => void
   sendTextMessage: (text: string) => Promise<void>
   retryFromFatal: () => void
+  analyser: AnalyserNode | null
 }
 
 // ── 헬퍼 ──────────────────────────────────────────────
@@ -129,6 +138,14 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const mimeTypeRef = useRef<string>('')
 
+  // 침묵 감지(VAD)·무음 가드용 Web Audio refs (MediaRecorder 경로 전용)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const vadIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const recordingStartRef = useRef<number>(0)   // 녹음 시작 시각 (길이·최대시간 판정)
+  const lastSpeechAtRef = useRef<number>(0)      // 마지막으로 발화가 감지된 시각
+  const speechDetectedRef = useRef<boolean>(false) // 녹음 중 발화가 있었는지 (무음 가드)
+  const vadActiveRef = useRef<boolean>(false)       // AudioContext 지원 시에만 VAD·무음가드 활성
+
   // TTS 재생용 <audio> 엘리먼트 및 Blob URL (volume=1.0 기본값, 디바이스 시스템 볼륨 위임)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const currentBlobUrlRef = useRef<string | null>(null)
@@ -142,6 +159,8 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
   const [transcript, setTranscript] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isFatalError, setIsFatalError] = useState<boolean>(false)
+  // 녹음 중 파형 시각화용 AnalyserNode (listening 시작 시 set, 종료 시 null)
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null)
 
   const updateState = useCallback((next: VoiceChatState) => {
     stateRef.current = next
@@ -151,6 +170,81 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
   const addMessage = useCallback((msg: ChatMessage) => {
     messagesRef.current = [...messagesRef.current, msg]
     setMessages(messagesRef.current)
+  }, [])
+
+  // ── 침묵 감지(VAD) 시작 — MediaRecorder 스트림에 AnalyserNode 연결 ──
+  // 1) analyser를 노출해 파형 시각화 (실시간 텍스트가 없는 Whisper batch의 대체 피드백)
+  // 2) 발화 후 무음이 일정 시간 지속되면 자동으로 녹음 종료 → 마이크 재클릭 불필요
+  // 3) 발화 자체가 없으면 onstop에서 STT를 건너뛰어 Whisper 환각 방지
+  const startVad = useCallback((stream: MediaStream) => {
+    recordingStartRef.current = Date.now()
+    lastSpeechAtRef.current = Date.now()
+    speechDetectedRef.current = false
+    vadActiveRef.current = false
+
+    // AudioContext 미지원(테스트 환경·구형 브라우저)이면 VAD·무음가드 없이 기존 동작 유지
+    const Ctx = window.AudioContext
+      ?? (window as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!Ctx) return
+
+    let audioCtx: AudioContext
+    let analyserNode: AnalyserNode
+    try {
+      audioCtx = new Ctx()
+      void audioCtx.resume()
+      audioContextRef.current = audioCtx
+      const source = audioCtx.createMediaStreamSource(stream)
+      analyserNode = audioCtx.createAnalyser()
+      analyserNode.fftSize = 2048
+      source.connect(analyserNode)
+    } catch {
+      // AudioContext 생성/연결 실패 → VAD 비활성 (무음 가드 스킵)
+      vadActiveRef.current = false
+      return
+    }
+    setAnalyser(analyserNode)
+    vadActiveRef.current = true
+
+    const vadData = new Uint8Array(analyserNode.fftSize)
+    vadIntervalRef.current = setInterval(() => {
+      analyserNode.getByteTimeDomainData(vadData)
+      // RMS(음량) 계산 — 128 중앙 정규화 후 제곱평균제곱근
+      let sumSq = 0
+      for (let i = 0; i < vadData.length; i++) {
+        const v = vadData[i] / 128 - 1
+        sumSq += v * v
+      }
+      const rms = Math.sqrt(sumSq / vadData.length)
+      const now = Date.now()
+
+      // 임계값을 한 번이라도 넘으면 '발화 시작' — 이후 침묵 종료 로직 활성화
+      if (rms > SPEECH_RMS_THRESHOLD) {
+        speechDetectedRef.current = true
+        lastSpeechAtRef.current = now
+      }
+      // 최대 녹음 시간 초과 → 강제 종료 (안전장치)
+      if (now - recordingStartRef.current >= MAX_RECORDING_MS) {
+        if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop()
+        return
+      }
+      // 발화 후 무음이 SILENCE_DURATION_MS 지속 → 자동 종료·전송
+      if (speechDetectedRef.current && now - lastSpeechAtRef.current >= SILENCE_DURATION_MS) {
+        if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop()
+      }
+    }, VAD_TICK_MS)
+  }, [])
+
+  // VAD 정리 — interval·AudioContext 해제 및 analyser null화
+  const stopVad = useCallback(() => {
+    if (vadIntervalRef.current) {
+      clearInterval(vadIntervalRef.current)
+      vadIntervalRef.current = null
+    }
+    if (audioContextRef.current) {
+      void audioContextRef.current.close()
+      audioContextRef.current = null
+    }
+    setAnalyser(null)
   }, [])
 
   // 마운트 시 senior_profiles TTS 설정 1회 로드 → ref에 캐시
@@ -492,6 +586,12 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
       unmountedRef.current = true
       // 마이크 트랙 해제
       mediaStreamRef.current?.getTracks().forEach((t) => t.stop())
+      // VAD(AudioContext·interval) 정리 — 언마운트 중이므로 setAnalyser는 생략
+      if (vadIntervalRef.current) clearInterval(vadIntervalRef.current)
+      if (audioContextRef.current) {
+        void audioContextRef.current.close()
+        audioContextRef.current = null
+      }
       // <audio> 재생 중단 및 Blob URL 정리
       // 핸들러를 먼저 분리해야 src='' 가 비동기 onerror로 Web TTS fallback을 트리거하지 않음
       if (audioRef.current) {
@@ -606,6 +706,8 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
     navigator.mediaDevices.getUserMedia({ audio: true })
       .then((stream) => {
         mediaStreamRef.current = stream
+        // 음량 모니터링 시작 — 파형 표시 + 자동 종료 + 무음 가드
+        startVad(stream)
         const mimeType = getSupportedMimeType()
         mimeTypeRef.current = mimeType
         const recorderOptions = mimeType ? { mimeType } : undefined
@@ -616,13 +718,24 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
           if (e.data.size > 0) audioChunksRef.current.push(e.data)
         }
         recorder.onstop = () => {
-          // 마이크 트랙 즉시 해제
+          // VAD 정리(analyser 해제 포함) + 마이크 트랙 즉시 해제
+          stopVad()
           stream.getTracks().forEach((t) => t.stop())
           mediaStreamRef.current = null
           const blob = new Blob(audioChunksRef.current, {
             type: mimeTypeRef.current || 'audio/webm',
           })
           audioChunksRef.current = []
+
+          // 무음 가드: VAD가 활성일 때만, 발화 없음/너무 짧은 녹음이면 STT 건너뜀 (Whisper 환각 방지)
+          // AudioContext 미지원 환경에서는 가드를 적용하지 않고 기존 동작(항상 STT) 유지
+          const durationMs = Date.now() - recordingStartRef.current
+          if (vadActiveRef.current && (!speechDetectedRef.current || durationMs < MIN_RECORDING_MS)) {
+            setError('말씀이 인식되지 않았어요. 다시 시도해 주세요')
+            updateState('idle')
+            return
+          }
+
           void processRecordedAudio(blob)
         }
 
@@ -639,7 +752,7 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
         )
         updateState('idle')
       })
-  }, [updateState, processRecordedAudio])
+  }, [updateState, processRecordedAudio, startVad, stopVad])
 
   const stopListening = useCallback(() => {
     if (stateRef.current !== 'listening') return
@@ -665,5 +778,6 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
     stopListening,
     sendTextMessage,
     retryFromFatal,
+    analyser,
   }
 }

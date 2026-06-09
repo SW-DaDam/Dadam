@@ -7,6 +7,7 @@ import { useAuthStore } from '@/shared/stores/authStore'
 import ChatBubble from '@/features/chat/components/ChatBubble'
 import TypingIndicator from '@/features/chat/components/TypingIndicator'
 import MicButton from '@/features/chat/components/MicButton'
+import WaveformVisualizer from '@/features/chat/components/WaveformVisualizer'
 
 // ChatMessage.timestamp(Date) → ChatBubble time(string) 변환
 function formatTime(date: Date): string {
@@ -22,7 +23,7 @@ export default function ChatPage() {
   const seniorId = useAuthStore((s) => s.user?.id ?? '')
   const { state, messages, transcript, error, isSttSupported,
           isFatalError, startListening, stopListening,
-          sendTextMessage, retryFromFatal } =
+          sendTextMessage, retryFromFatal, analyser } =
     useVoiceChat(seniorId)
   const { todayCount, loading: countLoading } = useTodayConversationCount(seniorId)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -154,10 +155,15 @@ export default function ChatPage() {
               >
                 <ChevronDown size={20} />
               </button>
-              <div className="w-full bg-[#FFF8F0] rounded-xl px-5 py-2 text-center">
-                <p className="text-[1.0625rem] italic text-[#6B7280]">
-                  {transcript || error || '...'}
-                </p>
+              <div className="w-full bg-[#FFF8F0] rounded-xl px-5 py-2 text-center min-h-[2.875rem] flex items-center justify-center">
+                {state === 'listening' && analyser ? (
+                  // 녹음 중에는 음량 파형 표시 (Whisper batch라 실시간 텍스트가 없으므로)
+                  <WaveformVisualizer analyser={analyser} />
+                ) : (
+                  <p className="text-[1.0625rem] italic text-[#6B7280]">
+                    {transcript || error || '...'}
+                  </p>
+                )}
               </div>
               <MicButton state={state} onPress={handleMicPress} />
               <p className="text-base font-medium text-[#9CA3AF]">버튼을 눌러 말씀해주세요</p>
