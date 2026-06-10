@@ -4,6 +4,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import SeniorSettingsPage from './SeniorSettingsPage'
 import NotificationSettingsPage from './NotificationSettingsPage'
+import ReaderNotificationSettingsPage from '@/features/reader/pages/ReaderNotificationSettingsPage'
 
 // --- SeniorSettingsPage 공통 mock ---
 const mockUseAuthStore = vi.fn()
@@ -49,6 +50,10 @@ vi.mock('@/features/notifications/hooks/useNotificationPrefs', () => ({
       author_new_comment: true,
       author_reply: true,
       author_family_comment: true,
+      new_book: true,
+      reader_author_comment: true,
+      reader_reply: true,
+      reader_other_comment: true,
     },
     loading: false,
     updatePref: vi.fn(),
@@ -106,5 +111,19 @@ describe('NotificationSettingsPage — 가족→독자 텍스트', () => {
   it('"책이 독자 책장에 출간됐을 때" 가 표시되지 않는다', () => {
     render(<MemoryRouter><NotificationSettingsPage /></MemoryRouter>)
     expect(screen.queryByText('책이 독자 책장에 출간됐을 때')).toBeNull()
+  })
+})
+
+describe('ReaderNotificationSettingsPage — 댓글 알림 세분화', () => {
+  it('독자 댓글 알림 세부 항목이 표시된다', () => {
+    render(<MemoryRouter><ReaderNotificationSettingsPage /></MemoryRouter>)
+    expect(screen.getByText('저자의 새 댓글')).toBeTruthy()
+    expect(screen.getByText('내 댓글의 답글')).toBeTruthy()
+    expect(screen.getByText('다른 독자의 새 댓글')).toBeTruthy()
+  })
+
+  it('기존 다른 가족 댓글 항목은 표시되지 않는다', () => {
+    render(<MemoryRouter><ReaderNotificationSettingsPage /></MemoryRouter>)
+    expect(screen.queryByText('다른 가족 댓글')).toBeNull()
   })
 })

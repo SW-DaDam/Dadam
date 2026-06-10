@@ -13,6 +13,9 @@ export interface NotifPrefs {
   author_new_comment: boolean // 내 책의 새 댓글 (저자)
   author_reply: boolean       // 내 댓글의 답글 (저자)
   author_family_comment: boolean // 가족끼리 주고받는 댓글 (저자)
+  reader_author_comment: boolean // 저자의 새 댓글 (독자)
+  reader_reply: boolean          // 내 댓글의 답글 (독자)
+  reader_other_comment: boolean  // 다른 독자의 새 댓글 (독자)
 }
 
 export const NOTIF_DEFAULTS: NotifPrefs = {
@@ -26,6 +29,9 @@ export const NOTIF_DEFAULTS: NotifPrefs = {
   author_new_comment: true,
   author_reply: true,
   author_family_comment: true,
+  reader_author_comment: true,
+  reader_reply: true,
+  reader_other_comment: false,
 }
 
 export function useNotificationPrefs() {
@@ -42,7 +48,12 @@ export function useNotificationPrefs() {
       .single()
       .then(({ data }) => {
         if (data?.notification_prefs) {
-          setPrefs({ ...NOTIF_DEFAULTS, ...(data.notification_prefs as Partial<NotifPrefs>) })
+          const stored = data.notification_prefs as Partial<NotifPrefs>
+          setPrefs({
+            ...NOTIF_DEFAULTS,
+            ...stored,
+            reader_other_comment: stored.reader_other_comment ?? stored.family_comment ?? false,
+          })
         }
         setLoading(false)
       })
@@ -57,7 +68,12 @@ export function useNotificationPrefs() {
         .update({ notification_prefs: next })
         .eq('id', user.id)
         .then(({ error }) => {
-          if (error) console.error('[알림 설정 저장 실패]', error.message)
+          if (error) {
+            console.error('[알림 설정 저장 실패]', error.message)
+            setPrefs((current) => (
+              current[key] === value ? prev : current
+            ))
+          }
         })
       return next
     })
@@ -77,6 +93,9 @@ export function useNotificationPrefs() {
       author_new_comment: false,
       author_reply: false,
       author_family_comment: false,
+      reader_author_comment: false,
+      reader_reply: false,
+      reader_other_comment: false,
     }
     setPrefs(all_off)
     void supabase.from('profiles').update({ notification_prefs: all_off as unknown as Record<string, boolean> }).eq('id', user.id)
@@ -96,6 +115,9 @@ export function useNotificationPrefs() {
       author_new_comment: true,
       author_reply: true,
       author_family_comment: true,
+      reader_author_comment: true,
+      reader_reply: true,
+      reader_other_comment: true,
     }
     setPrefs(all_on)
     void supabase.from('profiles').update({ notification_prefs: all_on as unknown as Record<string, boolean> }).eq('id', user.id)

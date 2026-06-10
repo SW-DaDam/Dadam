@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
-import { BellRing, BookOpen, ChevronLeft, Users } from 'lucide-react'
+import { BellRing, BookOpen, ChevronLeft, MessageCircle, Reply, Users } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
 import { useNotificationPrefs } from '@/features/notifications/hooks/useNotificationPrefs'
 import { usePushSubscription } from '@/shared/hooks/usePushSubscription'
@@ -24,12 +24,28 @@ const NOTIF_ITEMS: NotifItem[] = [
     desc: '저자가 새 책을 출간하면 알려줘요',
   },
   {
-    id: 'family_comment',
-    prefKey: 'family_comment',
+    id: 'author_comment',
+    prefKey: 'reader_author_comment',
+    icon: <MessageCircle size={20} className="text-[#E8820C]" />,
+    iconBg: 'bg-[#FFF0DC]',
+    title: '저자의 새 댓글',
+    desc: '저자가 책에 새 댓글을 남기면 알려줘요',
+  },
+  {
+    id: 'reply',
+    prefKey: 'reader_reply',
+    icon: <Reply size={20} className="text-[#E8820C]" />,
+    iconBg: 'bg-[#FFF0DC]',
+    title: '내 댓글의 답글',
+    desc: '저자나 다른 독자가 내 댓글에 답글을 남기면 알려줘요',
+  },
+  {
+    id: 'other_comment',
+    prefKey: 'reader_other_comment',
     icon: <Users size={20} className="text-[#9CA3AF]" />,
     iconBg: 'bg-[#F3F4F6]',
-    title: '다른 가족 댓글',
-    desc: '다른 가족이 댓글을 남기면 알려줘요',
+    title: '다른 독자의 새 댓글',
+    desc: '다른 독자가 책에 새 댓글을 남기면 알려줘요',
   },
 ]
 

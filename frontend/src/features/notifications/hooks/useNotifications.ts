@@ -3,14 +3,6 @@ import { supabase } from '@/lib/supabase'
 import type { Notification } from '@/types/domain'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { useNotificationsStore } from '../stores/notificationsStore'
-import { useNotificationPrefs } from './useNotificationPrefs'
-
-// notification_type → NotifPrefs 키 매핑
-const TYPE_TO_PREF: Record<string, string> = {
-  new_comment: 'new_comment',
-  new_reply: 'new_reply',
-  new_book: 'new_book',
-}
 
 const PAGE_SIZE = 50
 const POLLING_MS = 30_000
@@ -29,30 +21,9 @@ export function useNotifications() {
     setLoading,
   } = useNotificationsStore()
 
-  const { prefs } = useNotificationPrefs()
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // 알림 설정에서 꺼진 타입은 표시하지 않음
-  function isAllowed(n: Notification) {
-    if (n.type === 'new_comment' && n.reference_type === 'family_comment') {
-      return prefs.family_comment
-    }
-    if (n.type === 'new_comment' && n.reference_type === 'author_new_comment') {
-      return prefs.author_new_comment
-    }
-    if (n.type === 'new_reply' && n.reference_type === 'author_reply') {
-      return prefs.author_reply
-    }
-    if (n.type === 'new_reply' && n.reference_type === 'author_family_comment') {
-      return prefs.author_family_comment
-    }
-    const prefKey = TYPE_TO_PREF[n.type]
-    if (!prefKey) return true
-    return prefs[prefKey as keyof typeof prefs] !== false
-  }
-
-  const filteredNotifications = notifications.filter(isAllowed)
-  const unreadCount = filteredNotifications.filter((n) => !n.is_read).length
+  const unreadCount = notifications.filter((n) => !n.is_read).length
 
   const fetchNotifications = useCallback(async () => {
     if (!user?.id) return
@@ -126,5 +97,5 @@ export function useNotifications() {
     if (error) setNotifications(snapshot)  // 삭제 실패 시 롤백
   }, [removeNotification, setNotifications])
 
-  return { notifications: filteredNotifications, unreadCount, loading, markAsRead, markAllRead, deleteNotification }
+  return { notifications, unreadCount, loading, markAsRead, markAllRead, deleteNotification }
 }

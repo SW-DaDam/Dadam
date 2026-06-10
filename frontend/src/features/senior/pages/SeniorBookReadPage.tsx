@@ -477,7 +477,13 @@ export default function SeniorBookReadPage() {
   // 댓글 전송 — 댓글은 책 단위로 저장, 어르신에게 알림 발송 (F-15)
   async function isNotificationEnabled(
     userId: string,
-    prefKey: 'author_new_comment' | 'author_reply' | 'author_family_comment',
+    prefKey:
+      | 'author_new_comment'
+      | 'author_reply'
+      | 'author_family_comment'
+      | 'reader_author_comment'
+      | 'reader_reply'
+      | 'reader_other_comment',
   ) {
     const { data, error } = await supabase
       .from('profiles')
@@ -487,10 +493,14 @@ export default function SeniorBookReadPage() {
 
     if (error) {
       console.error('[알림 설정 조회 실패]', error)
-      return true
+      return false
     }
 
     const prefs = data?.notification_prefs as Record<string, boolean> | null
+    // 기존 사용자는 새 키가 없으므로 기본 ON, 명시적으로 false일 때만 OFF
+    if (prefKey === 'reader_other_comment' && prefs?.reader_other_comment === undefined) {
+      return prefs?.family_comment === true
+    }
     return prefs?.[prefKey] !== false
   }
 
@@ -540,21 +550,20 @@ export default function SeniorBookReadPage() {
       }
 
       if (profile.id !== book.senior_id) {
-        // 독자 댓글은 저자의 '내 책의 새 댓글' 설정에 따라 알림
-        if (await isNotificationEnabled(book.senior_id, 'author_new_comment')) {
-          const authorPayload = {
-            ...notifPayload,
-            reference_type: 'author_new_comment',
-          }
-          const { error: ne } = await supabase.from('notifications').insert({
-            recipient_id: book.senior_id,
-            ...authorPayload,
-          })
-          if (ne) console.error('[알림 INSERT 실패]', ne)
-          else void sendPushToUser(book.senior_id, authorPayload.title, commentContent, `/s/books/${bookId}`)
+        const authorPayload = {
+          ...notifPayload,
+          reference_type: 'author_new_comment',
+        }
+        const { error: ne } = await supabase.from('notifications').insert({
+          recipient_id: book.senior_id,
+          ...authorPayload,
+        })
+        if (ne) console.error('[알림 INSERT 실패]', ne)
+        else if (await isNotificationEnabled(book.senior_id, 'author_new_comment')) {
+          void sendPushToUser(book.senior_id, authorPayload.title, commentContent, `/s/books/${bookId}`)
         }
 
-        // 다른 독자에게는 family_comment 설정을 켠 경우에만 알림
+        // 웹 알림은 모든 다른 독자에게 저장하고, 푸시만 설정에 따라 발송
         const { data: links, error: linksError } = await supabase
           .from('family_links')
           .select('family_id')
@@ -571,6 +580,21 @@ export default function SeniorBookReadPage() {
           )]
 
           if (peerIds.length > 0) {
+            const familyCommentPayload = {
+              ...notifPayload,
+              reference_type: 'reader_other_comment',
+            }
+            const { error: peerNotificationError } = await supabase
+              .from('notifications')
+              .insert(peerIds.map((recipientId) => ({
+                recipient_id: recipientId,
+                ...familyCommentPayload,
+              })))
+
+            if (peerNotificationError) {
+              console.error('[다른 가족 댓글 알림 INSERT 실패]', peerNotificationError)
+            }
+
             const { data: peerProfiles, error: prefsError } = await supabase
               .from('profiles')
               .select('id, notification_prefs')
@@ -580,40 +604,26 @@ export default function SeniorBookReadPage() {
               console.error('[다른 가족 댓글 설정 조회 실패]', prefsError)
             } else {
               const recipients = (peerProfiles ?? []).filter((peer) => {
-                const prefs = peer.notification_prefs as { family_comment?: boolean } | null
-                return prefs?.family_comment === true
+                const prefs = peer.notification_prefs as {
+                  reader_other_comment?: boolean
+                  family_comment?: boolean
+                } | null
+                return prefs?.reader_other_comment ?? prefs?.family_comment ?? false
               })
 
-              if (recipients.length > 0) {
-                const familyCommentPayload = {
-                  ...notifPayload,
-                  reference_type: 'family_comment',
-                }
-                const { error: peerNotificationError } = await supabase
-                  .from('notifications')
-                  .insert(recipients.map((peer) => ({
-                    recipient_id: peer.id,
-                    ...familyCommentPayload,
-                  })))
-
-                if (peerNotificationError) {
-                  console.error('[다른 가족 댓글 알림 INSERT 실패]', peerNotificationError)
-                } else {
-                  recipients.forEach((peer) => {
-                    void sendPushToUser(
-                      peer.id,
-                      familyCommentPayload.title,
-                      commentContent,
-                      `/r/books/${bookId}`,
-                    )
-                  })
-                }
-              }
+              recipients.forEach((peer) => {
+                void sendPushToUser(
+                  peer.id,
+                  familyCommentPayload.title,
+                  commentContent,
+                  `/r/books/${bookId}`,
+                )
+              })
             }
           }
         }
       } else {
-        // 저자 댓글은 family_comment 설정과 무관하게 연결된 독자 전체에게 알림
+        // 웹 알림은 모든 독자에게 저장하고, 푸시만 설정에 따라 발송
         const { data: links } = await supabase
           .from('family_links')
           .select('family_id')
@@ -621,11 +631,36 @@ export default function SeniorBookReadPage() {
           .eq('invite_status', 'accepted')
         const uniqueIds = [...new Set((links ?? []).map((l) => l.family_id).filter(Boolean))] as string[]
         if (uniqueIds.length > 0) {
+          const readerPayload = {
+            ...notifPayload,
+            reference_type: 'reader_author_comment',
+          }
           const { error: ne2 } = await supabase.from('notifications').insert(
-            uniqueIds.map((id) => ({ recipient_id: id, ...notifPayload }))
+            uniqueIds.map((recipientId) => ({ recipient_id: recipientId, ...readerPayload })),
           )
           if (ne2) console.error('[알림 INSERT 실패]', ne2)
-          uniqueIds.forEach(id => void sendPushToUser(id, notifPayload.title, commentContent, `/r/books/${bookId}`))
+
+          const { data: readerProfiles, error: readerPrefsError } = await supabase
+            .from('profiles')
+            .select('id, notification_prefs')
+            .in('id', uniqueIds)
+
+          if (readerPrefsError) {
+            console.error('[독자 댓글 알림 설정 조회 실패]', readerPrefsError)
+          } else {
+            const recipients = (readerProfiles ?? []).filter((reader) => {
+              const prefs = reader.notification_prefs as { reader_author_comment?: boolean } | null
+              return prefs?.reader_author_comment !== false
+            })
+            recipients.forEach((reader) => {
+              void sendPushToUser(
+                reader.id,
+                readerPayload.title,
+                commentContent,
+                `/r/books/${bookId}`,
+              )
+            })
+          }
         }
       }
 
@@ -688,18 +723,19 @@ export default function SeniorBookReadPage() {
       const replierName = profile.full_name ?? profile.display_name ?? (isAuthor ? '저자' : '독자')
       const notifTitle = `${replierName}${josa(replierName, '이', '가')} [${book.title}]에 음성 답장을 남겼어요`
       const isReplyToAuthor = replyingToAuthorId === book.senior_id
-      const shouldNotifyRecipient = !isReplyToAuthor
-        || await isNotificationEnabled(book.senior_id, 'author_reply')
+      const shouldNotifyRecipient = isReplyToAuthor
+        ? await isNotificationEnabled(book.senior_id, 'author_reply')
+        : await isNotificationEnabled(replyingToAuthorId, 'reader_reply')
 
+      await supabase.from('notifications').insert({
+        recipient_id: replyingToAuthorId,
+        type: 'new_reply',
+        title: notifTitle,
+        body: textContent,
+        reference_id: book.id,
+        reference_type: isReplyToAuthor ? 'author_reply' : 'reader_reply',
+      })
       if (shouldNotifyRecipient) {
-        await supabase.from('notifications').insert({
-          recipient_id: replyingToAuthorId,
-          type: 'new_reply',
-          title: notifTitle,
-          body: textContent,
-          reference_id: book.id,
-          reference_type: isReplyToAuthor ? 'author_reply' : 'book',
-        })
         void sendPushToUser(
           replyingToAuthorId,
           notifTitle,
@@ -708,8 +744,7 @@ export default function SeniorBookReadPage() {
         )
       }
 
-      if (!isAuthor && !isReplyToAuthor
-        && await isNotificationEnabled(book.senior_id, 'author_family_comment')) {
+      if (!isAuthor && !isReplyToAuthor) {
         await supabase.from('notifications').insert({
           recipient_id: book.senior_id,
           type: 'new_reply',
@@ -718,7 +753,9 @@ export default function SeniorBookReadPage() {
           reference_id: book.id,
           reference_type: 'author_family_comment',
         })
-        void sendPushToUser(book.senior_id, notifTitle, textContent, `/s/books/${book.id}`)
+        if (await isNotificationEnabled(book.senior_id, 'author_family_comment')) {
+          void sendPushToUser(book.senior_id, notifTitle, textContent, `/s/books/${book.id}`)
+        }
       }
     }
 
@@ -761,31 +798,29 @@ export default function SeniorBookReadPage() {
       const notifTitle = `${replierName}${josa(replierName, '이', '가')} [${book.title}]에 답장을 남겼어요`
       const replyContent = replyText.trim()
       const isReplyToAuthor = replyingToAuthorId === book.senior_id
-      const shouldNotifyRecipient = !isReplyToAuthor
-        || await isNotificationEnabled(book.senior_id, 'author_reply')
+      const shouldNotifyRecipient = isReplyToAuthor
+        ? await isNotificationEnabled(book.senior_id, 'author_reply')
+        : await isNotificationEnabled(replyingToAuthorId, 'reader_reply')
 
-      if (shouldNotifyRecipient) {
-        const { error: ne } = await supabase.from('notifications').insert({
-          recipient_id: replyingToAuthorId,
-          type: 'new_reply',
-          title: notifTitle,
-          body: replyContent,
-          reference_id: book.id,
-          reference_type: isReplyToAuthor ? 'author_reply' : 'book',
-        })
-        if (ne) console.error('[대댓글 알림 INSERT 실패]', ne)
-        else {
+      const { error: ne } = await supabase.from('notifications').insert({
+        recipient_id: replyingToAuthorId,
+        type: 'new_reply',
+        title: notifTitle,
+        body: replyContent,
+        reference_id: book.id,
+        reference_type: isReplyToAuthor ? 'author_reply' : 'reader_reply',
+      })
+      if (ne) console.error('[대댓글 알림 INSERT 실패]', ne)
+      else if (shouldNotifyRecipient) {
           void sendPushToUser(
             replyingToAuthorId,
             notifTitle,
             replyContent,
             isReplyToAuthor ? `/s/books/${book.id}` : `/r/books/${book.id}`,
           )
-        }
       }
 
-      if (!isAuthor && !isReplyToAuthor
-        && await isNotificationEnabled(book.senior_id, 'author_family_comment')) {
+      if (!isAuthor && !isReplyToAuthor) {
         const { error: familyNotificationError } = await supabase.from('notifications').insert({
           recipient_id: book.senior_id,
           type: 'new_reply',
@@ -795,7 +830,9 @@ export default function SeniorBookReadPage() {
           reference_type: 'author_family_comment',
         })
         if (familyNotificationError) console.error('[가족 댓글 알림 INSERT 실패]', familyNotificationError)
-        else void sendPushToUser(book.senior_id, notifTitle, replyContent, `/s/books/${book.id}`)
+        else if (await isNotificationEnabled(book.senior_id, 'author_family_comment')) {
+          void sendPushToUser(book.senior_id, notifTitle, replyContent, `/s/books/${book.id}`)
+        }
       }
     }
 
