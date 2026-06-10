@@ -783,6 +783,19 @@ function Step3AuthorNote({
         try {
           const blob = new Blob(chunksRef.current, { type: mimeType ?? 'audio/webm' })
 
+          // 무음 감지: RMS 에너지가 임계값 미만이면 Whisper 환각 방지를 위해 호출 건너뜀
+          // decodeAudioData는 플랫폼/포맷에 따라 실패할 수 있으므로 실패 시 그냥 진행
+          try {
+            const arrayBuf = await blob.arrayBuffer()
+            const offlineCtx = new OfflineAudioContext(1, 44100, 44100)
+            const audioBuf = await offlineCtx.decodeAudioData(arrayBuf)
+            const data = audioBuf.getChannelData(0)
+            const rms = Math.sqrt(data.reduce((s, v) => s + v * v, 0) / data.length)
+            if (rms < 0.01) return  // 무음 → 스킵 (finally에서 transcribing 해제)
+          } catch {
+            // 디코딩 실패(포맷 미지원 등) 시 그냥 진행
+          }
+
           // 세션에서 accessToken · userId 추출 (stt-whisper는 senior_id + Authorization 필수)
           const { data: sessionData } = await supabase.auth.getSession()
           const accessToken = sessionData.session?.access_token

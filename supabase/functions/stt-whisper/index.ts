@@ -101,6 +101,7 @@ Deno.serve(async (req) => {
       model: 'whisper-1',
       file: audioEntry,
       language: 'ko',
+      prompt: '.',  // 무음/잡음 입력 시 Whisper 환각 감소 — 빈 컨텍스트 힌트
     })
 
     return new Response(
