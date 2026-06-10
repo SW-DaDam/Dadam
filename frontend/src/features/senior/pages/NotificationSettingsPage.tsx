@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
-import { BellRing, BookMarked, BookOpen, ChevronLeft } from 'lucide-react'
+import { BellRing, BookOpen, ChevronLeft, MessageCircle, MessagesSquare, Reply } from 'lucide-react'
 import Toggle from '@/shared/components/Toggle'
 import { useNotificationPrefs } from '@/features/notifications/hooks/useNotificationPrefs'
 import { usePushSubscription } from '@/shared/hooks/usePushSubscription'
@@ -23,13 +23,32 @@ const BOOK_NOTIFS: NotifItem[] = [
     title: '이번 달 책 초안이 완성됐을 때',
     desc: '월말에 AI가 책 초안을 만들어 두면',
   },
+]
+
+const COMMENT_NOTIFS: NotifItem[] = [
   {
-    id: 'publish',
-    prefKey: 'book_publish',
-    icon: <BookMarked size={20} className="text-[#E8820C]" />,
+    id: 'new-comment',
+    prefKey: 'author_new_comment',
+    icon: <MessageCircle size={20} className="text-[#E8820C]" />,
     iconBg: 'bg-[#FFF0DC]',
-    title: '책이 독자 책장에 출간됐을 때',
-    desc: '편집을 마친 책이 독자에게 공개되면',
+    title: '내 책의 새 댓글',
+    desc: '독자가 내 책에 새 댓글을 남기면',
+  },
+  {
+    id: 'reply',
+    prefKey: 'author_reply',
+    icon: <Reply size={20} className="text-[#E8820C]" />,
+    iconBg: 'bg-[#FFF0DC]',
+    title: '내 댓글의 답글',
+    desc: '독자가 내가 쓴 댓글에 답글을 남기면',
+  },
+  {
+    id: 'family-comment',
+    prefKey: 'author_family_comment',
+    icon: <MessagesSquare size={20} className="text-[#E8820C]" />,
+    iconBg: 'bg-[#FFF0DC]',
+    title: '가족끼리 주고받는 댓글',
+    desc: '독자들이 서로 댓글과 답글을 주고받으면',
   },
 ]
 
@@ -89,6 +108,29 @@ export default function NotificationSettingsPage() {
           <p className="text-base text-[#6B7280] px-1">책 만들기</p>
           <div className="bg-white border border-[#E5E7EB] rounded-2xl divide-y divide-[#E5E7EB]">
             {BOOK_NOTIFS.map((item) => (
+              <div key={item.id} className="flex items-center gap-3 px-5 py-4">
+                <div className={`w-10 h-10 rounded-xl ${item.iconBg} flex items-center justify-center shrink-0`}>
+                  {item.icon}
+                </div>
+                <div className="flex-1 flex flex-col gap-0.5 min-w-0">
+                  <p className="text-[1.0625rem] text-[#1F2937]">{item.title}</p>
+                  <p className="text-sm text-[#6B7280]">{item.desc}</p>
+                </div>
+                <Toggle
+                  on={!loading && prefs[item.prefKey as keyof typeof prefs]}
+                  onChange={(v) => updatePref(item.prefKey as keyof typeof prefs, v)}
+                  disabled={!pushSubscribed || loading}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 댓글 알림 섹션 */}
+        <div className="flex flex-col gap-1">
+          <p className="text-base text-[#6B7280] px-1">댓글 알림</p>
+          <div className="bg-white border border-[#E5E7EB] rounded-2xl divide-y divide-[#E5E7EB]">
+            {COMMENT_NOTIFS.map((item) => (
               <div key={item.id} className="flex items-center gap-3 px-5 py-4">
                 <div className={`w-10 h-10 rounded-xl ${item.iconBg} flex items-center justify-center shrink-0`}>
                   {item.icon}

@@ -10,6 +10,9 @@ export interface NotifPrefs {
   book_publish: boolean   // 책 가족 책장 출간 (저자)
   daily_remind: boolean   // 오늘 대화 미완료 리마인더 (저자)
   family_comment: boolean // 다른 가족 댓글 (독자)
+  author_new_comment: boolean // 내 책의 새 댓글 (저자)
+  author_reply: boolean       // 내 댓글의 답글 (저자)
+  author_family_comment: boolean // 가족끼리 주고받는 댓글 (저자)
 }
 
 export const NOTIF_DEFAULTS: NotifPrefs = {
@@ -20,6 +23,9 @@ export const NOTIF_DEFAULTS: NotifPrefs = {
   book_publish: true,
   daily_remind: false,
   family_comment: false,
+  author_new_comment: true,
+  author_reply: true,
+  author_family_comment: true,
 }
 
 export function useNotificationPrefs() {
@@ -60,7 +66,18 @@ export function useNotificationPrefs() {
   // 푸시 알림 OFF 시 모든 알림 끄기
   const disableAll = useCallback(() => {
     if (!user?.id) return
-    const all_off: NotifPrefs = { new_comment: false, new_reply: false, new_book: false, book_draft: false, book_publish: false, daily_remind: false, family_comment: false }
+    const all_off: NotifPrefs = {
+      new_comment: false,
+      new_reply: false,
+      new_book: false,
+      book_draft: false,
+      book_publish: false,
+      daily_remind: false,
+      family_comment: false,
+      author_new_comment: false,
+      author_reply: false,
+      author_family_comment: false,
+    }
     setPrefs(all_off)
     void supabase.from('profiles').update({ notification_prefs: all_off as unknown as Record<string, boolean> }).eq('id', user.id)
   }, [user?.id])
@@ -68,7 +85,18 @@ export function useNotificationPrefs() {
   // 푸시 알림 ON 시 모든 알림 켜기 (daily_remind는 opt-in 항목이라 제외)
   const enableAll = useCallback(() => {
     if (!user?.id) return
-    const all_on: NotifPrefs = { new_comment: true, new_reply: true, new_book: true, book_draft: true, book_publish: true, daily_remind: false, family_comment: true }
+    const all_on: NotifPrefs = {
+      new_comment: true,
+      new_reply: true,
+      new_book: true,
+      book_draft: true,
+      book_publish: true,
+      daily_remind: false,
+      family_comment: true,
+      author_new_comment: true,
+      author_reply: true,
+      author_family_comment: true,
+    }
     setPrefs(all_on)
     void supabase.from('profiles').update({ notification_prefs: all_on as unknown as Record<string, boolean> }).eq('id', user.id)
   }, [user?.id])

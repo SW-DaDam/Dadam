@@ -44,7 +44,12 @@ vi.mock('@/lib/supabase', () => ({
 }))
 vi.mock('@/features/notifications/hooks/useNotificationPrefs', () => ({
   useNotificationPrefs: () => ({
-    prefs: { family_comment: true, reply_to_comment: true, book_draft_ready: true, book_published: true, no_chat_today: true },
+    prefs: {
+      book_draft: true,
+      author_new_comment: true,
+      author_reply: true,
+      author_family_comment: true,
+    },
     loading: false,
     updatePref: vi.fn(),
   }),
@@ -86,18 +91,20 @@ describe('SeniorSettingsPage — 가족→독자 텍스트', () => {
 
 // ── NotificationSettingsPage ────────────────────────
 describe('NotificationSettingsPage — 가족→독자 텍스트', () => {
-  it('"독자가 댓글을 달았을 때" 가 표시된다', () => {
+  it('저자 댓글 알림 세부 항목이 표시된다', () => {
     render(<MemoryRouter><NotificationSettingsPage /></MemoryRouter>)
-    expect(screen.getByText('독자가 댓글을 달았을 때')).toBeTruthy()
+    expect(screen.getByText('내 책의 새 댓글')).toBeTruthy()
+    expect(screen.getByText('내 댓글의 답글')).toBeTruthy()
+    expect(screen.getByText('가족끼리 주고받는 댓글')).toBeTruthy()
   })
 
-  it('"독자 활동" 섹션 헤더가 표시된다', () => {
+  it('"댓글 알림" 섹션 헤더가 표시된다', () => {
     render(<MemoryRouter><NotificationSettingsPage /></MemoryRouter>)
-    expect(screen.getByText('독자 활동')).toBeTruthy()
+    expect(screen.getByText('댓글 알림')).toBeTruthy()
   })
 
-  it('"책이 독자 책장에 출간됐을 때" 가 표시된다', () => {
+  it('"책이 독자 책장에 출간됐을 때" 가 표시되지 않는다', () => {
     render(<MemoryRouter><NotificationSettingsPage /></MemoryRouter>)
-    expect(screen.getByText('책이 독자 책장에 출간됐을 때')).toBeTruthy()
+    expect(screen.queryByText('책이 독자 책장에 출간됐을 때')).toBeNull()
   })
 })

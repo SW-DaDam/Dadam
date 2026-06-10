@@ -475,6 +475,25 @@ export default function SeniorBookReadPage() {
   }
 
   // 댓글 전송 — 댓글은 책 단위로 저장, 어르신에게 알림 발송 (F-15)
+  async function isNotificationEnabled(
+    userId: string,
+    prefKey: 'author_new_comment' | 'author_reply' | 'author_family_comment',
+  ) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('notification_prefs')
+      .eq('id', userId)
+      .single()
+
+    if (error) {
+      console.error('[알림 설정 조회 실패]', error)
+      return true
+    }
+
+    const prefs = data?.notification_prefs as Record<string, boolean> | null
+    return prefs?.[prefKey] !== false
+  }
+
   async function handleSubmitComment() {
     if ((!commentText.trim() && !commentVoiceBlob) || !bookId || !profile || !book) return
     const commentContent = commentText.trim() || '(음성 댓글)'
@@ -521,10 +540,19 @@ export default function SeniorBookReadPage() {
       }
 
       if (profile.id !== book.senior_id) {
-        // 독자 댓글은 저자에게 항상 알림
-        const { error: ne } = await supabase.from('notifications').insert({ recipient_id: book.senior_id, ...notifPayload })
-        if (ne) console.error('[알림 INSERT 실패]', ne)
-        void sendPushToUser(book.senior_id, notifPayload.title, commentContent, `/s/books/${bookId}`)
+        // 독자 댓글은 저자의 '내 책의 새 댓글' 설정에 따라 알림
+        if (await isNotificationEnabled(book.senior_id, 'author_new_comment')) {
+          const authorPayload = {
+            ...notifPayload,
+            reference_type: 'author_new_comment',
+          }
+          const { error: ne } = await supabase.from('notifications').insert({
+            recipient_id: book.senior_id,
+            ...authorPayload,
+          })
+          if (ne) console.error('[알림 INSERT 실패]', ne)
+          else void sendPushToUser(book.senior_id, authorPayload.title, commentContent, `/s/books/${bookId}`)
+        }
 
         // 다른 독자에게는 family_comment 설정을 켠 경우에만 알림
         const { data: links, error: linksError } = await supabase
@@ -659,15 +687,39 @@ export default function SeniorBookReadPage() {
     if (replyingToAuthorId && replyingToAuthorId !== profile.id) {
       const replierName = profile.full_name ?? profile.display_name ?? (isAuthor ? '저자' : '독자')
       const notifTitle = `${replierName}${josa(replierName, '이', '가')} [${book.title}]에 음성 답장을 남겼어요`
-      await supabase.from('notifications').insert({
-        recipient_id: replyingToAuthorId,
-        type: 'new_reply',
-        title: notifTitle,
-        body: textContent,
-        reference_id: book.id,
-        reference_type: 'book',
-      })
-      void sendPushToUser(replyingToAuthorId, notifTitle, textContent)
+      const isReplyToAuthor = replyingToAuthorId === book.senior_id
+      const shouldNotifyRecipient = !isReplyToAuthor
+        || await isNotificationEnabled(book.senior_id, 'author_reply')
+
+      if (shouldNotifyRecipient) {
+        await supabase.from('notifications').insert({
+          recipient_id: replyingToAuthorId,
+          type: 'new_reply',
+          title: notifTitle,
+          body: textContent,
+          reference_id: book.id,
+          reference_type: isReplyToAuthor ? 'author_reply' : 'book',
+        })
+        void sendPushToUser(
+          replyingToAuthorId,
+          notifTitle,
+          textContent,
+          isReplyToAuthor ? `/s/books/${book.id}` : `/r/books/${book.id}`,
+        )
+      }
+
+      if (!isAuthor && !isReplyToAuthor
+        && await isNotificationEnabled(book.senior_id, 'author_family_comment')) {
+        await supabase.from('notifications').insert({
+          recipient_id: book.senior_id,
+          type: 'new_reply',
+          title: notifTitle,
+          body: textContent,
+          reference_id: book.id,
+          reference_type: 'author_family_comment',
+        })
+        void sendPushToUser(book.senior_id, notifTitle, textContent, `/s/books/${book.id}`)
+      }
     }
 
     handleDiscardVoice()
@@ -707,16 +759,44 @@ export default function SeniorBookReadPage() {
     if (replyingToAuthorId && replyingToAuthorId !== profile.id) {
       const replierName = profile.full_name ?? profile.display_name ?? (isAuthor ? '저자' : '독자')
       const notifTitle = `${replierName}${josa(replierName, '이', '가')} [${book.title}]에 답장을 남겼어요`
-      const { error: ne } = await supabase.from('notifications').insert({
-        recipient_id: replyingToAuthorId,
-        type: 'new_reply',
-        title: notifTitle,
-        body: replyText.trim(),
-        reference_id: book.id,
-        reference_type: 'book',
-      })
-      if (ne) console.error('[대댓글 알림 INSERT 실패]', ne)
-      void sendPushToUser(replyingToAuthorId, notifTitle, replyText.trim())
+      const replyContent = replyText.trim()
+      const isReplyToAuthor = replyingToAuthorId === book.senior_id
+      const shouldNotifyRecipient = !isReplyToAuthor
+        || await isNotificationEnabled(book.senior_id, 'author_reply')
+
+      if (shouldNotifyRecipient) {
+        const { error: ne } = await supabase.from('notifications').insert({
+          recipient_id: replyingToAuthorId,
+          type: 'new_reply',
+          title: notifTitle,
+          body: replyContent,
+          reference_id: book.id,
+          reference_type: isReplyToAuthor ? 'author_reply' : 'book',
+        })
+        if (ne) console.error('[대댓글 알림 INSERT 실패]', ne)
+        else {
+          void sendPushToUser(
+            replyingToAuthorId,
+            notifTitle,
+            replyContent,
+            isReplyToAuthor ? `/s/books/${book.id}` : `/r/books/${book.id}`,
+          )
+        }
+      }
+
+      if (!isAuthor && !isReplyToAuthor
+        && await isNotificationEnabled(book.senior_id, 'author_family_comment')) {
+        const { error: familyNotificationError } = await supabase.from('notifications').insert({
+          recipient_id: book.senior_id,
+          type: 'new_reply',
+          title: notifTitle,
+          body: replyContent,
+          reference_id: book.id,
+          reference_type: 'author_family_comment',
+        })
+        if (familyNotificationError) console.error('[가족 댓글 알림 INSERT 실패]', familyNotificationError)
+        else void sendPushToUser(book.senior_id, notifTitle, replyContent, `/s/books/${book.id}`)
+      }
     }
 
     setReplyingToId(null)

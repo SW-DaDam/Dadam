@@ -37,6 +37,15 @@ export function useNotifications() {
     if (n.type === 'new_comment' && n.reference_type === 'family_comment') {
       return prefs.family_comment
     }
+    if (n.type === 'new_comment' && n.reference_type === 'author_new_comment') {
+      return prefs.author_new_comment
+    }
+    if (n.type === 'new_reply' && n.reference_type === 'author_reply') {
+      return prefs.author_reply
+    }
+    if (n.type === 'new_reply' && n.reference_type === 'author_family_comment') {
+      return prefs.author_family_comment
+    }
     const prefKey = TYPE_TO_PREF[n.type]
     if (!prefKey) return true
     return prefs[prefKey as keyof typeof prefs] !== false
