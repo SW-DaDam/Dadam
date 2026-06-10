@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { useBookEdit } from '@/features/bookshelf/hooks/useBookEdit'
 import { supabase } from '@/lib/supabase'
 import { sendPushToUser } from '@/lib/pushNotification'
+import { uploadAudio } from '@/lib/ai/sttWhisperClient'
 import type { Chapter, CoverImage } from '@/types/domain'
 
 // ─── 상수 ────────────────────────────────────────────────────────
@@ -781,19 +782,24 @@ function Step3AuthorNote({
         setTranscribing(true)
         try {
           const blob = new Blob(chunksRef.current, { type: mimeType ?? 'audio/webm' })
-          const ext = mimeType?.includes('mp4') ? 'm4a' : 'webm'
-          const fd = new FormData()
-          fd.append('audio', blob, `author-note.${ext}`)
 
-          // 챗봇과 동일한 stt-whisper Edge Function 호출
-          const { data, error } = await supabase.functions.invoke('stt-whisper', { body: fd })
-          if (!error && typeof data?.text === 'string') {
-            const result = data.text.trim()
-            if (result) {
-              const prev = authorNoteRef.current.trim()
-              onChangeAuthorNote((prev ? `${prev} ${result}` : result).slice(0, MAX))
-            }
+          // 세션에서 accessToken · userId 추출 (stt-whisper는 senior_id + Authorization 필수)
+          const { data: sessionData } = await supabase.auth.getSession()
+          const accessToken = sessionData.session?.access_token
+          const userId = sessionData.session?.user.id
+          if (!accessToken || !userId) {
+            alert('로그인이 필요해요.')
+            return
           }
+
+          // sttWhisperClient의 uploadAudio 재사용 — 직접 fetch로 multipart/form-data 전송
+          const { text } = await uploadAudio(blob, userId, accessToken)
+          if (text.trim()) {
+            const prev = authorNoteRef.current.trim()
+            onChangeAuthorNote((prev ? `${prev} ${text.trim()}` : text.trim()).slice(0, MAX))
+          }
+        } catch {
+          alert('음성 변환에 실패했어요. 다시 시도해 주세요.')
         } finally {
           setTranscribing(false)
         }
