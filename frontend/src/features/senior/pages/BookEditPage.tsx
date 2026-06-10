@@ -1,9 +1,8 @@
 ﻿import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router'
-import { ChevronLeft, Check, Mic, Pencil, X, RotateCcw, RefreshCw, BookOpen, Camera, Trash2 } from 'lucide-react'
+import { ChevronLeft, Check, Mic, Pencil, X, RotateCcw, RefreshCw, BookOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useBookEdit } from '@/features/bookshelf/hooks/useBookEdit'
-import { useAuthStore } from '@/shared/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import { sendPushToUser } from '@/lib/pushNotification'
 import type { Chapter, CoverImage } from '@/types/domain'
@@ -72,11 +71,10 @@ function StepIndicator({
 export default function BookEditPage() {
   const navigate = useNavigate()
   const { bookId } = useParams<{ bookId: string }>()
-  const user = useAuthStore((s) => s.user)
   const {
     book, chapters: realChapters, coverImages, loading, coverLoading, coverError,
     regenerating, extraCoverCount, extraCoverLimit,
-    softDeleteChapter, restoreChapter, updateChapterTitle, updateChapterContent, updateChapterPhotoUrl,
+    softDeleteChapter, restoreChapter, updateChapterTitle, updateChapterContent,
     selectCover, publishBook, regenerateCover, retryCover,
   } = useBookEdit(bookId)
 
@@ -106,10 +104,6 @@ export default function BookEditPage() {
   const [publishing, setPublishing] = useState(false)
   const [published, setPublished] = useState(false)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
-  const [uploadingPhotoId, setUploadingPhotoId] = useState<string | null>(null)
-  const photoInputRef = useRef<HTMLInputElement>(null)
-  const uploadTargetChapterRef = useRef<string | null>(null)
-
   const chapters = realChapters.length > 0 ? realChapters : MOCK_CHAPTERS
   const isMock = realChapters.length === 0
   const activeChapters = chapters.filter(c => !c.is_deleted)
@@ -198,82 +192,6 @@ export default function BookEditPage() {
       await restoreChapter(id)
     } catch {
       showToast('되돌리기에 실패했어요')
-    }
-  }
-
-  // ─── 챕터 사진 업로드/삭제 ────────────────────────────────────────
-
-  function openPhotoUpload(chapterId: string) {
-    if (isMock) { showToast('목업 데이터입니다'); return }
-    uploadTargetChapterRef.current = chapterId
-    photoInputRef.current?.click()
-  }
-
-  async function handlePhotoFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    const chapterId = uploadTargetChapterRef.current
-    if (!file || !chapterId || !user) return
-    e.target.value = ''
-
-    if (!file.type.startsWith('image/')) { showToast('이미지 파일만 올릴 수 있어요'); return }
-    if (file.size > 10 * 1024 * 1024) { showToast('10MB 이하 사진만 올릴 수 있어요'); return }
-
-    setUploadingPhotoId(chapterId)
-    try {
-      const ext = file.name.split('.').pop() ?? 'jpg'
-      const path = `${user.id}/${chapterId}.${ext}`
-      const { error: upErr } = await supabase.storage
-        .from('chapter-photos')
-        .upload(path, file, { upsert: true, contentType: file.type })
-      if (upErr) {
-        console.error('[사진 업로드 실패]', upErr.message, upErr)
-        throw upErr
-      }
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('chapter-photos')
-        .getPublicUrl(path)
-
-      const { error: dbErr } = await supabase
-        .from('chapters')
-        .update({ photo_url: publicUrl })
-        .eq('id', chapterId)
-      if (dbErr) throw dbErr
-
-      updateChapterPhotoUrl(chapterId, publicUrl)
-      showToast('사진을 추가했어요')
-    } catch {
-      showToast('사진 업로드에 실패했어요')
-    } finally {
-      setUploadingPhotoId(null)
-      uploadTargetChapterRef.current = null
-    }
-  }
-
-  async function handlePhotoDelete(chapter: Chapter) {
-    if (!chapter.photo_url || isMock) return
-    try {
-      const url = new URL(chapter.photo_url)
-      const storagePath = decodeURIComponent(url.pathname.split('/chapter-photos/')[1])
-
-      // DB의 photo_url을 먼저 비운다 — 실패하면 중단(파일·참조 모두 유지되어 일관 상태)
-      // (Supabase 호출은 에러 시 throw하지 않고 { error }를 반환하므로 명시적으로 확인)
-      const { error: dbErr } = await supabase.from('chapters').update({ photo_url: null }).eq('id', chapter.id)
-      if (dbErr) {
-        showToast('사진 삭제에 실패했어요')
-        return
-      }
-
-      // 스토리지 파일 삭제 — 실패해도 DB 참조는 이미 제거됨(고아 파일만 남음, 비치명)
-      const { error: storageErr } = await supabase.storage.from('chapter-photos').remove([storagePath])
-      if (storageErr) {
-        console.warn('[사진 삭제] storage 파일 제거 실패(고아 파일 가능):', storageErr)
-      }
-
-      updateChapterPhotoUrl(chapter.id, null)
-      showToast('사진을 삭제했어요')
-    } catch {
-      showToast('사진 삭제에 실패했어요')
     }
   }
 
@@ -443,21 +361,7 @@ export default function BookEditPage() {
                     </div>
                   </div>
 
-                  {/* 사진 미리보기 */}
-                  {chapter.photo_url && (
-                    <div className="relative rounded-xl overflow-hidden">
-                      <img src={chapter.photo_url} alt="챕터 사진" className="w-full max-h-48 object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => handlePhotoDelete(chapter)}
-                        className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/50 flex items-center justify-center"
-                      >
-                        <Trash2 size={14} className="text-white" />
-                      </button>
-                    </div>
-                  )}
-
-                  {/* 버튼 행: 내용 보기 / 내용 수정 / 사진 / 이야기 빼기 */}
+                  {/* 버튼 행: 내용 보기 / 내용 수정 / 이야기 빼기 */}
                   <div className="flex justify-end gap-2 flex-wrap">
                     <button type="button" onClick={() => setViewingChapter(chapter)}
                       className="bg-[#F3F4F6] rounded-xl px-4 py-2 min-h-11 flex items-center gap-1.5">
@@ -469,20 +373,6 @@ export default function BookEditPage() {
                       className="bg-[#EFF6FF] rounded-xl px-4 py-2 min-h-11 flex items-center gap-1.5 disabled:opacity-40">
                       <Pencil size={15} className="text-[#3B82F6]" />
                       <span className="text-base text-[#3B82F6]">내용 수정</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openPhotoUpload(chapter.id)}
-                      disabled={uploadingPhotoId === chapter.id}
-                      className="bg-[#F0FDF4] rounded-xl px-4 py-2 min-h-11 flex items-center gap-1.5 disabled:opacity-50"
-                    >
-                      {uploadingPhotoId === chapter.id
-                        ? <span className="text-base text-[#16A34A]">올리는 중…</span>
-                        : <>
-                            <Camera size={15} className="text-[#16A34A]" />
-                            <span className="text-base text-[#16A34A]">사진</span>
-                          </>
-                      }
                     </button>
                     {/* 단편은 챕터 삭제 불가 — 단편 생성 시 이미 주제를 선택했으므로 */}
                     {!isShortBook && (
@@ -530,15 +420,6 @@ export default function BookEditPage() {
               <span className="text-[1.25rem]" style={{ color: ACCENT_TEXT }}>다음으로</span>
             </button>
           </div>
-
-          {/* 숨겨진 사진 업로드 input */}
-          <input
-            ref={photoInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handlePhotoFileChange}
-          />
 
           {/* 챕터 내용 보기 모달 */}
           {viewingChapter && (
@@ -859,49 +740,92 @@ function Step3AuthorNote({
   onSkip: () => void
 }) {
   const MAX = 500
-  const [sttOn, setSttOn] = useState(false)
-  const [sttDuration, setSttDuration] = useState(0)
+  const [recording, setRecording] = useState(false)      // 녹음 중
+  const [transcribing, setTranscribing] = useState(false) // Whisper 변환 중
+  const [recDuration, setRecDuration] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const streamRef = useRef<MediaStream | null>(null)
+  // onstop 클로저가 최신 authorNote를 참조하도록 ref로 동기화
+  const authorNoteRef = useRef(authorNote)
+  useEffect(() => { authorNoteRef.current = authorNote }, [authorNote])
 
-  const startSTT = useCallback(async () => {
-    const SpeechRecognition =
-      (window as unknown as { SpeechRecognition?: typeof window.SpeechRecognition; webkitSpeechRecognition?: typeof window.SpeechRecognition })
-        .SpeechRecognition ??
-      (window as unknown as { webkitSpeechRecognition?: typeof window.SpeechRecognition })
-        .webkitSpeechRecognition
+  function stopTimer() {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+  }
 
-    if (!SpeechRecognition) {
-      alert('이 브라우저는 음성 입력을 지원하지 않아요. 직접 입력해주세요.')
-      return
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
+
+      // 브라우저별 지원 포맷 선택 (챗봇 getSupportedMimeType과 동일 패턴)
+      const mimeType =
+        MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' :
+        MediaRecorder.isTypeSupported('audio/webm')             ? 'audio/webm' :
+        MediaRecorder.isTypeSupported('audio/mp4')              ? 'audio/mp4' :
+        undefined
+
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+      chunksRef.current = []
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop())
+        streamRef.current = null
+        stopTimer()
+        setRecording(false)
+        if (chunksRef.current.length === 0) return
+
+        setTranscribing(true)
+        try {
+          const blob = new Blob(chunksRef.current, { type: mimeType ?? 'audio/webm' })
+          const ext = mimeType?.includes('mp4') ? 'm4a' : 'webm'
+          const fd = new FormData()
+          fd.append('audio', blob, `author-note.${ext}`)
+
+          // 챗봇과 동일한 stt-whisper Edge Function 호출
+          const { data, error } = await supabase.functions.invoke('stt-whisper', { body: fd })
+          if (!error && typeof data?.text === 'string') {
+            const result = data.text.trim()
+            if (result) {
+              const prev = authorNoteRef.current.trim()
+              onChangeAuthorNote((prev ? `${prev} ${result}` : result).slice(0, MAX))
+            }
+          }
+        } finally {
+          setTranscribing(false)
+        }
+      }
+
+      mediaRecorderRef.current = recorder
+      recorder.start()
+      setRecording(true)
+      setRecDuration(0)
+      timerRef.current = setInterval(() => setRecDuration((d) => d + 1), 1000)
+    } catch (err) {
+      const name = err instanceof Error ? err.name : ''
+      if (name === 'NotAllowedError') alert('마이크 권한을 허용해 주세요.')
+      else alert('마이크를 사용할 수 없어요. 직접 입력해 주세요.')
     }
-    const recognition = new SpeechRecognition()
-    recognition.lang = 'ko-KR'
-    recognition.continuous = true
-    recognition.interimResults = true
-    recognition.onresult = (e: SpeechRecognitionEvent) => {
-      const transcript = Array.from(e.results).map((r) => r[0].transcript).join('')
-      onChangeAuthorNote(transcript.slice(0, MAX))
-    }
-    recognition.onerror = () => stopSTT()
-    recognition.start()
-    recognitionRef.current = recognition
-    setSttDuration(0)
-    timerRef.current = setInterval(() => setSttDuration((d) => d + 1), 1000)
-    setSttOn(true)
   }, [onChangeAuthorNote])
 
-  const stopSTT = useCallback(() => {
-    recognitionRef.current?.stop()
-    recognitionRef.current = null
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
-    setSttOn(false)
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop()
+    }
   }, [])
 
-  useEffect(() => () => stopSTT(), [stopSTT])
+  // 페이지 이탈 시 정리
+  useEffect(() => () => {
+    stopTimer()
+    if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop()
+    streamRef.current?.getTracks().forEach((t) => t.stop())
+  }, [])
 
-  const mm = String(Math.floor(sttDuration / 60)).padStart(2, '0')
-  const ss = String(sttDuration % 60).padStart(2, '0')
+  const mm = String(Math.floor(recDuration / 60)).padStart(2, '0')
+  const ss = String(recDuration % 60).padStart(2, '0')
 
   return (
     <>
@@ -925,22 +849,31 @@ function Step3AuthorNote({
             <span className="text-sm text-white">추천</span>
           </div>
 
-          {sttOn ? (
+          {transcribing ? (
+            // Whisper 변환 중
             <>
-              <button type="button" onClick={stopSTT}
+              <div className="w-14 h-14 rounded-full bg-[#F3F4F6] flex items-center justify-center">
+                <div className="w-7 h-7 rounded-full border-4 border-[#E8820C] border-t-transparent animate-spin" />
+              </div>
+              <p className="text-[1.125rem] text-[#6B7280]">말씀을 텍스트로 옮기는 중이에요…</p>
+            </>
+          ) : recording ? (
+            // 녹음 중
+            <>
+              <button type="button" onClick={stopRecording}
                 className="w-14 h-14 rounded-full bg-[#DC2626] flex items-center justify-center shadow-lg">
                 <span className="w-5 h-5 rounded bg-white" />
               </button>
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-[#DC2626] animate-pulse" />
                 <span className="text-[1.125rem] text-[#DC2626] font-medium tabular-nums">{mm}:{ss}</span>
-                <span className="text-base text-[#6B7280]">말씀이 텍스트로 변환되고 있어요</span>
               </div>
               <p className="text-sm text-[#9CA3AF]">버튼을 누르면 녹음이 멈춰요</p>
             </>
           ) : (
+            // 대기
             <>
-              <button type="button" onClick={startSTT}
+              <button type="button" onClick={startRecording}
                 className="w-14 h-14 rounded-full bg-[#E8820C] flex items-center justify-center">
                 <Mic size={26} className="text-white" />
               </button>

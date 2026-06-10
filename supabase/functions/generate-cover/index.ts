@@ -465,8 +465,8 @@ Deno.serve(async (req) => {
         await supabaseAdmin.from('notifications').insert({
           recipient_id: seniorId,
           type: 'book_draft_ready',
-          title: '이달의 책이 준비됐어요!',
-          body: '표지를 골라보세요.',
+          title: '책 초안 작성이 완료됐어요!',
+          body: '책을 완성해주세요.',
           reference_id: bookId,
           reference_type: 'book',
         })
@@ -719,8 +719,8 @@ Deno.serve(async (req) => {
     const { error: notifErr } = await supabaseAdmin.from('notifications').insert({
       recipient_id: seniorId,
       type: 'book_draft_ready',
-      title: '이달의 책이 준비됐어요!',
-      body: '표지를 골라보세요.',
+      title: '책 초안 작성이 완료됐어요!',
+      body: '책을 완성해주세요.',
       reference_id: bookId,
       reference_type: 'book',
     })
