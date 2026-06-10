@@ -34,6 +34,9 @@ export function useNotifications() {
 
   // 알림 설정에서 꺼진 타입은 표시하지 않음
   function isAllowed(n: Notification) {
+    if (n.type === 'new_comment' && n.reference_type === 'family_comment') {
+      return prefs.family_comment
+    }
     const prefKey = TYPE_TO_PREF[n.type]
     if (!prefKey) return true
     return prefs[prefKey as keyof typeof prefs] !== false

@@ -68,7 +68,14 @@ export default function ProfileSetupPage() {
     const year = Number(birthYear)
     const isValidYear = birthYear.length === 4 && year > 1900 && year < CURRENT_YEAR
     const birthDate = isValidYear ? `${birthYear}-01-01` : null
-    const { error } = await setupSeniorProfile(user.id, nickname.trim(), gender, birthDate)
+    const { error } = await setupSeniorProfile(
+      user.id,
+      nickname.trim(),
+      gender,
+      birthDate,
+      kakaoProfile?.avatarUrl,
+      kakaoProfile?.name,
+    )
     if (error) {
       setErrorMessage(getDbErrorMessage(error))
       setSubmitting(false)

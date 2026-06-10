@@ -521,12 +521,71 @@ export default function SeniorBookReadPage() {
       }
 
       if (profile.id !== book.senior_id) {
-        // 가족 → 저자에게 알림
+        // 독자 댓글은 저자에게 항상 알림
         const { error: ne } = await supabase.from('notifications').insert({ recipient_id: book.senior_id, ...notifPayload })
         if (ne) console.error('[알림 INSERT 실패]', ne)
         void sendPushToUser(book.senior_id, notifPayload.title, commentContent, `/s/books/${bookId}`)
+
+        // 다른 독자에게는 family_comment 설정을 켠 경우에만 알림
+        const { data: links, error: linksError } = await supabase
+          .from('family_links')
+          .select('family_id')
+          .eq('senior_id', book.senior_id)
+          .eq('invite_status', 'accepted')
+
+        if (linksError) {
+          console.error('[다른 가족 댓글 대상 조회 실패]', linksError)
+        } else {
+          const peerIds = [...new Set(
+            (links ?? [])
+              .map((link) => link.family_id)
+              .filter((id): id is string => !!id && id !== profile.id),
+          )]
+
+          if (peerIds.length > 0) {
+            const { data: peerProfiles, error: prefsError } = await supabase
+              .from('profiles')
+              .select('id, notification_prefs')
+              .in('id', peerIds)
+
+            if (prefsError) {
+              console.error('[다른 가족 댓글 설정 조회 실패]', prefsError)
+            } else {
+              const recipients = (peerProfiles ?? []).filter((peer) => {
+                const prefs = peer.notification_prefs as { family_comment?: boolean } | null
+                return prefs?.family_comment === true
+              })
+
+              if (recipients.length > 0) {
+                const familyCommentPayload = {
+                  ...notifPayload,
+                  reference_type: 'family_comment',
+                }
+                const { error: peerNotificationError } = await supabase
+                  .from('notifications')
+                  .insert(recipients.map((peer) => ({
+                    recipient_id: peer.id,
+                    ...familyCommentPayload,
+                  })))
+
+                if (peerNotificationError) {
+                  console.error('[다른 가족 댓글 알림 INSERT 실패]', peerNotificationError)
+                } else {
+                  recipients.forEach((peer) => {
+                    void sendPushToUser(
+                      peer.id,
+                      familyCommentPayload.title,
+                      commentContent,
+                      `/r/books/${bookId}`,
+                    )
+                  })
+                }
+              }
+            }
+          }
+        }
       } else {
-        // 저자 → 연결된 가족 전체에게 알림 (family_id 중복 제거)
+        // 저자 댓글은 family_comment 설정과 무관하게 연결된 독자 전체에게 알림
         const { data: links } = await supabase
           .from('family_links')
           .select('family_id')

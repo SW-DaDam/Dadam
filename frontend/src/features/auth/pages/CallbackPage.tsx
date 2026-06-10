@@ -57,10 +57,14 @@ export function CallbackPage() {
     // store에 user + kakaoProfile 저장
     // kakaoProfile은 온보딩(ProfileSetupPage/ReaderSetupPage)에서 카카오 이름·사진 표시에 사용
     setUser(session.user)
+    const kakaoAvatarUrl =
+      session.user.user_metadata?.avatar_url ??
+      session.user.user_metadata?.picture ??
+      null
     const kakaoName = session.user.user_metadata?.full_name ?? session.user.user_metadata?.name ?? '사용자'
     setKakaoProfile({
       name: kakaoName,
-      avatarUrl: session.user.user_metadata?.avatar_url ?? null,
+      avatarUrl: kakaoAvatarUrl,
     })
 
     // profiles 조회로 역할 + 온보딩 완료 여부 확인
@@ -73,6 +77,18 @@ export function CallbackPage() {
     if (profileError) {
       // [P2 Fix] PGRST116(no rows)만 트리거 지연으로 처리 — 그 외 에러는 로그인으로 복귀
       if ((profileError as { code?: string }).code === PGRST_NO_ROWS) {
+        const { error: createError } = await supabase.from('profiles').insert({
+          id: session.user.id,
+          role: 'family',
+          display_name: '사용자',
+          full_name: kakaoName,
+          avatar_url: kakaoAvatarUrl,
+        })
+        if (createError) {
+          console.error('[Auth] 프로필 생성 실패', createError)
+          navigate('/login', { replace: true })
+          return
+        }
         navigate('/role-select', { replace: true })
       } else {
         console.error('[Auth] 프로필 조회 실패', profileError)
@@ -82,9 +98,10 @@ export function CallbackPage() {
     }
 
     // 로그인 시마다 카카오 이름·프사 동기화
-    void supabase.from('profiles')
-      .update({ full_name: kakaoName, avatar_url: session.user.user_metadata?.avatar_url ?? null } as never)
+    const { error: syncError } = await supabase.from('profiles')
+      .update({ full_name: kakaoName, avatar_url: kakaoAvatarUrl } as never)
       .eq('id', session.user.id)
+    if (syncError) console.error('[Auth] 카카오 프로필 동기화 실패', syncError)
 
     const pendingCode = sessionStorage.getItem('pendingInviteCode')
 

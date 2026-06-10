@@ -1,19 +1,25 @@
 import { supabase } from '@/lib/supabase'
 
-// 어르신 프로필 설정: profiles UPSERT + senior_profiles UPSERT
-// 트리거 미완료로 profiles row가 없을 경우에도 안전하게 생성
 export async function setupSeniorProfile(
   userId: string,
   displayName: string,
   gender: 'male' | 'female' | null,
-  birthDate: string | null  // 'YYYY-MM-DD' 형식
+  birthDate: string | null,
+  avatarUrl?: string | null,
+  fullName?: string,
 ): Promise<{ error: unknown }> {
   const { error: profileError } = await supabase
     .from('profiles')
-    .upsert({ id: userId, role: 'senior', display_name: displayName })
+    .upsert({
+      id: userId,
+      role: 'senior',
+      display_name: displayName,
+      full_name: fullName ?? displayName,
+      avatar_url: avatarUrl ?? null,
+    })
 
   if (profileError) {
-    console.error('[Auth] 어르신 프로필 설정 실패', profileError)
+    console.error('[Auth] 저자 프로필 설정 실패', profileError)
     return { error: profileError }
   }
 
@@ -34,25 +40,29 @@ export async function setupSeniorProfile(
   return { error: null }
 }
 
-// 가족 프로필 설정: profiles UPSERT
-// 트리거 미완료로 profiles row가 없을 경우에도 안전하게 생성
 export async function setupFamilyProfile(
   userId: string,
-  displayName: string
+  displayName: string,
+  avatarUrl?: string | null,
 ): Promise<{ error: unknown }> {
   const { error } = await supabase
     .from('profiles')
-    .upsert({ id: userId, role: 'family', display_name: displayName })
+    .upsert({
+      id: userId,
+      role: 'family',
+      display_name: displayName,
+      full_name: displayName,
+      avatar_url: avatarUrl ?? null,
+    })
 
   if (error) {
-    console.error('[Auth] 가족 프로필 설정 실패', error)
+    console.error('[Auth] 독자 프로필 설정 실패', error)
     return { error }
   }
 
   return { error: null }
 }
 
-// 초대 코드 수락: pending family_link를 family_id + 양방향 호칭으로 업데이트
 export async function acceptInviteCode(
   code: string,
   userId: string,
@@ -83,18 +93,15 @@ export async function acceptInviteCode(
     .eq('id', link.id)
 
   if (updateErr) return { ok: false, message: updateErr.message }
-  return { ok: true, message: '가족으로 연결됐어요!' }
+  return { ok: true, message: '독자로 연결됐어요' }
 }
 
-// 어르신 온보딩 완료 표시: senior_profiles.onboarding_completed = true
 export async function completeSeniorOnboarding(userId: string): Promise<{ error: unknown }> {
   const { error } = await supabase
     .from('senior_profiles')
     .update({ onboarding_completed: true })
     .eq('id', userId)
 
-  if (error) {
-    console.error('[Auth] 온보딩 완료 처리 실패', error)
-  }
+  if (error) console.error('[Auth] 온보딩 완료 처리 실패', error)
   return { error: error ?? null }
 }
