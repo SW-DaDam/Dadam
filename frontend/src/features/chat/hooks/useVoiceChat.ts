@@ -744,6 +744,11 @@ export function useVoiceChat(seniorId: string): UseVoiceChatReturn {
         updateState('listening')
       })
       .catch((err) => {
+        // MediaRecorder 생성/시작 실패 시 VAD 정리 + 마이크 트랙 해제
+        // getUserMedia 성공 후 recorder 단계에서 실패하면 onstop이 실행되지 않으므로 직접 정리
+        stopVad()
+        mediaStreamRef.current?.getTracks().forEach((t) => t.stop())
+        mediaStreamRef.current = null
         const errName = err instanceof Error ? err.name : ''
         setError(
           errName === 'NotAllowedError'
