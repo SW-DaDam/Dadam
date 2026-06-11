@@ -1,7 +1,6 @@
 ﻿import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ChevronLeft } from 'lucide-react'
-import Toggle from '@/shared/components/Toggle'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { supabase } from '@/lib/supabase'
@@ -67,8 +66,6 @@ export default function ReaderProfileEditPage() {
   const displayName: string = user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? '사용자'
   const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
   const [relation, setRelation] = useState('아들')
-  const [notifBook, setNotifBook] = useState(true)
-  const [notifReply, setNotifReply] = useState(true)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
@@ -111,7 +108,7 @@ export default function ReaderProfileEditPage() {
         </button>
       </header>
 
-      <main className="flex-1 min-h-0 overflow-y-auto pb-[160px] w-full max-w-2xl md:max-w-none mx-auto">
+      <main className="flex-1 min-h-0 overflow-y-auto pb-6 w-full max-w-2xl md:max-w-none mx-auto">
 
         {/* 프로필 사진 */}
         <div className="bg-white border-b border-[#E5E7EB] flex flex-col items-center gap-3 py-6">
@@ -195,54 +192,6 @@ export default function ReaderProfileEditPage() {
             </div>
           </div>
 
-          {/* 연결된 저자 */}
-          <div className="flex flex-col gap-1.5">
-            <p className="text-base text-[#6B7280]">연결된 저자</p>
-            <div className="bg-white border border-[#E5E7EB] rounded-xl px-4 py-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#FEE500] flex items-center justify-center shrink-0">
-                <svg width="16" height="14" viewBox="0 0 40 36" fill="#3C1E1E8C" aria-hidden="true">
-                  <path d="M20 0C8.954 0 0 6.716 0 15c0 5.073 3.027 9.558 7.627 12.29L5.41 34.97a.75.75 0 0 0 1.082.8l9.196-5.832C16.54 30.3 18.25 30.5 20 30.5c11.046 0 20-6.716 20-15S31.046 0 20 0Z" />
-                </svg>
-              </div>
-              <div className="flex-1 flex flex-col gap-1 min-w-0">
-                <p className="text-[1.125rem] text-[#1F2937]">김영숙</p>
-                <span className="inline-flex self-start bg-[#FFF0DC] rounded-lg px-2 py-0.5">
-                  <span className="text-sm text-[#E8820C]">엄마</span>
-                </span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="bg-[#DCFCE7] rounded-full px-2.5 py-1 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A]" />
-                  <span className="text-sm text-[#16A34A]">연결됨</span>
-                </span>
-                <button type="button" className="bg-[#FEF2F2] rounded-lg px-3 py-1.5 min-h-9">
-                  <span className="text-sm text-[#DC2626]">해제</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* 알림 */}
-          <div className="flex flex-col gap-1.5">
-            <p className="text-base text-[#6B7280]">알림</p>
-            <div className="bg-white border border-[#E5E7EB] rounded-xl divide-y divide-[#E5E7EB]">
-              <div className="flex items-center gap-3 px-4 py-4">
-                <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                  <p className="text-[1.125rem] text-[#1F2937]">책 출간 알림</p>
-                  <p className="text-[0.9375rem] text-[#6B7280]">저자가 새 책을 출간하면 알려줘요</p>
-                </div>
-                <Toggle on={notifBook} onChange={setNotifBook} />
-              </div>
-              <div className="flex items-center gap-3 px-4 py-4">
-                <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                  <p className="text-[1.125rem] text-[#1F2937]">댓글 답장 알림</p>
-                  <p className="text-[0.9375rem] text-[#6B7280]">내 댓글에 저자가 답장하면 알려줘요</p>
-                </div>
-                <Toggle on={notifReply} onChange={setNotifReply} />
-              </div>
-            </div>
-          </div>
-
           {/* 계정 탈퇴 */}
           <div className="bg-[#FEF2F2] border border-[#FECACA] rounded-2xl py-4 text-center">
             <button type="button" onClick={() => setShowDeleteModal(true)}>
@@ -252,14 +201,6 @@ export default function ReaderProfileEditPage() {
 
         </div>
       </main>
-
-      {/* 하단 저장 바 */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#E5E7EB] px-4 sm:px-6 py-4 flex flex-col gap-3 max-w-2xl md:max-w-none mx-auto">
-        <p className="text-base text-[#6B7280] text-center">변경 사항은 저장 버튼을 눌러야 적용돼요</p>
-        <button type="button" className="w-full bg-[#E8820C] rounded-2xl py-4 text-center">
-          <span className="text-[1.375rem] text-white">저장하기</span>
-        </button>
-      </div>
 
       {showDeleteModal && (
         <DeleteAccountModal
