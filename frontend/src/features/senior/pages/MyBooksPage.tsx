@@ -62,6 +62,9 @@ export default function MyBooksPage() {
   // 공용 에러 토스트
   const [genError, setGenError] = useState<string | null>(null)
 
+  // 이미 해당 월 책이 존재할 때 표시하는 확인 모달 (기존 책 id 보관)
+  const [duplicateBookId, setDuplicateBookId] = useState<string | null>(null)
+
   // 책 삭제 확인 모달
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -118,6 +121,24 @@ export default function MyBooksPage() {
   const handleCreateBook = useCallback(async () => {
     if (!user) return
     setMonthModalOpen(false)
+
+    // 호출 전에 books 테이블을 직접 확인 — job 상태와 무관하게 이미 책이 있으면 모달 표시
+    // (job이 failed/만료된 경우 RPC가 새 job을 만들어 utterances 0건 오류로 오인되는 버그 방지)
+    const { data: alreadyExists } = await supabase
+      .from('books')
+      .select('id')
+      .eq('senior_id', user.id)
+      .eq('book_type', 'monthly')
+      .eq('year', selectYear)
+      .eq('month', selectMonth)
+      .limit(1)
+      .maybeSingle()
+
+    if (alreadyExists) {
+      setDuplicateBookId(alreadyExists.id)
+      return
+    }
+
     setGenerating(true)
     setGenError(null)
     setStepIdx(0)
@@ -148,7 +169,10 @@ export default function MyBooksPage() {
         }
       )
 
-      // 409: 이미 해당 월 월간 책이 있음 → 해당 책으로 이동
+      // response body를 한 번만 파싱 — ok 여부와 무관하게 이후 분기에서 재사용
+      const resBody = await res.json().catch(() => ({})) as { error?: string; result?: string }
+
+      // 409: 이미 해당 월 월간 책이 있음 → 알림 모달 표시 후 사용자가 직접 이동 선택
       // book_type='monthly' 필터 필수: 같은 달에 단편 책이 있을 경우 잘못된 책으로 이동 방지
       if (res.status === 409) {
         setGenerating(false)
@@ -162,14 +186,21 @@ export default function MyBooksPage() {
           .order('created_at', { ascending: false })
           .limit(1)
           .single()
-        if (existingBook) navigate(`/s/books/${existingBook.id}/edit`)
+        // 확인 모달로 사용자에게 알림 — 기존 책 id가 없으면 목록 갱신만
+        if (existingBook) setDuplicateBookId(existingBook.id)
         else await refresh()
         return
       }
 
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error((body as { error?: string }).error ?? `책 생성 실패 (${res.status})`)
+        throw new Error(resBody.error ?? `책 생성 실패 (${res.status})`)
+      }
+
+      // outcome: 'failed' → 해당 월 대화 내용 없음 (utterances 0건)
+      if (resBody.result === 'failed') {
+        setGenerating(false)
+        setGenError(`${selectYear}년 ${selectMonth}월에 나눈 대화가 없어서 책을 만들 수 없어요.`)
+        return
       }
 
       await refresh()
@@ -557,6 +588,35 @@ export default function MyBooksPage() {
           <p className="text-[1.125rem] font-bold text-[#1F2937] mb-2">단편 이야기책 만드는 중</p>
           <p className="text-base text-[#6B7280]">{SHORT_STEP_MESSAGES[shortStepIdx]}</p>
           <p className="text-sm text-[#9CA3AF] mt-4">몇 분 정도 걸릴 수 있어요</p>
+        </div>
+      )}
+
+      {/* ── 중복 월간 책 알림 모달 ────────────────────────────── */}
+      {duplicateBookId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-[#1F2937] opacity-45" onClick={() => setDuplicateBookId(null)} />
+          <div className="relative bg-white rounded-2xl w-full max-w-sm p-6 flex flex-col gap-4 z-10">
+            <p className="text-[1.25rem] font-bold text-[#1F2937] text-center">이미 책이 있어요</p>
+            <p className="text-[1.0625rem] text-[#6B7280] text-center">
+              {selectYear}년 {selectMonth}월 이야기책이<br />이미 만들어져 있어요.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setDuplicateBookId(null)}
+                className="flex-1 bg-[#F3F4F6] rounded-xl py-3 text-center min-h-11"
+              >
+                <span className="text-[1.0625rem] text-[#6B7280]">닫기</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate(`/s/books/${duplicateBookId}/edit`)}
+                className="flex-1 bg-[#E8820C] rounded-xl py-3 text-center min-h-11"
+              >
+                <span className="text-[1.0625rem] text-white">책 열기</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
