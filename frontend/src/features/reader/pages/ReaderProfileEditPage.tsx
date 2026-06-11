@@ -1,5 +1,6 @@
 ﻿import { useState } from 'react'
 import { useNavigate } from 'react-router'
+import { useEffect } from 'react'
 import { ChevronLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/shared/stores/authStore'
@@ -65,9 +66,50 @@ export default function ReaderProfileEditPage() {
   const clear = useAuthStore((s) => s.clear)
   const displayName: string = user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? '사용자'
   const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
-  const [relation, setRelation] = useState('아들')
+  const [relation, setRelation] = useState('')
+  const [initialRelation, setInitialRelation] = useState('')
+  const [saving, setSaving] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  useEffect(() => {
+    if (!user?.id) return
+    void supabase
+      .from('family_links')
+      .select('reader_nickname, relationship')
+      .eq('family_id', user.id)
+      .eq('invite_status', 'accepted')
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        const currentRelation = data?.reader_nickname ?? data?.relationship ?? ''
+        setRelation(currentRelation)
+        setInitialRelation(currentRelation)
+      })
+  }, [user?.id])
+
+  async function handleSave() {
+    if (!user?.id || !relation.trim() || saving) return
+    const nextRelation = relation.trim()
+    setSaving(true)
+    const { error } = await supabase
+      .from('family_links')
+      .update({
+        reader_nickname: nextRelation,
+        relationship: nextRelation,
+      })
+      .eq('family_id', user.id)
+      .eq('invite_status', 'accepted')
+
+    setSaving(false)
+    if (error) {
+      alert('저장에 실패했어요. 잠시 후 다시 시도해 주세요.')
+      return
+    }
+    setRelation(nextRelation)
+    setInitialRelation(nextRelation)
+    alert('저장했어요.')
+  }
 
   async function handleDeleteAccount() {
     setDeleting(true)
@@ -102,9 +144,11 @@ export default function ReaderProfileEditPage() {
         </h1>
         <button
           type="button"
-          className="ml-auto bg-[#E8820C] rounded-xl px-4 py-2 min-h-11"
+          onClick={handleSave}
+          disabled={!relation.trim() || relation.trim() === initialRelation || saving}
+          className="ml-auto bg-[#E8820C] rounded-xl px-4 py-2 min-h-11 disabled:bg-[#D1D5DB] disabled:cursor-not-allowed"
         >
-          <span className="text-[1.0625rem] text-white">저장</span>
+          <span className="text-[1.0625rem] text-white">{saving ? '저장 중' : '저장'}</span>
         </button>
       </header>
 
