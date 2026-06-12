@@ -66,26 +66,23 @@ export default function AiMemoryPage() {
           </div>
         </div>
 
-        {/* 카테고리 탭 — LLM이 생성한 카테고리를 동적으로 표시 */}
-        {/* rounded와 overflow-x-auto 충돌 방지: 외부 래퍼로 rounded, 내부에서 overflow 처리 */}
+        {/* 카테고리 탭 — 5열 그리드, 모든 칸 동일 너비 */}
         {allTabs.length > 1 && (
-          <div className="bg-white border border-[#E5E7EB] rounded-2xl">
-            <div className="overflow-x-auto scrollbar-none px-1.5 py-1.5">
-              <div className="flex gap-1 min-w-max">
-                {allTabs.map((label) => (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => setActiveTab(label)}
-                    className={cn(
-                      'rounded-xl px-3 py-1.5 text-sm transition-colors whitespace-nowrap',
-                      activeTab === label ? 'bg-[#E8820C] text-white' : 'text-[#6B7280]',
-                    )}
-                  >
-                    {label} {counts[label] ?? 0}
-                  </button>
-                ))}
-              </div>
+          <div className="bg-white border border-[#E5E7EB] rounded-2xl px-1.5 py-1.5">
+            <div className="grid grid-cols-5 gap-1">
+              {allTabs.map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setActiveTab(label)}
+                  className={cn(
+                    'rounded-xl px-2 py-1.5 text-sm transition-colors whitespace-nowrap',
+                    activeTab === label ? 'bg-[#E8820C] text-white' : 'text-[#6B7280]',
+                  )}
+                >
+                  {label} {counts[label] ?? 0}
+                </button>
+              ))}
             </div>
           </div>
         )}
