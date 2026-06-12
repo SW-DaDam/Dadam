@@ -255,8 +255,9 @@ async function generateAndUploadCover(
   // base64 → Uint8Array 변환 (fetch URL 다운로드 불필요)
   const imageBuffer = Uint8Array.from(atob(b64), c => c.charCodeAt(0))
 
-  // Storage 경로: {senior_id}/{book_id}/{chapter_id}.png (챕터 1:1 대응)
-  const storagePath = `${seniorId}/${bookId}/${chapterId}.png`
+  // 재생성마다 새 파일명으로 고유 URL 생성 — CDN 캐시 덮어쓰기 문제 방지
+  const timestamp = Date.now()
+  const storagePath = `${seniorId}/${bookId}/${chapterId}_${timestamp}.png`
 
   const { error: uploadErr } = await supabaseAdmin.storage
     .from(BUCKET)
