@@ -101,6 +101,16 @@ export default function BookEditPage() {
   const [savingContent, setSavingContent] = useState(false)
 
   const [authorNote, setAuthorNote] = useState('')  // 작가의 말 (구 헌사)
+  const authorNoteInitialized = useRef(false)
+
+  // book 최초 로드 시 DB에 저장된 dedication으로 작가의 말 복원
+  useEffect(() => {
+    if (book && !authorNoteInitialized.current) {
+      setAuthorNote(book.dedication ?? '')
+      authorNoteInitialized.current = true
+    }
+  }, [book])
+
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [published, setPublished] = useState(false)
