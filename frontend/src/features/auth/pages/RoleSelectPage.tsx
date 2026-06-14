@@ -63,7 +63,7 @@ export default function RoleSelectPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
 
       {/* 헤더 */}
       <header className="w-full h-[60px] shrink-0 bg-white border-b border-[#E5E7EB] flex items-center px-4 sm:px-6 md:px-8 gap-4">
@@ -82,7 +82,7 @@ export default function RoleSelectPage() {
       {/* 단계 표시 */}
       <StepIndicator currentStep={1} />
 
-      <main className="flex-1 flex flex-col items-center px-4 sm:px-6 pt-0 pb-3 sm:pb-5 gap-3 sm:gap-4 w-full max-w-2xl md:max-w-none mx-auto overflow-hidden">
+      <main className="flex-1 min-h-0 flex flex-col items-center px-4 sm:px-6 pt-0 pb-3 sm:pb-5 gap-3 sm:gap-4 w-full max-w-2xl md:max-w-none mx-auto overflow-y-auto">
 
         {/* 안내 텍스트 */}
         <section className="flex flex-col items-center shrink-0">
@@ -96,7 +96,7 @@ export default function RoleSelectPage() {
           type="button"
           onClick={() => handleSelect('senior')}
           className={cn(
-            'w-full flex-1 rounded-2xl p-8 flex flex-col items-center justify-center gap-5 text-left transition-all min-h-0',
+            'w-full shrink-0 min-h-[280px] rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center gap-4 sm:gap-5 text-left transition-all',
             selected === 'senior'
               ? 'bg-[#FFF8F0] border-[3px] border-[#E8820C]'
               : 'bg-[#F3F4F6] border border-[#E5E7EB]',
@@ -125,7 +125,7 @@ export default function RoleSelectPage() {
           type="button"
           onClick={() => handleSelect('family')}
           className={cn(
-            'w-full flex-1 rounded-2xl p-8 flex flex-col items-center justify-center gap-5 text-left transition-all min-h-0',
+            'w-full shrink-0 min-h-[280px] rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center gap-4 sm:gap-5 text-left transition-all',
             selected === 'family'
               ? 'bg-[#FFF8F0] border-[3px] border-[#E8820C]'
               : 'bg-[#F3F4F6] border border-[#E5E7EB]',
