@@ -37,7 +37,7 @@ function randomCode(): string {
 }
 
 export function useInvite(): UseInviteReturn {
-  const { user } = useAuthStore()
+  const { user, profile, setRole, setProfile } = useAuthStore()
   const [inviteCode, setInviteCode] = useState<string | null>(null)
   const [familyMembers, setFamilyMembers] = useState<FamilyMemberWithProfile[]>([])
   const [loading, setLoading] = useState(true)
@@ -107,10 +107,32 @@ export function useInvite(): UseInviteReturn {
   ): Promise<{ ok: boolean; message: string }> {
     if (!user) return { ok: false, message: '로그인이 필요해요' }
 
-    // family_links FK(→ profiles) 위반 방지: 기존 profiles 행 유지, 없으면 생성
-    await supabase
+    // family_links FK 보장과 온보딩 완료 처리를 함께 수행한다.
+    // ignoreDuplicates를 사용하면 기존 display_name='사용자'가 남아 /role-select로 되돌아간다.
+    const displayName =
+      user.user_metadata?.full_name ??
+      user.user_metadata?.name ??
+      profile?.full_name ??
+      (profile?.display_name !== '사용자' ? profile?.display_name : null) ??
+      '독자'
+    const avatarUrl =
+      user.user_metadata?.avatar_url ??
+      user.user_metadata?.picture ??
+      profile?.avatar_url ??
+      null
+    const { error: profileError } = await supabase
       .from('profiles')
-      .upsert({ id: user.id, role: 'family', display_name: '사용자' }, { ignoreDuplicates: true })
+      .upsert({
+        id: user.id,
+        role: 'family',
+        display_name: displayName,
+        full_name: displayName,
+        avatar_url: avatarUrl,
+      })
+
+    if (profileError) {
+      return { ok: false, message: '독자 정보를 저장하지 못했어요. 다시 시도해 주세요' }
+    }
 
     const { data: link, error: findErr } = await supabase
       .from('family_links')
@@ -136,6 +158,15 @@ export function useInvite(): UseInviteReturn {
       .eq('id', link.id)
 
     if (updateErr) return { ok: false, message: updateErr.message }
+
+    const { data: syncedProfile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single()
+    setRole('family')
+    if (syncedProfile) setProfile(syncedProfile)
+
     return { ok: true, message: '가족으로 연결됐어요!' }
   }
 

@@ -76,7 +76,10 @@ export default function InviteAcceptPage() {
     const res = await acceptInvite(code, seniorTitle, readerNickname)
     setResult(res)
     setLoading(false)
-    if (res.ok) setTimeout(() => navigate('/r'), 2000)
+    if (res.ok) {
+      sessionStorage.removeItem('pendingInviteCode')
+      navigate('/r', { replace: true })
+    }
   }
 
   return (
