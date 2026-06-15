@@ -42,31 +42,55 @@ export default function ReaderHomePage() {
           )}
 
           {!loading && isConnected && latestPublished && !latestDismissed && (
-            <div className="mx-4 sm:mx-6 bg-white border border-[#E5E7EB] rounded-2xl px-5 py-4 relative">
+            <div className="mx-4 sm:mx-6 bg-white border-2 border-[#E8820C] rounded-2xl overflow-visible relative">
+              <div className="absolute -top-3 left-5 bg-[#E8820C] rounded-lg px-3 py-1 z-10">
+                <span className="text-sm text-white font-medium">NEW</span>
+              </div>
               <button
                 type="button"
                 onClick={() => setLatestDismissed(true)}
-                className="absolute -top-2 -right-2 p-1.5 rounded-full hover:bg-gray-100 bg-white shadow-sm text-[#9CA3AF]"
+                className="absolute -top-2 -right-2 z-10 p-1.5 rounded-full hover:bg-gray-100 bg-white shadow-sm text-[#9CA3AF]"
                 aria-label="최근 출간작 닫기"
               >
                 <X size={13} />
               </button>
-              <div className="flex items-center justify-between gap-3 pr-5">
-                <div className="flex flex-col gap-0.5 min-w-0">
-                  <p className="text-[1.125rem] font-bold text-[#1F2937]">최근 출간작</p>
-                  <p className="text-base text-[#6B7280] truncate">{latestPublished.title}</p>
+
+              <div className="flex items-stretch gap-4 px-5 pt-6 pb-5">
+                <div className="relative w-[72px] h-[104px] shrink-0">
+                  {latestPublished.cover_image_url ? (
+                    <img
+                      src={latestPublished.cover_image_url}
+                      alt={latestPublished.title}
+                      className="w-full h-full rounded-lg object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-[#FFF0DC] border border-[#E8820C] rounded-lg flex items-center justify-center px-2">
+                      <p className="text-xs text-[#E8820C] text-center leading-tight line-clamp-4">
+                        {latestPublished.title}
+                      </p>
+                    </div>
+                  )}
+                  <div className="absolute inset-y-0 left-0 w-1.5 bg-[#E8820C] opacity-35 rounded-l-lg" />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLatestDismissed(true)
-                    navigate(`/r/books/${latestPublished.id}`)
-                  }}
-                  className="shrink-0 bg-[#FFF0DC] rounded-xl px-4 py-2 min-h-10 translate-x-[6px]"
-                >
-                  <span className="text-base text-[#E8820C] font-medium">확인</span>
-                </button>
+
+                <div className="flex-1 flex flex-col gap-1 min-w-0 pt-1">
+                  <p className="text-[1.25rem] text-[#1F2937] truncate">{latestPublished.title}</p>
+                  <p className="text-base text-[#6B7280]">
+                    {latestPublished.year}년 {latestPublished.month}월
+                  </p>
+                  <p className="text-base text-[#6B7280]">
+                    챕터 {latestPublished.chapter_count}개
+                  </p>
+                </div>
               </div>
+
+              <button
+                type="button"
+                onClick={() => navigate(`/r/books/${latestPublished.id}`)}
+                className="w-full bg-[#E8820C] rounded-b-xl py-3 text-center min-h-12"
+              >
+                <span className="text-[1.125rem] text-white">지금 읽기</span>
+              </button>
             </div>
           )}
 
